@@ -1,5 +1,5 @@
 // 界面中文标签：把 presets.js 里的英文 id 翻译成人话。Jev 读不到这个文件，它只面向界面。
-import { INTEREST, FIELDS, AGE_GROUP, TEMPER, BUDGET, SHOP } from './vocab.js';
+import { INTEREST, FIELDS, AGE_GROUP, TEMPER, BUDGET, SHOP, JOB } from './vocab.js';
 
 export const PRESET_ZH = {
   post: { noun: '帖子', who: '读者' },
@@ -118,4 +118,40 @@ export function segmentValueZh(attribute, value) {
   if (attribute === 'budget') return BUDGET[value]?.zh ?? value;
   if (attribute === 'shopping') return SHOP[value]?.zh ?? value;
   return value;
+}
+
+/** 闲置转让的追问：买家会先问卖家什么（keys 与 presets.js listing.followUp.answers 一致）。 */
+export const FOLLOWUP_LISTING_ZH = {
+  available: '还在吗',
+  negotiable: '能便宜点吗',
+  quick_discount: '今天要能给优惠吗',
+  condition: '成色怎么样，有划痕吗',
+  defects: '功能都正常吗，修过吗',
+  how_old: '用了多久',
+  why_selling: '为什么卖',
+  original: '是原装的吗',
+  documents: '有发票、包装或保修吗',
+  included: '都附带什么',
+  details: '关键参数（电池、里程、尺寸）',
+  photos: '能多发几张图或视频吗',
+  delivery: '发物流吗，谁出运费',
+  pickup: '哪里自提',
+  try_first: '可以先验货吗',
+  safe_deal: '支持担保交易或货到付款吗',
+  exchange: '可以换物吗',
+  hold: '能帮我留几天吗',
+  bulk: '多件有优惠吗',
+  nothing: '不用问，直接要了',
+};
+
+/** 人格 → 界面卡片用的干净视图（Worker 的 voices 与回放共用）。 */
+export function personView(who) {
+  return {
+    id: who.id,
+    name: who.name.zh,
+    age: who.age,
+    job: JOB[who.job]?.zh,
+    city: who.city.zh,
+    temper: TEMPER[who.temper]?.zh,
+  };
 }

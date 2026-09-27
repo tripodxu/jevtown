@@ -128,3 +128,8 @@ footer a { color: var(--muted); }
 
 .error { color: var(--sorry); }
 .blocked-note { border-left: 3px solid var(--sorry); padding-left: 10px; }
+
+/* 示例回放：两版并排 */
+.examples { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 860px) { .examples { grid-template-columns: 1fr; } }
+#compare .blocked-note, #result .blocked-note { margin-bottom: 8px; }

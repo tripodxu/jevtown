@@ -7,13 +7,14 @@
 //   GET  /api/feed      最近的检查
 // 引擎全部来自 public/shared/（上游 gaborishka/jevtown，MIT），Worker 只做编排和存取。
 import { crowd, persona, CROWD } from '../public/shared/personas.js';
-import { PRESETS, CANT_TELL } from '../public/shared/presets.js';
-import { JOB, TEMPER } from '../public/shared/vocab.js';
-import { openingRequest, openingAnswers, reactionRequest, questionId, MAX_TEXT_CHARS } from '../public/shared/requests.js';
+import { PRESETS, CANT_TELL, priceLadder } from '../public/shared/presets.js';
+import { openingRequest, openingAnswers, reactionRequest, questionId, MAX_TEXT_CHARS, followUpRequest } from '../public/shared/requests.js';
 import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered } from '../public/shared/feed.js';
 import { drawReaction } from '../public/shared/draw.js';
 import { askQuestion, mergeSaid, listsOf } from '../public/shared/check.js';
 import { counters, segments, topSegments, voicesOf } from '../public/shared/summary.js';
+import { encodeBytes } from '../public/shared/bytes.js';
+import { personView } from '../public/shared/labels.js';
 import { pickProvider, ask as askJev } from '../public/shared/jev.js';
 import { createMockAsk } from '../public/shared/mock.js';
 import { rng, hash32 } from '../public/shared/rng.js';
@@ -48,13 +49,13 @@ const loadPost = async (db, id) => (await db.prepare('SELECT * FROM posts WHERE 
 const loadVersion = async (db, id, number = 1) =>
   (await db.prepare('SELECT * FROM versions WHERE post = ? AND number = ?').bind(id, number).first()) ?? null;
 
-/** 记一笔花费流水。返回 D1 语句（可直接进 db.batch，单独执行时加 .run()）。 */
-const addSpend = (db, { post, stage, n = 0, usd = 0, tokens = 0, day }) =>
+/** 记一笔花费流水。返回 D1 语句（可直接进 db.batch，单独执行时加 .run()）；同一键重复时累加。 */
+const addSpend = (db, { post, number = 1, stage, n = 0, usd = 0, tokens = 0, day }) =>
   db.prepare(
-    'INSERT INTO batches (post, number, stage, n, usd, tokens, day) VALUES (?, 1, ?, ?, ?, ?, ?) ' +
+    'INSERT INTO batches (post, number, stage, n, usd, tokens, day) VALUES (?, ?, ?, ?, ?, ?, ?) ' +
       'ON CONFLICT (post, number, stage, n) DO UPDATE SET usd = usd + excluded.usd, tokens = tokens + excluded.tokens',
   )
-    .bind(post, stage, n, round2(usd), Math.round(tokens), day);
+    .bind(post, number, stage, n, round2(usd), Math.round(tokens), day);
 
 /** 全站今天已花掉多少（CROWD_DAILY_BUDGET_USD 的对手盘）。 */
 const spentToday = async (db, day) => {
@@ -62,9 +63,9 @@ const spentToday = async (db, day) => {
   return row?.usd ?? 0;
 };
 
-/** 一条 post 的所有反应，作为 Map<personaId, reactionId>。 */
-const reactionsMap = async (db, id) => {
-  const { results } = await db.prepare('SELECT id, reaction FROM reactions WHERE post = ? AND number = 1').bind(id).all();
+/** 一条 post 某个版本的所有反应，作为 Map<personaId, reactionId>。 */
+const reactionsMap = async (db, id, number = 1) => {
+  const { results } = await db.prepare('SELECT id, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, number).all();
   return new Map(results.map((row) => [row.id, row.reaction]));
 };
 
@@ -78,9 +79,10 @@ export default {
 
     try {
       if (request.method === 'POST' && path === '/api/check') return await runCheck(request, env);
+      if (request.method === 'POST' && path === '/api/version') return await runVersion(request, env);
       if (request.method === 'GET' && path === '/api/batch') return await runBatch(url, env);
       if (request.method === 'POST' && path === '/api/wave') return await closeWave(url, env);
-      if (request.method === 'GET' && path.startsWith('/api/post/')) return await showPost(path.slice('/api/post/'.length), env);
+      if (request.method === 'GET' && path.startsWith('/api/post/')) return await showPost(path.slice('/api/post/'.length), env, url);
       if (request.method === 'GET' && path === '/api/feed') return await listFeed(env);
       return fail('not found', 404);
     } catch (error) {
@@ -99,6 +101,10 @@ async function runCheck(request, env) {
   if (!PRESETS[presetId]) return fail('unknown preset');
   if (!text) return fail('text is empty');
   if (text.length > MAX_TEXT_CHARS) return fail(`text is longer than ${MAX_TEXT_CHARS} chars`);
+  const prices = presetId === 'product'
+    ? (Array.isArray(body.prices) && body.prices.every((n) => Number.isFinite(n) && n > 0) && body.prices.length >= 2 ? body.prices.map(Number) : null)
+    : null;
+  if (presetId === 'product' && !prices) return fail('product 需要 prices：至少两个正数的数组，如 [9,19,39,79]');
 
   const ip = request.headers.get('CF-Connecting-IP') ?? 'local';
   const day = today();
@@ -128,8 +134,8 @@ async function runCheck(request, env) {
       env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .bind(id, presetId, pool, text, 'blocked', now, day, ip),
       env.DB.prepare(
-        'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)',
-      ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, round2(usd), tokens),
+        'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, prices, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, prices ? JSON.stringify(prices) : null, round2(usd), tokens),
       addSpend(env.DB, { post: id, stage: 'opening', usd, tokens, day }),
     ]);
     return json({ post: id, version: 1, state: 'blocked', blocked: opening.blocked, unlisted: opening.unlisted, checks: opening.checks });
@@ -144,8 +150,8 @@ async function runCheck(request, env) {
     env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, presetId, pool, text, 'running', now, day, ip),
     env.DB.prepare(
-      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, JSON.stringify(plan), round2(usd), tokens),
+      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, prices, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, JSON.stringify(plan), prices ? JSON.stringify(prices) : null, round2(usd), tokens),
     addSpend(env.DB, { post: id, stage: 'opening', usd, tokens, day }),
   ]);
   return json({
@@ -159,14 +165,63 @@ async function runCheck(request, env) {
   });
 }
 
+// -- POST /api/version：同帖再发一版 ---------------------------------------------
+
+/** 同帖再发一版：新开一个版本号，重新开局（新文本有新的分数与波次），复用同一 post 的受众池。 */
+async function runVersion(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const id = String(body.post ?? '');
+  const text = String(body.text ?? '').trim();
+  if (!id) return fail('post is required');
+  if (!text) return fail('text is empty');
+  if (text.length > MAX_TEXT_CHARS) return fail(`text is longer than ${MAX_TEXT_CHARS} chars`);
+  const post = await loadPost(env.DB, id);
+  if (!post) return fail('no such post', 404);
+  if (post.state === 'running') return fail('previous version is still running', 409);
+
+  const budget = Number(env.CROWD_DAILY_BUDGET_USD ?? 0);
+  if (budget > 0 && (await spentToday(env.DB, today())) >= budget) return fail('today’s budget is spent', 429);
+
+  const row = await env.DB.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS number FROM versions WHERE post = ?').bind(id).first();
+  const number = row.number;
+  const provider = providerOf(env);
+  const pool = post.pool;
+  const { answers, usd, tokens } = await provider.ask(openingRequest(post.preset, text));
+  const opening = openingAnswers(answers);
+
+  if (opening.blocked.length) {
+    await env.DB.batch([
+      env.DB.prepare(
+        'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, usd, tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), round2(usd), tokens),
+      addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, day: today() }),
+    ]);
+    return json({ post: id, version: number, state: 'blocked', blocked: opening.blocked });
+  }
+
+  const people = crowd(pool);
+  const random = rng(hash32('waves', pool, `${id}.${number}`));
+  const wave0 = firstWave(people, opening.scores, post.preset, random);
+  const plan = { wave: 0, answered: 0, history: { 0: wave0.map((who) => who.id) } };
+  await env.DB.batch([
+    env.DB.prepare('UPDATE posts SET state = ? WHERE id = ?').bind('running', id),
+    env.DB.prepare(
+      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, usd, tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), JSON.stringify(plan), round2(usd), tokens),
+    addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, day: today() }),
+  ]);
+  return json({ post: id, version: number, state: 'running', wave: { index: 0, total: wave0.length } });
+}
+
 // -- GET /api/batch：问 Jev 一批人 ---------------------------------------------
 
 async function runBatch(url, env) {
   const id = url.searchParams.get('post');
+  const v = Number(url.searchParams.get('v') ?? '1') || 1;
   const post = await loadPost(env.DB, id);
   if (!post) return fail('no such post', 404);
   if (post.state !== 'running') return fail('the check is not running', 409);
-  const version = await loadVersion(env.DB, id);
+  const version = await loadVersion(env.DB, id, v);
   const plan = JSON.parse(version.plan);
   const order = plan.history[String(plan.wave)];
   const start = plan.answered;
@@ -179,18 +234,18 @@ async function runBatch(url, env) {
   const provider = providerOf(env);
   const { answers, usd, tokens } = await provider.ask(reactionRequest(presetId, version.text, people));
 
-  const versionId = `${id}.1`;
+  const versionId = `${id}.${v}`;
   const statements = batch.map((pid, index) => {
     const probabilities = answers[questionId(people[index])]?.probabilities ?? {};
     const reaction = drawReaction(probabilities, pool, pid, versionId) ?? CANT_TELL;
-    return env.DB.prepare('INSERT INTO reactions (post, number, id, wave, reaction) VALUES (?, 1, ?, ?, ?)')
-      .bind(id, pid, plan.wave, reaction);
+    return env.DB.prepare('INSERT INTO reactions (post, number, id, wave, reaction) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, v, pid, plan.wave, reaction);
   });
   plan.answered = start + batch.length;
   statements.push(
-    env.DB.prepare('UPDATE versions SET plan = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = 1')
-      .bind(JSON.stringify(plan), round2(usd), tokens, id),
-    addSpend(env.DB, { post: id, stage: `wave${plan.wave}`, n: start, usd, tokens, day: today() }),
+    env.DB.prepare('UPDATE versions SET plan = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
+      .bind(JSON.stringify(plan), round2(usd), tokens, id, v),
+    addSpend(env.DB, { post: id, number: v, stage: `wave${plan.wave}`, n: start, usd, tokens, day: today() }),
   );
   await env.DB.batch(statements);
   return json({ answered: plan.answered, total: order.length, wave: plan.wave });
@@ -200,10 +255,11 @@ async function runBatch(url, env) {
 
 async function closeWave(url, env) {
   const id = url.searchParams.get('post');
+  const v = Number(url.searchParams.get('v') ?? '1') || 1;
   const post = await loadPost(env.DB, id);
   if (!post) return fail('no such post', 404);
   if (post.state !== 'running') return fail('the check is already finished', 409);
-  const version = await loadVersion(env.DB, id);
+  const version = await loadVersion(env.DB, id, v);
   const plan = JSON.parse(version.plan);
   const presetId = post.preset;
   const pool = post.pool;
@@ -214,31 +270,32 @@ async function closeWave(url, env) {
 
   const waveIndex = plan.wave;
   const order = plan.history[String(waveIndex)];
-  const { results: waveRows } = await env.DB.prepare('SELECT reaction FROM reactions WHERE post = ? AND number = 1 AND wave = ?')
-    .bind(id, waveIndex)
+  const { results: waveRows } = await env.DB.prepare('SELECT reaction FROM reactions WHERE post = ? AND number = ? AND wave = ?')
+    .bind(id, v, waveIndex)
     .all();
   const drawn = waveRows.map((row) => row.reaction);
   const waveMood = mood(presetId, drawn);
   const waveTravels = travels(presetId, drawn);
   const waveInfo = { index: waveIndex, asked: order.length, size: drawn.length, mood: round2(waveMood), travels: waveTravels };
 
-  const reached = await reactionsMap(env.DB, id);
+  const reached = await reactionsMap(env.DB, id, v);
 
   // 传播：够 glad，且还有波次与还没看到的人。
   if (waveTravels && waveIndex + 1 < maxWaves && reached.size < CROWD) {
     const people = crowd(pool);
-    const random = rng(hash32('waves', pool, `${id}.1.${waveIndex + 1}`));
+    const random = rng(hash32('waves', pool, `${id}.${v}.${waveIndex + 1}`));
     const next = nextWave(people, reached, scores, presetId, waveIndex + 1, random);
     plan.wave = waveIndex + 1;
     plan.answered = 0;
     plan.history[String(waveIndex + 1)] = next.map((who) => who.id);
-    await env.DB.prepare('UPDATE versions SET plan = ? WHERE post = ? AND number = 1').bind(JSON.stringify(plan), id).run();
+    await env.DB.prepare('UPDATE versions SET plan = ? WHERE post = ? AND number = ?').bind(JSON.stringify(plan), id, v).run();
     return json({ wave: waveInfo, travels: true, next: { index: waveIndex + 1, total: next.length } });
   }
 
   // 检查收尾：把收尾提问（为什么划走/什么让他们停下/会评论什么）发给到达过的人。
   const people = crowd(pool);
   const reactionOf = (pid) => reached.get(pid);
+  const followUp = await runFollowUp(env, post, version, provider, reached, people, v);
   let gathered = emptyGathered();
   for (const wave of Object.keys(plan.history).sort((a, b) => a - b)) {
     gathered = gatherAsked(presetId, plan.history[wave], reactionOf, gathered);
@@ -261,10 +318,10 @@ async function closeWave(url, env) {
         people: ids.map((pid) => people[pid]),
         reactionOf,
         pool,
-        versionId: `${id}.1`,
+        versionId: `${id}.${v}`,
       });
       parts.push(part);
-      await addSpend(env.DB, { post: id, stage: 'ask', usd, tokens, day: today() }).run();
+      await addSpend(env.DB, { post: id, number: v, stage: 'ask', usd, tokens, day: today() }).run();
     } catch (error) {
       console.error('ask', question, error?.message);
       for (const list of listsOf(question, presetId, ids, reactionOf)) missing[list] = 'failed';
@@ -272,18 +329,56 @@ async function closeWave(url, env) {
   }
   const said = mergeSaid(parts, missing);
   await env.DB.batch([
-    env.DB.prepare('UPDATE versions SET said = ? WHERE post = ? AND number = 1').bind(JSON.stringify(said), id),
+    env.DB.prepare('UPDATE versions SET said = ? WHERE post = ? AND number = ?').bind(JSON.stringify(said), id, v),
     env.DB.prepare("UPDATE posts SET state = 'done' WHERE id = ?").bind(id),
   ]);
-  return json({ wave: waveInfo, travels: false, done: true, reach: reached.size });
+  return json({ wave: waveInfo, travels: false, done: true, reach: reached.size, followUp: followUp && { asked: followUp.asked } });
+}
+
+/** 追问阶段：闲置帖问停下的人"会问卖家什么"；商品帖问价格阶梯。结果存 versions.follow_up。 */
+async function runFollowUp(env, post, version, provider, reached, people, number) {
+  const preset = PRESETS[post.preset];
+  if (!preset.followUp) return null;
+  const prices = version.prices ? JSON.parse(version.prices) : null;
+  const answers = preset.followUp.answers ?? priceLadder(prices ?? [9, 19, 39, 79], '¥');
+  const stopped = [...reached.entries()].filter(([, reaction]) => preset.reactions[reaction]?.stopped).map(([id]) => id);
+  const totals = Object.fromEntries(Object.keys(answers).map((id) => [id, 0]));
+  let asked = 0;
+  let usd = 0;
+  let tokens = 0;
+  for (let i = 0; i < stopped.length; i += PER_REQUEST) {
+    const batchPeople = stopped.slice(i, i + PER_REQUEST).map((pid) => people[pid]);
+    const { answers: batchAnswers, usd: batchUsd, tokens: batchTokens } =
+      await provider.ask(followUpRequest(post.preset, version.text, batchPeople, answers));
+    usd += batchUsd;
+    tokens += batchTokens;
+    for (const who of batchPeople) {
+      const probabilities = batchAnswers[questionId(who)]?.probabilities ?? {};
+      asked += 1;
+      for (const [id, value] of Object.entries(probabilities)) totals[id] = (totals[id] ?? 0) + value;
+    }
+  }
+  const followUp = { answers, asked, totals };
+  await env.DB.batch([
+    env.DB.prepare('UPDATE versions SET follow_up = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
+      .bind(JSON.stringify(followUp), round2(usd), tokens, post.id, number),
+    addSpend(env.DB, { post: post.id, number, stage: 'followup', usd, tokens, day: today() }),
+  ]);
+  return followUp;
 }
 
 // -- GET /api/post/:id：一页所需的一切 -----------------------------------------
 
-async function showPost(id, env) {
+async function showPost(id, env, url) {
   const post = await loadPost(env.DB, id);
   if (!post) return fail('no such post', 404);
-  const version = await loadVersion(env.DB, id);
+  // ?v= 指定版本；不传则取最新版本。
+  let v = Number(url?.searchParams.get('v')) || 0;
+  if (!v) {
+    const row = await env.DB.prepare('SELECT MAX(number) AS number FROM versions WHERE post = ?').bind(id).first();
+    v = row?.number ?? 1;
+  }
+  const version = await loadVersion(env.DB, id, v);
   const presetId = post.preset;
   const preset = PRESETS[presetId];
   const keys = Object.keys(preset.reactions);
@@ -296,7 +391,7 @@ async function showPost(id, env) {
   if (post.state === 'blocked') return json(base);
 
   const people = crowd(post.pool);
-  const { results: rows } = await env.DB.prepare('SELECT id, wave, reaction FROM reactions WHERE post = ? AND number = 1').bind(id).all();
+  const { results: rows } = await env.DB.prepare('SELECT id, wave, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, v).all();
   const bytes = new Uint8Array(CROWD);
   const byWave = new Map();
   for (const row of rows) {
@@ -317,7 +412,7 @@ async function showPost(id, env) {
   const said = JSON.parse(version.said ?? 'null');
   const voices = voicesOf(id, presetId, bytes).map((voice) => ({
     ...voice,
-    who: voiceOf(people[voice.id]),
+    who: personView(people[voice.id]),
   }));
 
   return json({
@@ -332,14 +427,24 @@ async function showPost(id, env) {
       sorry: topSegments(all, 'sorry'),
     },
     voices,
+    followUp: version.follow_up ? JSON.parse(version.follow_up) : null,
+    prices: version.prices ? JSON.parse(version.prices) : null,
+    versions: await versionsOf(env.DB, id),
     spent: { usd: round2(version.usd ?? 0), tokens: version.tokens ?? 0 },
   });
 }
 
-/** 收尾没问到的也有一条干净的人格行（界面只展示被问到的）。 */
-function voiceOf(who) {
-  return { id: who.id, name: who.name.zh, age: who.age, job: JOB[who.job]?.zh, city: who.city.zh, temper: TEMPER[who.temper]?.zh };
+/** 某帖的全部版本（轻量列表：版本号、文本、派生态）。注意 blocked/said 是 JSON 文本列：'[]' 也是真值，必须解析后判断。 */
+async function versionsOf(db, id) {
+  const { results } = await db.prepare('SELECT number, text, blocked, said FROM versions WHERE post = ? ORDER BY number').bind(id).all();
+  return results.map((row) => ({
+    number: row.number,
+    text: row.text,
+    state: JSON.parse(row.blocked ?? '[]').length ? 'blocked' : row.said == null ? 'running' : 'done',
+  }));
 }
+
+/** 收尾没问到的也有一条干净的人格行（界面只展示被问到的）——视图由 shared/labels.js 的 personView 给出。 */
 
 // -- GET /api/feed --------------------------------------------------------------
 
@@ -352,12 +457,4 @@ async function listFeed(env) {
 
 // -- 工具 -----------------------------------------------------------------------
 
-/** Uint8Array → base64（地图数据压缩传输）。 */
-function encodeBytes(bytes) {
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
+// Uint8Array → base64 的编解码已移到 shared/bytes.js，Worker 与浏览器/回放共用同一份。

@@ -119,6 +119,8 @@ fs.writeFileSync(
       checks: result.checks,
       unlisted: result.unlisted,
       said: result.said,
+      followUp: result.followUp,
+      prices: result.prices ?? null,
       usd: result.usd,
     },
     null,

@@ -14,6 +14,15 @@
   </header>
 
   <main>
+    <section id="showcase" class="card" hidden>
+      <h2>示例：同一条手机转让帖，两种写法</h2>
+      <p class="hint">以下是保存下来的检查结果，纯浏览器回放，不花一分钱。</p>
+      <div class="examples">
+        <div class="card example-a"></div>
+        <div class="card example-b"></div>
+      </div>
+    </section>
+
     <section id="compose" class="card">
       <form id="form">
         <div class="row">
@@ -40,6 +49,15 @@
 
     <section id="result" class="card" hidden></section>
 
+    <div class="row" id="resultActions" hidden>
+      <button id="revise" type="button">改一版再发</button>
+      <span class="hint">改两个词，让同一座小镇再读一遍，两版并排对比。</span>
+    </div>
+
+    <section id="compare" class="card" hidden>
+      <h2>第 1 版（对比）</h2>
+    </section>
+
     <section id="feedSection" class="card">
       <h2>最近的小镇检查</h2>
       <ul id="feed" class="feed"></ul>
@@ -52,5 +70,6 @@
   </footer>
 
   <script type="module" src="/app.js"></script>
+  <script type="module" src="/showcase.js"></script>
 </body>
 </html>
