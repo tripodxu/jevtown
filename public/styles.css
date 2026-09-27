@@ -1,0 +1,130 @@
+/* 中文小镇 · 深色主题。地图配色来自 presets.js 的 LOOKS，界面围绕同一套色。 */
+:root {
+  --bg: #0f131a;
+  --card: #171d27;
+  --line: #262e3b;
+  --text: #dfe5ee;
+  --muted: #8b95a7;
+  --accent: #6ea8fe;
+  --glad: #3ddc84;
+  --sorry: #ff5c5c;
+  --spreads: #ffd84d;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+  max-width: 980px;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+
+header h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: 1px; }
+.tagline { margin: 0 0 20px; color: var(--muted); }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 18px;
+}
+
+.row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.row.between { justify-content: space-between; }
+
+select, textarea {
+  background: #10151d;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+}
+textarea { width: 100%; resize: vertical; }
+
+button {
+  background: var(--accent);
+  color: #0b1220;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 18px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: wait; }
+.hint { color: var(--muted); font-size: 13px; }
+
+#status { margin-top: 12px; }
+.status-line { color: var(--muted); margin-bottom: 6px; font-size: 13px; }
+.bar { height: 6px; background: #10151d; border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 100%; width: 0%; background: var(--accent); transition: width 0.2s; }
+
+h2 { font-size: 17px; margin: 4px 0 12px; }
+h3 { font-size: 14px; margin: 16px 0 8px; color: var(--muted); font-weight: 600; }
+
+/* 总览数字 */
+.stats { display: flex; flex-wrap: wrap; gap: 10px 26px; }
+.stat b { display: block; font-size: 22px; }
+.stat span { color: var(--muted); font-size: 12px; }
+
+/* 波次 */
+.waves { width: 100%; border-collapse: collapse; margin-top: 4px; }
+.waves td, .waves th { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
+.waves th { color: var(--muted); font-weight: 500; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; }
+.badge.go { background: rgba(61, 220, 132, 0.15); color: var(--glad); }
+.badge.stop { background: rgba(255, 92, 92, 0.15); color: var(--sorry); }
+
+/* 反应计数 */
+.counts { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 3px 10px; border-radius: 99px; font-size: 13px; border: 1px solid var(--line); }
+.chip b { font-weight: 700; }
+
+/* 地图 */
+.map-wrap { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+canvas.grid { image-rendering: pixelated; border: 1px solid var(--line); border-radius: 8px; cursor: crosshair; }
+.legend { font-size: 12px; color: var(--muted); display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
+.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 2px; }
+#tooltip {
+  position: fixed; pointer-events: none; display: none;
+  background: #0b1220; border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; max-width: 260px; z-index: 5;
+}
+
+/* 分组与小镇在说 */
+.seg { display: flex; align-items: baseline; gap: 8px; margin: 4px 0; font-size: 13px; }
+.seg .label { min-width: 120px; }
+.seg .bar2 { flex: 1; max-width: 320px; height: 8px; background: #10151d; border-radius: 4px; overflow: hidden; align-self: center; }
+.seg .bar2 i { display: block; height: 100%; }
+.seg .num { color: var(--muted); min-width: 90px; }
+
+.said-row { margin: 6px 0; font-size: 13px; }
+.said-row .what { color: var(--muted); }
+.said-row .lead { color: var(--text); }
+
+/* 人格声音 */
+.voices { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.voice { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.voice .who { font-weight: 600; }
+.voice .what { margin-top: 4px; }
+
+/* Jev 的解读 */
+.checks { display: flex; flex-wrap: wrap; gap: 8px; }
+.checks .chip.yes { color: var(--glad); border-color: rgba(61, 220, 132, 0.4); }
+.checks .chip.no { color: var(--muted); }
+.checks .chip.unclear { color: var(--spreads); }
+
+.feed { list-style: none; margin: 0; padding: 0; }
+.feed li { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.feed a { color: var(--accent); text-decoration: none; }
+.feed .meta { color: var(--muted); margin-left: 8px; }
+
+footer { margin-top: 28px; color: var(--muted); font-size: 12px; }
+footer a { color: var(--muted); }
+
+.error { color: var(--sorry); }
+.blocked-note { border-left: 3px solid var(--sorry); padding-left: 10px; }

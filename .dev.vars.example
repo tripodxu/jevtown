@@ -1,0 +1,7 @@
+# wrangler dev 读取本文件（复制为 .dev.vars 后生效，优先级高于 wrangler.jsonc 的 vars）。
+# 默认 mock：不需要任何 key，全流程可跑，答案是确定性的假答案，0 花费。
+JEV_PROVIDER=mock
+
+# 接真实模型时删掉上面一行，改设其一：
+# TYPESAFE_API_KEY=
+# OPENROUTER_API_KEY=

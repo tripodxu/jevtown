@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jevtown-cn",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // 只有 API 走 Worker；页面、样式和脚本直接从边缘出，不计 Worker 请求。
+    "run_worker_first": ["/api/*"]
+  },
+  // database_id：真正上线时 `npx wrangler d1 create jevtown` 会打印它；本地开发只认 database_name。
+  "d1_databases": [{ "binding": "DB", "database_name": "jevtown", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }],
+  "vars": {
+    // 每 IP 每天可发起的检查数、全站每天总花费上限（0 = 不限）。
+    "CROWD_DAILY_LIMIT": "20",
+    "CROWD_DAILY_BUDGET_USD": "5",
+    // 文本最多传几波：1 = 只有第一波 600 人，4 = 全城。
+    "CROWD_MAX_WAVES": "4",
+    // mock / typesafe / openrouter；留空 = 有哪个 key 用哪个，都没有则自动落入 mock。
+    "JEV_PROVIDER": "mock"
+  },
+  "observability": { "enabled": false }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "jevtown-cn",
+  "version": "0.1.0",
+  "private": true,
+  "description": "中文小镇版 Jevtown：人们写，一万个 AI 人格来读。基于 gaborishka/jevtown（MIT）的引擎与 Worker 架构。",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "wrangler d1 migrations apply jevtown --local && wrangler dev --port 5191",
+    "deploy": "wrangler d1 migrations apply jevtown --remote && wrangler deploy",
+    "check": "node scripts/check.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "devDependencies": {
+    "wrangler": "^4.135.0"
+  }
+}

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>中文小镇 · 一万个人格怎么读你的文字</title>
+  <meta name="description" content="发一段文字，一万个 AI 人格来读：谁停下、谁点赞、谁反感、谁划走。基于 Jev（System One 模型）。">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <h1>中文小镇</h1>
+    <p class="tagline">发一段文字，一万个 AI 人格来读：谁停下、谁点赞、谁反感、谁划走。每一次反应都是模型对类型化问题给出的概率。</p>
+  </header>
+
+  <main>
+    <section id="compose" class="card">
+      <form id="form">
+        <div class="row">
+          <label for="preset">类型</label>
+          <select id="preset">
+            <option value="post">帖子</option>
+            <option value="listing">闲置转让</option>
+            <option value="product">商品文案</option>
+            <option value="headline">标题</option>
+          </select>
+        </div>
+        <textarea id="text" rows="5" maxlength="2000"
+          placeholder="写下你想发的内容……&#10;试试：一条二手手机转让、一句朋友圈观点、一个商品卖点。"></textarea>
+        <div class="row between">
+          <span class="hint" id="hint">本地开发默认 mock 模式：答案确定但不花钱。</span>
+          <button id="go" type="submit">让小镇来读</button>
+        </div>
+      </form>
+      <div id="status" hidden>
+        <div class="status-line" id="statusLine"></div>
+        <div class="bar"><div class="bar-fill" id="statusBar"></div></div>
+      </div>
+    </section>
+
+    <section id="result" class="card" hidden></section>
+
+    <section id="feedSection" class="card">
+      <h2>最近的小镇检查</h2>
+      <ul id="feed" class="feed"></ul>
+    </section>
+  </main>
+
+  <footer>
+    基于 <a href="https://github.com/gaborishka/jevtown" target="_blank" rel="noopener">gaborishka/jevtown</a>（MIT）的引擎与 Worker 架构改造 ·
+    决策模型 <a href="https://typesafe.ai" target="_blank" rel="noopener">Jev</a>（System One）· 仅限本地开发，未上线
+  </footer>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
