@@ -66,7 +66,7 @@ npm run check -- --preset post --max-waves 2 "我为什么把每周例会砍成�
 ## 步骤清单（一步一步完善）
 
 - [x] **Step 1 · 核心闭环（本阶段）**：中文小镇引擎 + Worker API + D1 + 前端 + mock 全流程 + 单测/集成测试
-- [ ] **Step 2 · 打磨**：版本对比（改文案再发同一批受众）、商品价格阶梯与需求曲线、收尾提问的 persona 挑选展示、首页示例回放（`examples/*.json`）
+- [x] **Step 2 · 打磨**：版本对比（改文案再发同一批受众，两版并排）、商品价格阶梯与需求曲线、闲置帖买家问题、收尾提问人头数展示、首页示例回放（`public/examples/*.json` 纯浏览器回放）
 - [ ] **Step 3 · 真实模型联调**：TypeSafe / OpenRouter key 实测，记录真实成本与延迟（参照上游 measurements.md 的方法）
 - [ ] **Step 4 · 上线准备**：人格打包管线（CPU 优化）、`wrangler d1 create` + secret、自定义域、并发收波 CAS 锁、`npm run deploy`
 - [ ] **Step 5 · 生态（可选）**：MCP 服务器（check_text / compare_texts）、居民系统 /me、分享卡片
