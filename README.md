@@ -22,6 +22,8 @@ npm run dev                          # 应用本地 D1 迁移并启动，http://
 
 打开 http://localhost:5191 ，选类型、写文字、点"让小镇来读"。默认 mock 模式：答案是确定性的假答案（按文本特征 + 人格属性算出），小镇的样貌是真实的，但不调真实模型、不花钱。
 
+**主题**：顶栏右侧四个分段按钮自由切换视觉世界——夜巡（默认，墨色夜城）、公报（米纸宋体）、仪器（冷灰精密）、经典（第一版配色）。选择存 localStorage，地图画布随主题重绘；全部由 `public/styles.css` 的 CSS 变量令牌驱动，新增主题 = 加一组令牌 + 顶栏一个按钮。
+
 **接真实模型**：把 `.dev.vars.example` 复制为 `.dev.vars`，删掉 `JEV_PROVIDER=mock`，填入 `TYPESAFE_API_KEY` 或 `OPENROUTER_API_KEY`（OpenRouter 用模型 `typesafe/jev-1.13` 的 Decisions API）。重启 `npm run dev`。
 
 **终端跑一次检查**（不经过站点）：

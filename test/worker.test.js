@@ -58,3 +58,43 @@ test('版本：同一帖可再发一版，两版各有各的计数，versions �
   assert.ok(v2.versions.every((entry) => entry.text.length > 0));
   assert.ok(v2.versions.every((entry) => entry.state === 'done'));
 }, { timeout: 240_000 });
+
+test('product 缺 prices → 400；上一版还在跑时再发一版 → 409', async () => {
+  const noPrices = await postJSON(worker, '/api/check', { preset: 'product', text: '一款不臭的跑步袜' });
+  assert.equal(noPrices.status, 400);
+
+  const running = await (await postJSON(worker, '/api/check', { preset: 'post', text: '限流测试：这一版故意不跑完' })).json();
+  assert.equal(running.state, 'running');
+  const conflict = await postJSON(worker, '/api/version', { post: running.post, text: '另一版' });
+  assert.equal(conflict.status, 409);
+});
+
+test('blocked 帖的详情页：state=blocked 且没有计数与地图', async () => {
+  const opening = await (await postJSON(worker, '/api/check', { preset: 'listing', text: '傻逼东西你去死吧' })).json();
+  assert.equal(opening.state, 'blocked');
+  const detail = await (await worker.fetch(`/api/post/${opening.post}`)).json();
+  assert.equal(detail.post.state, 'blocked');
+  assert.equal(detail.counters, undefined);
+  assert.equal(detail.looks, undefined);
+  assert.ok(detail.blocked.includes('insult'));
+});
+
+test('每日限额：/api/check 与 /api/version 都会被 429 拦下', async () => {
+  const limited = await startWorker({ CROWD_DAILY_LIMIT: '2' });
+  try {
+    // 共享 D1 里可能已有今天建的帖子：先数一数现状，再验证"超限必 429"。
+    const feed = await (await limited.fetch('/api/feed')).json();
+    const existing = feed.posts.length;
+    assert.ok(existing >= 2, `限额用例需要已有帖子做基数，现仅 ${existing}`);
+
+    const rejected = await postJSON(limited, '/api/check', { preset: 'post', text: '这条应该被每日限额拦住' });
+    assert.equal(rejected.status, 429);
+
+    // 已完成的帖子再发一版同样过不了限额门。
+    const done = feed.posts.find((post) => post.state === 'done');
+    const versionRejected = await postJSON(limited, '/api/version', { post: done.id, text: '限额下不许再发' });
+    assert.equal(versionRejected.status, 429);
+  } finally {
+    await limited.stop();
+  }
+});

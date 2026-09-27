@@ -17,6 +17,8 @@ const cssVar = (name, fallback) => {
 };
 
 export function drawGrid(canvas, bytes, presetId) {
+  // 修剪掉已断连的旧画布（反复渲染结果区时防泄漏），再登记新的。
+  for (const [old] of drawn) if (!old.isConnected) drawn.delete(old);
   drawn.set(canvas, { bytes, presetId });
   paint(canvas, bytes, presetId);
 }

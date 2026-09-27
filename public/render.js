@@ -33,7 +33,7 @@ export function renderCheck(el, result) {
   html.push(overview(result));
   html.push(wavesView(result));
   html.push(countsView(result));
-  html.push('<h3>小镇地图</h3><div class="map-wrap"><canvas class="grid"></canvas><div class="legend"></div></div>');
+  html.push('<h3>小镇地图</h3><div class="map-wrap"><canvas class="grid" role="img" aria-label="小镇反应地图：一万个格子，每格一个人格的反应（悬停可看详情）"></canvas><div class="legend"></div></div>');
   html.push(jevReading(result));
   html.push(segmentsView(result));
   html.push(saidView(result));

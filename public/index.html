@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>中文小镇 · 一万个人格怎么读你的文字</title>
   <meta name="description" content="发一段文字，一万个 AI 人格来读：谁停下、谁点赞、谁反感、谁划走。基于 Jev（System One 模型）。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23d8553c'/%3E%3Ctext x='16' y='23' font-size='18' font-family='serif' font-weight='700' text-anchor='middle' fill='%230d1017'%3E镇%3C/text%3E%3C/svg%3E">
   <script>
     // 首帧前定主题，避免闪烁；四选一，localStorage 记忆。
     try {
@@ -60,7 +61,7 @@
         <textarea id="text" rows="5" maxlength="2000"
           placeholder="写下你想发的内容……&#10;试试：一条二手手机转让、一句朋友圈观点、一个商品卖点。"></textarea>
         <div class="row between">
-          <span class="hint" id="hint">本地默认 mock 模式，答案确定但不花钱。</span>
+          <span class="hint" id="hint">mock 模式答案确定、不花钱；接真实 key 后按次计费。</span>
           <button id="go" type="submit">让小镇来读</button>
         </div>
       </form>

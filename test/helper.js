@@ -2,13 +2,13 @@
 import { execSync } from 'node:child_process';
 import { unstable_dev } from 'wrangler';
 
-export async function startWorker() {
+export async function startWorker(vars = {}) {
   // 迁移是幂等的；--local 复用 .wrangler/state 的本地 D1。
   execSync('npx wrangler d1 migrations apply jevtown --local', { stdio: 'pipe' });
   return unstable_dev('worker/index.js', {
     config: 'wrangler.jsonc',
     port: 0,
-    vars: { CROWD_DAILY_LIMIT: '0', CROWD_DAILY_BUDGET_USD: '0' }, // 测试不受限额
+    vars: { CROWD_DAILY_LIMIT: '0', CROWD_DAILY_BUDGET_USD: '0', ...vars }, // 测试默认不受限额
   });
 }
 

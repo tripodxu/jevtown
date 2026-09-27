@@ -22,6 +22,17 @@ import { rng, hash32 } from '../public/shared/rng.js';
 const PER_REQUEST = 100;
 const WAVES_MAX = 4;
 
+/**
+ * 全城人群的模块级缓存：crowd() 算 1 万人格约 155ms，而 runCheck/closeWave/showPost 每个请求都要用。
+ * Worker 的模块作用域在同一 isolate 内跨请求存活，热身后每请求 0ms；换池（未来加 en）也只算一次。
+ */
+const crowdCache = new Map();
+function crowdOf(pool) {
+  let people = crowdCache.get(pool);
+  if (!people) crowdCache.set(pool, (people = crowd(pool)));
+  return people;
+}
+
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8' } });
 const fail = (message, status = 400) => json({ error: message }, status);
@@ -142,7 +153,7 @@ async function runCheck(request, env) {
   }
 
   // 第一波：传播算法认为最该看到的人（打分越高越靠前），掺少量随机。
-  const people = crowd(pool);
+  const people = crowdOf(pool);
   const random = rng(hash32('waves', pool, `${id}.1`));
   const wave0 = firstWave(people, opening.scores, presetId, random);
   const plan = { wave: 0, answered: 0, history: { 0: wave0.map((who) => who.id) } };
@@ -179,6 +190,14 @@ async function runVersion(request, env) {
   if (!post) return fail('no such post', 404);
   if (post.state === 'running') return fail('previous version is still running', 409);
 
+  // 与 runCheck 同一限额：新版本也是一次新检查。
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'local';
+  const day = today();
+  const limit = Number(env.CROWD_DAILY_LIMIT ?? 0);
+  if (limit > 0) {
+    const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM posts WHERE ip = ? AND day = ?').bind(ip, day).first();
+    if ((row?.n ?? 0) >= limit) return fail('today’s checks are used up, come back tomorrow', 429);
+  }
   const budget = Number(env.CROWD_DAILY_BUDGET_USD ?? 0);
   if (budget > 0 && (await spentToday(env.DB, today())) >= budget) return fail('today’s budget is spent', 429);
 
@@ -199,7 +218,7 @@ async function runVersion(request, env) {
     return json({ post: id, version: number, state: 'blocked', blocked: opening.blocked });
   }
 
-  const people = crowd(pool);
+  const people = crowdOf(pool);
   const random = rng(hash32('waves', pool, `${id}.${number}`));
   const wave0 = firstWave(people, opening.scores, post.preset, random);
   const plan = { wave: 0, answered: 0, history: { 0: wave0.map((who) => who.id) } };
@@ -282,7 +301,7 @@ async function closeWave(url, env) {
 
   // 传播：够 glad，且还有波次与还没看到的人。
   if (waveTravels && waveIndex + 1 < maxWaves && reached.size < CROWD) {
-    const people = crowd(pool);
+    const people = crowdOf(pool);
     const random = rng(hash32('waves', pool, `${id}.${v}.${waveIndex + 1}`));
     const next = nextWave(people, reached, scores, presetId, waveIndex + 1, random);
     plan.wave = waveIndex + 1;
@@ -293,7 +312,7 @@ async function closeWave(url, env) {
   }
 
   // 检查收尾：把收尾提问（为什么划走/什么让他们停下/会评论什么）发给到达过的人。
-  const people = crowd(pool);
+  const people = crowdOf(pool);
   const reactionOf = (pid) => reached.get(pid);
   const followUp = await runFollowUp(env, post, version, provider, reached, people, v);
   let gathered = emptyGathered();
@@ -396,7 +415,7 @@ async function showPost(id, env, url) {
   };
   if (post.state === 'blocked') return json(base);
 
-  const people = crowd(post.pool);
+  const people = crowdOf(post.pool);
   const { results: rows } = await env.DB.prepare('SELECT id, wave, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, v).all();
   const bytes = new Uint8Array(CROWD);
   const byWave = new Map();
