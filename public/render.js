@@ -103,7 +103,8 @@ function segmentsView(result) {
     html.push(`<h3>${title}（显著高于全城）</h3>`);
     for (const seg of list) {
       const share = seg.size ? seg[key] / seg.size : 0;
-      const color = key === 'sorry' ? 'var(--sorry)' : key === 'glad' ? 'var(--glad)' : 'var(--accent)';
+      // 条色对齐地图图例的语义色：停下=蓝，乐见=绿，反感=红（--map-* 是全主题不变的数据墨水）。
+      const color = key === 'sorry' ? 'var(--map-red)' : key === 'glad' ? 'var(--map-green)' : 'var(--map-blue)';
       html.push(
         `<div class="seg"><span class="label">${esc(SEGMENT_ZH[seg.attribute] ?? seg.attribute)}：${esc(segmentValueZh(seg.attribute, seg.value))}</span>` +
         `<span class="bar2"><i style="width:${Math.round(share * 100)}%;background:${color}"></i></span>` +

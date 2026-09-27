@@ -1,4 +1,4 @@
-// 首页示例：两条真实检查的存档，纯浏览器回放——访客先看到小镇会做什么，再决定写不写。
+// 首页示例：两条真实检查的存档，纯浏览器回放。访客先看到小镇会做什么，再决定写不写。
 import { renderCheck } from './render.js';
 import { replayToView } from './shared/replay.js';
 
