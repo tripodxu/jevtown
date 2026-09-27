@@ -533,6 +533,41 @@ canvas.grid {
 .said-row .what { color: var(--muted); }
 .said-row .lead { color: var(--text); }
 
+/* ---------- 图谱 ---------- */
+
+.chart { width: 100%; height: auto; display: block; margin-top: 10px; }
+.chart .chart-zero { stroke: var(--hairline-strong); stroke-width: 1; }
+.chart .chart-axis-line { stroke: var(--hairline); stroke-width: 1; }
+.chart .chart-num { fill: var(--muted); font-family: var(--font-mono); font-size: 10.5px; }
+.chart .chart-axis { fill: var(--muted); font-family: var(--font-body); font-size: 11px; }
+
+/* 漏斗与分阶段条（共用一行三段式） */
+.funnel { margin-top: 6px; }
+
+.frow { display: flex; align-items: center; gap: 12px; margin: 7px 0; }
+
+.frow .flabel { min-width: 76px; color: var(--muted); font-size: 12.5px; flex-shrink: 0; }
+
+.frow .fbar {
+  flex: 1;
+  max-width: 400px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--inset);
+  overflow: hidden;
+}
+
+.frow .fbar i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+
+/* 漏斗的情绪分层：够 glad=绿、持平=蓝、负面=红 */
+.frow .fbar i.fgo { background: var(--map-green); }
+.frow .fbar i.fhold { background: var(--map-blue); }
+.frow .fbar i.fdrop { background: var(--map-red); }
+
+.frow .fnum { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+
+.report-meta { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; }
+
 /* Jev 解读 */
 .checks { display: flex; flex-wrap: wrap; gap: 8px; }
 .checks .chip.yes { color: var(--ok); border-color: var(--ok); }

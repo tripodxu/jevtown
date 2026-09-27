@@ -155,3 +155,13 @@ export function personView(who) {
     temper: TEMPER[who.temper]?.zh,
   };
 }
+
+/** 调用报告的分阶段名称（batches.stage → 中文）。 */
+export function reportStageZh(stage) {
+  if (stage === 'opening') return '开局打分';
+  if (stage === 'followup') return '追问阶段';
+  if (stage === 'ask') return '收尾提问';
+  const wave = /^wave(\d+)$/.exec(stage);
+  if (wave) return `第 ${Number(wave[1]) + 1} 波`;
+  return stage;
+}

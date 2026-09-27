@@ -34,6 +34,30 @@ test('product：跑完后有价格阶梯追问，GET /api/post 能拿到 followU
   assert.deepEqual(detail.prices, [9, 19, 39, 79]);
 }, { timeout: 120_000 });
 
+test('调用报告：分阶段次数/耗时/tokens 齐全，provider 记录在案', async () => {
+  const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '调用报告验证：一条普通的帖子' })).json();
+  await runToDone(worker, opening.post, opening.version);
+  const detail = await (await worker.fetch(`/api/post/${opening.post}?v=1`)).json();
+
+  const report = detail.report;
+  assert.ok(report, 'report 缺失');
+  assert.equal(report.provider, 'mock');
+  const byStage = Object.fromEntries(report.stages.map((s) => [s.stage, s]));
+  assert.ok(byStage.opening, '缺 opening 阶段');
+  assert.equal(byStage.opening.n, 1);
+  const waveStages = report.stages.filter((s) => /^wave\d+$/.test(s.stage));
+  assert.ok(waveStages.length >= 1, '缺波次阶段');
+  for (const wave of waveStages) {
+    assert.ok(wave.n >= 1, `波次应逐批记账，得 ${wave.n}`);
+    assert.ok(wave.ms > 0, 'mock 也应记录模拟耗时');
+    assert.ok(wave.tokens > 0);
+  }
+  assert.ok(report.totals.requests >= report.stages.length);
+  assert.ok(report.totals.ms > 0);
+  // spent 口径 = versions.usd（mock 全为 0）
+  assert.equal(report.totals.usd, 0);
+}, { timeout: 120_000 });
+
 test('listing：跑完后有买家问题追问', async () => {
   const res = await postJSON(worker, '/api/check', { preset: 'listing', text: '出 iPhone 13，128G，电池 86%，无维修，1400 元，可小刀，包邮，联系我' });
   const opening = await res.json();

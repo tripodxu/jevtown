@@ -151,8 +151,10 @@ export function createMockAsk() {
           : { probabilities: { [first]: 0.9, [CANT_TELL]: 0.1 } };
       }
     }
-    // 输入 token 按问题数估算；mock 不花钱。
-    const tokens = Object.keys(questions).length * 45 + 60;
-    return { answers, tokens, usd: 0 };
+    // 输入 token 按问题数估算；mock 不花钱。ms 是模拟的模型耗时（让调用报告在 mock 下也有形状）。
+    const count = Object.keys(questions).length;
+    const tokens = count * 45 + 60;
+    const ms = 45 + count * 6 + Math.floor(unit('mock-ms', count, text.length % 97) * 140);
+    return { answers, tokens, usd: 0, ms };
   };
 }

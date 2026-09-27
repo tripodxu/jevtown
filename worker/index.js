@@ -60,13 +60,13 @@ const loadPost = async (db, id) => (await db.prepare('SELECT * FROM posts WHERE 
 const loadVersion = async (db, id, number = 1) =>
   (await db.prepare('SELECT * FROM versions WHERE post = ? AND number = ?').bind(id, number).first()) ?? null;
 
-/** 记一笔花费流水。返回 D1 语句（可直接进 db.batch，单独执行时加 .run()）；同一键重复时累加。 */
-const addSpend = (db, { post, number = 1, stage, n = 0, usd = 0, tokens = 0, day }) =>
+/** 记一笔调用流水（请求数以行计，同键冲突时累加金额与耗时）。返回 D1 语句（可直接进 db.batch，单独执行时加 .run()）。 */
+const addSpend = (db, { post, number = 1, stage, n = 0, usd = 0, tokens = 0, ms = 0, day }) =>
   db.prepare(
-    'INSERT INTO batches (post, number, stage, n, usd, tokens, day) VALUES (?, ?, ?, ?, ?, ?, ?) ' +
-      'ON CONFLICT (post, number, stage, n) DO UPDATE SET usd = usd + excluded.usd, tokens = tokens + excluded.tokens',
+    'INSERT INTO batches (post, number, stage, n, usd, tokens, ms, day) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ' +
+      'ON CONFLICT (post, number, stage, n) DO UPDATE SET usd = usd + excluded.usd, tokens = tokens + excluded.tokens, ms = ms + excluded.ms',
   )
-    .bind(post, number, stage, n, round2(usd), Math.round(tokens), day);
+    .bind(post, number, stage, n, round2(usd), Math.round(tokens), Math.round(ms), day);
 
 /** 全站今天已花掉多少（CROWD_DAILY_BUDGET_USD 的对手盘）。 */
 const spentToday = async (db, day) => {
@@ -129,7 +129,7 @@ async function runCheck(request, env) {
 
   const provider = providerOf(env);
   const pool = 'zh';
-  const { answers, usd, tokens } = await provider.ask(openingRequest(presetId, text));
+  const { answers, usd, tokens, ms } = await provider.ask(openingRequest(presetId, text));
   const opening = openingAnswers(answers);
   const id = newId();
   const now = Date.now();
@@ -145,9 +145,9 @@ async function runCheck(request, env) {
       env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .bind(id, presetId, pool, text, 'blocked', now, day, ip),
       env.DB.prepare(
-        'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, prices, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, prices ? JSON.stringify(prices) : null, round2(usd), tokens),
-      addSpend(env.DB, { post: id, stage: 'opening', usd, tokens, day }),
+        'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, prices, provider, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, prices ? JSON.stringify(prices) : null, provider.name, round2(usd), tokens),
+      addSpend(env.DB, { post: id, stage: 'opening', usd, tokens, ms, day }),
     ]);
     return json({ post: id, version: 1, state: 'blocked', blocked: opening.blocked, unlisted: opening.unlisted, checks: opening.checks });
   }
@@ -161,9 +161,9 @@ async function runCheck(request, env) {
     env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, presetId, pool, text, 'running', now, day, ip),
     env.DB.prepare(
-      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, prices, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, JSON.stringify(plan), prices ? JSON.stringify(prices) : null, round2(usd), tokens),
-    addSpend(env.DB, { post: id, stage: 'opening', usd, tokens, day }),
+      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, prices, provider, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, JSON.stringify(plan), prices ? JSON.stringify(prices) : null, provider.name, round2(usd), tokens),
+    addSpend(env.DB, { post: id, stage: 'opening', usd, tokens, ms, day }),
   ]);
   return json({
     post: id,
@@ -205,15 +205,15 @@ async function runVersion(request, env) {
   const number = row.number;
   const provider = providerOf(env);
   const pool = post.pool;
-  const { answers, usd, tokens } = await provider.ask(openingRequest(post.preset, text));
+  const { answers, usd, tokens, ms } = await provider.ask(openingRequest(post.preset, text));
   const opening = openingAnswers(answers);
 
   if (opening.blocked.length) {
     await env.DB.batch([
       env.DB.prepare(
-        'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, usd, tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), round2(usd), tokens),
-      addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, day: today() }),
+        'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, provider, usd, tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), provider.name, round2(usd), tokens),
+      addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, ms, day: today() }),
     ]);
     return json({ post: id, version: number, state: 'blocked', blocked: opening.blocked });
   }
@@ -225,9 +225,9 @@ async function runVersion(request, env) {
   await env.DB.batch([
     env.DB.prepare('UPDATE posts SET state = ? WHERE id = ?').bind('running', id),
     env.DB.prepare(
-      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, usd, tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), JSON.stringify(plan), round2(usd), tokens),
-    addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, day: today() }),
+      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, provider, usd, tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), JSON.stringify(plan), provider.name, round2(usd), tokens),
+    addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, ms, day: today() }),
   ]);
   return json({ post: id, version: number, state: 'running', wave: { index: 0, total: wave0.length } });
 }
@@ -251,7 +251,7 @@ async function runBatch(url, env) {
   const batch = order.slice(start, start + PER_REQUEST);
   const people = batch.map((pid) => persona(pool, pid));
   const provider = providerOf(env);
-  const { answers, usd, tokens } = await provider.ask(reactionRequest(presetId, version.text, people));
+  const { answers, usd, tokens, ms } = await provider.ask(reactionRequest(presetId, version.text, people));
 
   const versionId = `${id}.${v}`;
   const statements = batch.map((pid, index) => {
@@ -264,7 +264,7 @@ async function runBatch(url, env) {
   statements.push(
     env.DB.prepare('UPDATE versions SET plan = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
       .bind(JSON.stringify(plan), round2(usd), tokens, id, v),
-    addSpend(env.DB, { post: id, number: v, stage: `wave${plan.wave}`, n: start, usd, tokens, day: today() }),
+    addSpend(env.DB, { post: id, number: v, stage: `wave${plan.wave}`, n: start, usd, tokens, ms, day: today() }),
   );
   await env.DB.batch(statements);
   return json({ answered: plan.answered, total: order.length, wave: plan.wave });
@@ -324,6 +324,7 @@ async function closeWave(url, env) {
   const missing = {};
   let askUsd = 0;
   let askTokens = 0;
+  let askMs = 0;
   const budget = Number(env.CROWD_DAILY_BUDGET_USD ?? 0);
   const spent = budget > 0 && provider.name !== 'mock' && (await spentToday(env.DB, today())) >= budget;
   for (const { question, ids } of closing) {
@@ -333,7 +334,7 @@ async function closeWave(url, env) {
       continue;
     }
     try {
-      const { part, usd, tokens } = await askQuestion(provider.ask, question, {
+      const { part, usd, tokens, ms } = await askQuestion(provider.ask, question, {
         presetId,
         text: version.text,
         people: ids.map((pid) => people[pid]),
@@ -344,7 +345,8 @@ async function closeWave(url, env) {
       parts.push(part);
       askUsd += usd;
       askTokens += tokens;
-      await addSpend(env.DB, { post: id, number: v, stage: 'ask', usd, tokens, day: today() }).run();
+      askMs += ms;
+      await addSpend(env.DB, { post: id, number: v, stage: 'ask', n: parts.length - 1, usd, tokens, ms, day: today() }).run();
     } catch (error) {
       console.error('ask', question, error?.message);
       for (const list of listsOf(question, presetId, ids, reactionOf)) missing[list] = 'failed';
@@ -373,10 +375,11 @@ async function runFollowUp(env, post, version, provider, reached, people, number
   let tokens = 0;
   for (let i = 0; i < stopped.length; i += PER_REQUEST) {
     const batchPeople = stopped.slice(i, i + PER_REQUEST).map((pid) => people[pid]);
-    const { answers: batchAnswers, usd: batchUsd, tokens: batchTokens } =
+    const { answers: batchAnswers, usd: batchUsd, tokens: batchTokens, ms: batchMs } =
       await provider.ask(followUpRequest(post.preset, version.text, batchPeople, answers));
     usd += batchUsd;
     tokens += batchTokens;
+    await addSpend(env.DB, { post: post.id, number, stage: 'followup', n: i / PER_REQUEST, usd: batchUsd, tokens: batchTokens, ms: batchMs, day: today() }).run();
     for (const who of batchPeople) {
       const probabilities = batchAnswers[questionId(who)]?.probabilities ?? {};
       asked += 1;
@@ -384,11 +387,9 @@ async function runFollowUp(env, post, version, provider, reached, people, number
     }
   }
   const followUp = { answers, asked, totals };
-  await env.DB.batch([
-    env.DB.prepare('UPDATE versions SET follow_up = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
-      .bind(JSON.stringify(followUp), round2(usd), tokens, post.id, number),
-    addSpend(env.DB, { post: post.id, number, stage: 'followup', usd, tokens, day: today() }),
-  ]);
+  await env.DB.prepare('UPDATE versions SET follow_up = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
+    .bind(JSON.stringify(followUp), round2(usd), tokens, post.id, number)
+    .run();
   return followUp;
 }
 
@@ -455,8 +456,35 @@ async function showPost(id, env, url) {
     followUp: version.follow_up ? JSON.parse(version.follow_up) : null,
     prices: version.prices ? JSON.parse(version.prices) : null,
     versions: await versionsOf(env.DB, id),
+    report: await callReport(env.DB, id, v, version),
     spent: { usd: round2(version.usd ?? 0), tokens: version.tokens ?? 0 },
   });
+}
+
+/** Jev 调用报告：分阶段聚合请求流水（次数/花费/tokens/耗时），报告卡与图谱的数据源。 */
+async function callReport(db, id, number, version) {
+  const { results } = await db.prepare(
+    'SELECT stage, COUNT(*) AS n, SUM(usd) AS usd, SUM(tokens) AS tokens, SUM(ms) AS ms FROM batches WHERE post = ? AND number = ? GROUP BY stage ORDER BY MIN(rowid)',
+  )
+    .bind(id, number)
+    .all();
+  const stages = results.map((row) => ({
+    stage: row.stage,
+    n: row.n,
+    usd: round2(row.usd ?? 0),
+    tokens: row.tokens ?? 0,
+    ms: row.ms ?? 0,
+  }));
+  return {
+    provider: version.provider ?? null,
+    stages,
+    totals: {
+      requests: stages.reduce((sum, s) => sum + s.n, 0),
+      usd: round2(stages.reduce((sum, s) => sum + s.usd, 0)),
+      tokens: stages.reduce((sum, s) => sum + s.tokens, 0),
+      ms: stages.reduce((sum, s) => sum + s.ms, 0),
+    },
+  };
 }
 
 /** 某帖的全部版本（轻量列表：版本号、文本、派生态）。注意 blocked/said 是 JSON 文本列：'[]' 也是真值，必须解析后判断。 */
