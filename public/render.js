@@ -66,7 +66,8 @@ function wavesView(result) {
     const last = wave.index === result.waves.length - 1;
     const cls = wave.travels && !last ? 'go' : 'stop';
     const label = cls === 'go' ? '继续传播' : last ? '检查结束' : '停在这里';
-    return `<tr><td>第 ${wave.index + 1} 波</td><td>${wave.size} / ${wave.asked}</td><td>${wave.mood >= 0 ? '+' : ''}${wave.mood}</td>` +
+    const moodText = `${wave.mood >= 0 ? '+' : ''}${Number(wave.mood).toFixed(2)}`;
+    return `<tr><td>第 ${wave.index + 1} 波</td><td>${wave.size} / ${wave.asked}</td><td>${moodText}</td>` +
       `<td><span class="badge ${cls}">${label}</span></td></tr>`;
   });
   return `<h3>传播波次</h3><table class="waves"><tr><th>波次</th><th>到达</th><th>情绪（乐见−反感）</th><th></th></tr>${rows.join('')}</table>`;
