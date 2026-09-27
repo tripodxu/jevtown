@@ -3,8 +3,9 @@
 import { PRESETS, LOOKS, lookOf } from './shared/presets.js';
 import { drawGrid, attachTooltip } from './grid.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh,
 } from './shared/labels.js';
+import { moodLine, demandChart, funnel, reportBars, fmtMs } from './charts.js';
 import { rankedAnswers, demandCurve } from './shared/summary.js';
 import { decodeBytes } from './shared/bytes.js';
 
@@ -31,6 +32,7 @@ export function renderCheck(el, result) {
   html.push('</div>');
 
   html.push(overview(result));
+  html.push(reportView(result));
   html.push(wavesView(result));
   html.push(countsView(result));
   html.push('<h3>小镇地图</h3><div class="map-wrap"><canvas class="grid" role="img" aria-label="小镇反应地图：一万个格子，每格一个人格的反应（悬停可看详情）"></canvas><div class="legend"></div></div>');
@@ -60,28 +62,48 @@ function overview(result) {
     '</div>';
 }
 
+function reportView(result) {
+  const report = result.report;
+  if (!report?.stages?.length) return '';
+  const t = report.totals;
+  const provider = report.provider ? `<span class="chip">${esc(report.provider)}</span>` : '';
+  return `<h3>Jev 调用报告</h3>
+    <div class="stats">
+      ${stat(t.requests, '模型请求')}
+      ${stat(t.tokens.toLocaleString(), '输入 tokens')}
+      ${stat(`$${t.usd.toFixed(4)}`, '花费')}
+      ${stat(fmtMs(t.ms), '模型耗时')}
+    </div>
+    <div class="report-meta">${provider}<span class="hint">分阶段明细（条长 = ${t.usd > 0 ? '花费' : '耗时'}占比）</span></div>
+    ${reportBars(report.stages, reportStageZh)}`;
+}
+
 function wavesView(result) {
   if (!result.waves?.length) return '';
-  const rows = result.waves.map((wave) => {
-    const last = wave.index === result.waves.length - 1;
-    const cls = wave.travels && !last ? 'go' : 'stop';
-    const label = cls === 'go' ? '继续传播' : last ? '检查结束' : '停在这里';
-    const moodText = `${wave.mood >= 0 ? '+' : ''}${Number(wave.mood).toFixed(2)}`;
-    return `<tr><td>第 ${wave.index + 1} 波</td><td>${wave.size} / ${wave.asked}</td><td>${moodText}</td>` +
-      `<td><span class="badge ${cls}">${label}</span></td></tr>`;
-  });
-  return `<h3>传播波次</h3><table class="waves"><tr><th>波次</th><th>到达</th><th>情绪（乐见−反感）</th><th></th></tr>${rows.join('')}</table>`;
+  const line = moodLine(result.waves.map((w) => w.mood));
+  return `<h3>传播波次与情绪轨迹</h3>${funnel(result.waves)}${line}`;
 }
 
 function countsView(result) {
   const presetId = result.post.preset;
-  const chips = Object.entries(result.counters.byReaction)
+  const reach = Math.max(1, result.counters.reach);
+  const rows = Object.entries(result.counters.byReaction)
     .filter(([, count]) => count)
-    .map(([reaction, count]) => {
-      const look = lookOf(presetId, reaction);
-      return `<span class="chip" style="border-color:${LOOKS[look]}"><b>${count.toLocaleString()}</b> ${esc(REACTIONS_ZH[reaction] ?? reaction)}</span>`;
-    });
-  return `<h3>大家做了什么</h3><div class="counts">${chips.join('')}</div>`;
+    .sort((a, b) => b[1] - a[1]);
+  const max = rows[0]?.[1] ?? 1;
+  const bars = rows.map(([reaction, count]) => {
+    const look = lookOf(presetId, reaction);
+    const width = Math.max(3, Math.round((count / max) * 100));
+    return `<div class="seg"><span class="label">${esc(REACTIONS_ZH[reaction] ?? reaction)}</span>` +
+      `<span class="bar2"><i style="width:${width}%;background:${LOOKS[look]}"></i></span>` +
+      `<span class="num">${count.toLocaleString()} · ${Math.round((count / reach) * 100)}%</span></div>`;
+  });
+  return `<h3>反应分布（占到达人数）</h3>${bars.join('')}`;
+}
+
+function liftOf(seg, key) {
+  const lift = key === 'stopped' ? seg.stoppedLift : key === 'glad' ? seg.gladLift : seg.sorryLift;
+  return lift >= 1.05 ? (Math.round(lift * 10) / 10).toFixed(1) : '';
 }
 
 function jevReading(result) {
@@ -108,7 +130,7 @@ function segmentsView(result) {
       html.push(
         `<div class="seg"><span class="label">${esc(SEGMENT_ZH[seg.attribute] ?? seg.attribute)}：${esc(segmentValueZh(seg.attribute, seg.value))}</span>` +
         `<span class="bar2"><i style="width:${Math.round(share * 100)}%;background:${color}"></i></span>` +
-        `<span class="num">${seg[key]} / ${seg.size}（${Math.round(share * 100)}%）</span></div>`,
+        `<span class="num">${seg[key]} / ${seg.size}（${Math.round(share * 100)}%${liftOf(seg, key) ? ` · ${liftOf(seg, key)}×` : ""}）</span></div>`,
       );
     }
   }
@@ -152,13 +174,10 @@ function followUpView(result) {
     }
   } else if (presetId === 'product' && result.prices) {
     const curve = demandCurve(f, result.prices);
-    const most = curve.at(-1)?.revenue || 1;
-    html.push(`<div class="said-row"><span class="what">问过 ${f.asked} 个停下的人，各价位的买家与收入：</span></div>`);
-    for (const step of curve) {
-      html.push(`<div class="seg"><span class="label">¥${step.price}</span>` +
-        `<span class="bar2"><i style="width:${Math.round((step.revenue / most) * 100)}%;background:var(--glad)"></i></span>` +
-        `<span class="num">${step.buyers} 人 · ¥${step.revenue}</span></div>`);
-    }
+    html.push(`<div class="said-row"><span class="what">问过 ${f.asked} 个停下的人，价格阶梯上的买家数（累计）：</span></div>`);
+    html.push(demandChart(curve));
+    const best = [...curve].sort((a, b) => b.revenue - a.revenue)[0];
+    if (best) html.push(`<div class="said-row"><span class="what">收入最高的定价：¥${best.price}（${best.buyers} 人 · ¥${best.revenue.toLocaleString()}）</span></div>`);
   }
   return html.join('');
 }

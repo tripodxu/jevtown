@@ -25,7 +25,7 @@ const round2 = (value) => Math.round(value * 100) / 100;
  * → { part: { lists: { [list]: { asked, totals } }, picks: { [list]: { [answer]: [personId, …] } } }, usd, tokens }
  */
 export async function askQuestion(send, question, { presetId, text, people, reactionOf, pool, versionId }) {
-  const { answers, usd, tokens } = await send(askRequest(question, presetId, text, people, reactionOf));
+  const { answers, usd, tokens, ms } = await send(askRequest(question, presetId, text, people, reactionOf));
   const lists = {};
   const picks = {};
   for (const who of people) {
@@ -41,7 +41,7 @@ export async function askQuestion(send, question, { presetId, text, people, reac
     if (pick !== CANT_TELL) ((picks[list] ??= {})[pick] ??= []).push(who.id);
   }
   for (const tally of Object.values(lists)) for (const id of Object.keys(tally.totals)) tally.totals[id] = round2(tally.totals[id]);
-  return { part: { lists, picks }, usd, tokens };
+  return { part: { lists, picks }, usd, tokens, ms };
 }
 
 /** The lists a closing question fills with the answers of `ids`: why fills one for each look among them. */
