@@ -134,7 +134,12 @@ export function createMockAsk() {
         if ('negotiable' in question.criteria) {
           answers[id] = { probabilities: { available: 0.3, negotiable: 0.34, condition: 0.2, defects: 0.1, photos: 0.06, nothing: 0.0 } };
         } else {
-          answers[id] = { probabilities: { p0: 0.46, p1: 0.24, p2: 0.16, p3: 0.14 } };
+          // 商品价格阶梯：p0 = 哪档都不买，p1..pn = 愿付的最高档；档数由题面决定，动态分摊。
+          const steps = Object.keys(question.criteria).filter((key) => /^p\d+$/.test(key) && key !== 'p0');
+          const probabilities = { p0: 0.46 };
+          const share = 0.54 / Math.max(1, steps.length);
+          for (const step of steps) probabilities[step] = share;
+          answers[id] = { probabilities };
         }
       } else {
         // 收尾提问：答案列表因人而异，取前两个真实答案按 0.6/0.3 分配，一成给 cant_tell。

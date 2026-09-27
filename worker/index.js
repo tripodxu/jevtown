@@ -7,9 +7,9 @@
 //   GET  /api/feed      最近的检查
 // 引擎全部来自 public/shared/（上游 gaborishka/jevtown，MIT），Worker 只做编排和存取。
 import { crowd, persona, CROWD } from '../public/shared/personas.js';
-import { PRESETS, CANT_TELL } from '../public/shared/presets.js';
+import { PRESETS, CANT_TELL, priceLadder } from '../public/shared/presets.js';
 import { JOB, TEMPER } from '../public/shared/vocab.js';
-import { openingRequest, openingAnswers, reactionRequest, questionId, MAX_TEXT_CHARS } from '../public/shared/requests.js';
+import { openingRequest, openingAnswers, reactionRequest, questionId, MAX_TEXT_CHARS, followUpRequest } from '../public/shared/requests.js';
 import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered } from '../public/shared/feed.js';
 import { drawReaction } from '../public/shared/draw.js';
 import { askQuestion, mergeSaid, listsOf } from '../public/shared/check.js';
@@ -48,13 +48,13 @@ const loadPost = async (db, id) => (await db.prepare('SELECT * FROM posts WHERE 
 const loadVersion = async (db, id, number = 1) =>
   (await db.prepare('SELECT * FROM versions WHERE post = ? AND number = ?').bind(id, number).first()) ?? null;
 
-/** 记一笔花费流水。返回 D1 语句（可直接进 db.batch，单独执行时加 .run()）。 */
-const addSpend = (db, { post, stage, n = 0, usd = 0, tokens = 0, day }) =>
+/** 记一笔花费流水。返回 D1 语句（可直接进 db.batch，单独执行时加 .run()）；同一键重复时累加。 */
+const addSpend = (db, { post, number = 1, stage, n = 0, usd = 0, tokens = 0, day }) =>
   db.prepare(
-    'INSERT INTO batches (post, number, stage, n, usd, tokens, day) VALUES (?, 1, ?, ?, ?, ?, ?) ' +
+    'INSERT INTO batches (post, number, stage, n, usd, tokens, day) VALUES (?, ?, ?, ?, ?, ?, ?) ' +
       'ON CONFLICT (post, number, stage, n) DO UPDATE SET usd = usd + excluded.usd, tokens = tokens + excluded.tokens',
   )
-    .bind(post, stage, n, round2(usd), Math.round(tokens), day);
+    .bind(post, number, stage, n, round2(usd), Math.round(tokens), day);
 
 /** 全站今天已花掉多少（CROWD_DAILY_BUDGET_USD 的对手盘）。 */
 const spentToday = async (db, day) => {
@@ -99,6 +99,10 @@ async function runCheck(request, env) {
   if (!PRESETS[presetId]) return fail('unknown preset');
   if (!text) return fail('text is empty');
   if (text.length > MAX_TEXT_CHARS) return fail(`text is longer than ${MAX_TEXT_CHARS} chars`);
+  const prices = presetId === 'product'
+    ? (Array.isArray(body.prices) && body.prices.every((n) => Number.isFinite(n) && n > 0) && body.prices.length >= 2 ? body.prices.map(Number) : null)
+    : null;
+  if (presetId === 'product' && !prices) return fail('product 需要 prices：至少两个正数的数组，如 [9,19,39,79]');
 
   const ip = request.headers.get('CF-Connecting-IP') ?? 'local';
   const day = today();
@@ -128,8 +132,8 @@ async function runCheck(request, env) {
       env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .bind(id, presetId, pool, text, 'blocked', now, day, ip),
       env.DB.prepare(
-        'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)',
-      ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, round2(usd), tokens),
+        'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, prices, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, prices ? JSON.stringify(prices) : null, round2(usd), tokens),
       addSpend(env.DB, { post: id, stage: 'opening', usd, tokens, day }),
     ]);
     return json({ post: id, version: 1, state: 'blocked', blocked: opening.blocked, unlisted: opening.unlisted, checks: opening.checks });
@@ -144,8 +148,8 @@ async function runCheck(request, env) {
     env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, presetId, pool, text, 'running', now, day, ip),
     env.DB.prepare(
-      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, JSON.stringify(plan), round2(usd), tokens),
+      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, prices, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, JSON.stringify(plan), prices ? JSON.stringify(prices) : null, round2(usd), tokens),
     addSpend(env.DB, { post: id, stage: 'opening', usd, tokens, day }),
   ]);
   return json({
@@ -239,6 +243,7 @@ async function closeWave(url, env) {
   // 检查收尾：把收尾提问（为什么划走/什么让他们停下/会评论什么）发给到达过的人。
   const people = crowd(pool);
   const reactionOf = (pid) => reached.get(pid);
+  const followUp = await runFollowUp(env, post, version, provider, reached, people, 1);
   let gathered = emptyGathered();
   for (const wave of Object.keys(plan.history).sort((a, b) => a - b)) {
     gathered = gatherAsked(presetId, plan.history[wave], reactionOf, gathered);
@@ -275,7 +280,39 @@ async function closeWave(url, env) {
     env.DB.prepare('UPDATE versions SET said = ? WHERE post = ? AND number = 1').bind(JSON.stringify(said), id),
     env.DB.prepare("UPDATE posts SET state = 'done' WHERE id = ?").bind(id),
   ]);
-  return json({ wave: waveInfo, travels: false, done: true, reach: reached.size });
+  return json({ wave: waveInfo, travels: false, done: true, reach: reached.size, followUp: followUp && { asked: followUp.asked } });
+}
+
+/** 追问阶段：闲置帖问停下的人"会问卖家什么"；商品帖问价格阶梯。结果存 versions.follow_up。 */
+async function runFollowUp(env, post, version, provider, reached, people, number) {
+  const preset = PRESETS[post.preset];
+  if (!preset.followUp) return null;
+  const prices = version.prices ? JSON.parse(version.prices) : null;
+  const answers = preset.followUp.answers ?? priceLadder(prices ?? [9, 19, 39, 79], '¥');
+  const stopped = [...reached.entries()].filter(([, reaction]) => preset.reactions[reaction]?.stopped).map(([id]) => id);
+  const totals = Object.fromEntries(Object.keys(answers).map((id) => [id, 0]));
+  let asked = 0;
+  let usd = 0;
+  let tokens = 0;
+  for (let i = 0; i < stopped.length; i += PER_REQUEST) {
+    const batchPeople = stopped.slice(i, i + PER_REQUEST).map((pid) => people[pid]);
+    const { answers: batchAnswers, usd: batchUsd, tokens: batchTokens } =
+      await provider.ask(followUpRequest(post.preset, version.text, batchPeople, answers));
+    usd += batchUsd;
+    tokens += batchTokens;
+    for (const who of batchPeople) {
+      const probabilities = batchAnswers[questionId(who)]?.probabilities ?? {};
+      asked += 1;
+      for (const [id, value] of Object.entries(probabilities)) totals[id] = (totals[id] ?? 0) + value;
+    }
+  }
+  const followUp = { answers, asked, totals };
+  await env.DB.batch([
+    env.DB.prepare('UPDATE versions SET follow_up = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
+      .bind(JSON.stringify(followUp), round2(usd), tokens, post.id, number),
+    addSpend(env.DB, { post: post.id, number, stage: 'followup', usd, tokens, day: today() }),
+  ]);
+  return followUp;
 }
 
 // -- GET /api/post/:id：一页所需的一切 -----------------------------------------
@@ -332,6 +369,8 @@ async function showPost(id, env) {
       sorry: topSegments(all, 'sorry'),
     },
     voices,
+    followUp: version.follow_up ? JSON.parse(version.follow_up) : null,
+    prices: version.prices ? JSON.parse(version.prices) : null,
     spent: { usd: round2(version.usd ?? 0), tokens: version.tokens ?? 0 },
   });
 }
