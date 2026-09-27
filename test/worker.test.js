@@ -42,3 +42,19 @@ test('listing：跑完后有买家问题追问', async () => {
   assert.ok(detail.followUp.asked > 0);
   assert.ok('negotiable' in detail.followUp.totals, '买家问题里应有砍价');
 }, { timeout: 120_000 });
+
+test('版本：同一帖可再发一版，两版各有各的计数，versions 列表齐全', async () => {
+  const first = await (await postJSON(worker, '/api/check', { preset: 'post', text: '跑了五公里，说说我怎么坚持下来的，附训练计划' })).json();
+  await runToDone(worker, first.post, first.version);
+
+  const second = await (await postJSON(worker, '/api/version', { post: first.post, text: '五公里跑三年，体重和焦虑一起下来的：我的笨办法' })).json();
+  assert.equal(second.version, 2);
+  await runToDone(worker, second.post, second.version);
+
+  const v2 = await (await worker.fetch(`/api/post/${second.post}?v=2`)).json();
+  assert.equal(v2.post.id, first.post);
+  assert.ok(v2.counters.reach > 0);
+  assert.deepEqual(v2.versions.map((entry) => entry.number), [1, 2]);
+  assert.ok(v2.versions.every((entry) => entry.text.length > 0));
+  assert.ok(v2.versions.every((entry) => entry.state === 'done'));
+}, { timeout: 240_000 });
