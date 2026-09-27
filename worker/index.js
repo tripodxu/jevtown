@@ -8,12 +8,13 @@
 // 引擎全部来自 public/shared/（上游 gaborishka/jevtown，MIT），Worker 只做编排和存取。
 import { crowd, persona, CROWD } from '../public/shared/personas.js';
 import { PRESETS, CANT_TELL, priceLadder } from '../public/shared/presets.js';
-import { JOB, TEMPER } from '../public/shared/vocab.js';
 import { openingRequest, openingAnswers, reactionRequest, questionId, MAX_TEXT_CHARS, followUpRequest } from '../public/shared/requests.js';
 import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered } from '../public/shared/feed.js';
 import { drawReaction } from '../public/shared/draw.js';
 import { askQuestion, mergeSaid, listsOf } from '../public/shared/check.js';
 import { counters, segments, topSegments, voicesOf } from '../public/shared/summary.js';
+import { encodeBytes } from '../public/shared/bytes.js';
+import { personView } from '../public/shared/labels.js';
 import { pickProvider, ask as askJev } from '../public/shared/jev.js';
 import { createMockAsk } from '../public/shared/mock.js';
 import { rng, hash32 } from '../public/shared/rng.js';
@@ -411,7 +412,7 @@ async function showPost(id, env, url) {
   const said = JSON.parse(version.said ?? 'null');
   const voices = voicesOf(id, presetId, bytes).map((voice) => ({
     ...voice,
-    who: voiceOf(people[voice.id]),
+    who: personView(people[voice.id]),
   }));
 
   return json({
@@ -443,10 +444,7 @@ async function versionsOf(db, id) {
   }));
 }
 
-/** 收尾没问到的也有一条干净的人格行（界面只展示被问到的）。 */
-function voiceOf(who) {
-  return { id: who.id, name: who.name.zh, age: who.age, job: JOB[who.job]?.zh, city: who.city.zh, temper: TEMPER[who.temper]?.zh };
-}
+/** 收尾没问到的也有一条干净的人格行（界面只展示被问到的）——视图由 shared/labels.js 的 personView 给出。 */
 
 // -- GET /api/feed --------------------------------------------------------------
 
@@ -459,12 +457,4 @@ async function listFeed(env) {
 
 // -- 工具 -----------------------------------------------------------------------
 
-/** Uint8Array → base64（地图数据压缩传输）。 */
-function encodeBytes(bytes) {
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
+// Uint8Array → base64 的编解码已移到 shared/bytes.js，Worker 与浏览器/回放共用同一份。
