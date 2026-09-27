@@ -1,6 +1,7 @@
 // 前端编排：发文本 → 分步驱动检查（batch/wave）→ 交给 render.js 渲染。
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
 import { renderCheck, esc } from './render.js';
+import { initThemeSwitcher } from './theme.js';
 
 const BLOCKED_ZH = {
   hate: '仇恨攻击', sexual: '露骨色情', violence: '暴力威胁',
@@ -32,7 +33,8 @@ const postJSON = async (url, body) => {
 const status = (line, ratio) => {
   $('status').hidden = false;
   $('statusLine').textContent = line;
-  $('statusBar').style.width = `${Math.round((ratio ?? 0) * 100)}%`;
+  // 进度条用 scaleX 缩放（合成器友好），宽度恒为 100%。
+  $('statusBar').style.transform = `scaleX(${Math.min(1, Math.max(0, ratio ?? 0))})`;
 };
 
 // -- 提交与分步驱动 -------------------------------------------------------------
@@ -56,7 +58,7 @@ $('form').addEventListener('submit', async (event) => {
     current.post = opening.post;
     current.version = opening.version;
     if (opening.unlisted?.length) {
-      status(`注意：${opening.unlisted.map((id) => BLOCKED_ZH[id] ?? id).join('、')}——仍会照常检查，但不进公共流。`, 0.04);
+      status(`注意：${opening.unlisted.map((id) => BLOCKED_ZH[id] ?? id).join('、')}（仍会照常检查，但不进公共流）`, 0.04);
     }
 
     // 波次循环：一批批问 Jev（每批 100 人），收波定去留，直到检查结束。
@@ -72,7 +74,7 @@ $('form').addEventListener('submit', async (event) => {
         done = true;
         status('收尾完成。', 0.98);
       } else {
-        status(`第 ${wave.wave.index + 1} 波完成，情绪 ${wave.wave.mood >= 0 ? '+' : ''}${wave.wave.mood}——文字继续传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`, 0.5);
+        status(`第 ${wave.wave.index + 1} 波完成，情绪 ${wave.wave.mood >= 0 ? '+' : ''}${wave.wave.mood}，文字继续传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`, 0.5);
       }
     }
 
@@ -82,7 +84,7 @@ $('form').addEventListener('submit', async (event) => {
     await loadFeed();
   } catch (error) {
     $('statusLine').innerHTML = `<span class="error">${esc(error.message)}</span>`;
-    $('statusBar').style.width = '0%';
+    $('statusBar').style.transform = 'scaleX(0)';
   } finally {
     $('go').disabled = false;
   }
@@ -130,7 +132,7 @@ async function loadFeed() {
               `<span class="meta">${esc(PRESET_NOUN_OF(post.preset))} · ${post.state === 'done' ? '已完成' : post.state === 'running' ? '进行中' : '已拒绝'}</span></li>`,
           )
           .join('')
-      : '<li style="color:var(--muted)">还没有检查——发一段文字试试。</li>';
+      : '<li style="color:var(--muted)">还没有检查。发一段文字试试。</li>';
   } catch {
     $('feed').innerHTML = '<li class="error">读取失败：worker 没在跑？先 npm run dev。</li>';
   }
@@ -148,4 +150,5 @@ async function openPost(id) {
 }
 window.openPost = openPost;
 
+initThemeSwitcher();
 loadFeed();

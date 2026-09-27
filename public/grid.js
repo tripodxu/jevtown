@@ -1,5 +1,6 @@
-// 100×100 的小镇地图：一个人格一个点，颜色与 presets.js 的 LOOKS 一致。
-// 悬停时按需计算人格（shared/personas.js 直接在浏览器里跑，无构建步骤）。
+// 100×100 的小镇地图：一个人格一个点。未到达的人融入底色，到达的按反应上色。
+// 颜色分两层：反应六色是数据墨水（presets.js 的 LOOKS，全主题不变）；
+// 底板与网格取自主题的 CSS 变量（--map-well），所以切主题时整张地图要重绘。
 import { LOOKS, lookOf, PRESETS } from './shared/presets.js';
 import { persona } from './shared/personas.js';
 import { INTEREST, JOB, TEMPER, BUDGET } from './shared/vocab.js';
@@ -7,8 +8,27 @@ import { REACTIONS_ZH } from './shared/labels.js';
 
 const CELL = 4;
 const GRID = 100;
+// 已画过的画布登记在案：主题切换时逐张重绘。
+const drawn = new Map();
+
+const cssVar = (name, fallback) => {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+};
 
 export function drawGrid(canvas, bytes, presetId) {
+  drawn.set(canvas, { bytes, presetId });
+  paint(canvas, bytes, presetId);
+}
+
+/** 主题切换后调用：把登记过的地图全部按新令牌重画一遍。 */
+export function redrawMaps() {
+  for (const [canvas, args] of drawn) {
+    if (canvas.isConnected) paint(canvas, args.bytes, args.presetId);
+  }
+}
+
+function paint(canvas, bytes, presetId) {
   const keys = Object.keys(PRESETS[presetId].reactions);
   const dpr = window.devicePixelRatio || 1;
   canvas.width = GRID * CELL * dpr;
@@ -17,7 +37,7 @@ export function drawGrid(canvas, bytes, presetId) {
   canvas.style.height = `${GRID * CELL}px`;
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
-  ctx.fillStyle = LOOKS.dark;
+  ctx.fillStyle = cssVar('--map-well', '#0a0d13');
   ctx.fillRect(0, 0, GRID * CELL, GRID * CELL);
   for (let id = 0; id < bytes.length; id++) {
     const byte = bytes[id];
@@ -31,13 +51,17 @@ export function drawGrid(canvas, bytes, presetId) {
 /** 悬停提示：id → 人格档案 + 它的反应。 */
 export function attachTooltip(canvas, bytes, presetId) {
   const keys = Object.keys(PRESETS[presetId].reactions);
-  const tooltip = document.getElementById('tooltip');
+  let tooltip = document.getElementById('tooltip');
+  if (!tooltip) {
+    tooltip = Object.assign(document.createElement('div'), { id: 'tooltip', role: 'status' });
+    document.body.append(tooltip);
+  }
   canvas.addEventListener('mousemove', (event) => {
     const rect = canvas.getBoundingClientRect();
     const x = Math.floor((event.clientX - rect.left) / CELL);
     const y = Math.floor((event.clientY - rect.top) / CELL);
-    const visible = x >= 0 && x < GRID && y >= 0 && y < GRID;
-    if (!visible) { tooltip.style.display = 'none'; return; }
+    const inside = x >= 0 && x < GRID && y >= 0 && y < GRID;
+    if (!inside) { tooltip.style.display = 'none'; return; }
     const id = y * GRID + x;
     const who = persona('zh', id);
     const byte = bytes[id];

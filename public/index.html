@@ -1,29 +1,52 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="night">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>中文小镇 · 一万个人格怎么读你的文字</title>
   <meta name="description" content="发一段文字，一万个 AI 人格来读：谁停下、谁点赞、谁反感、谁划走。基于 Jev（System One 模型）。">
+  <script>
+    // 首帧前定主题，避免闪烁；四选一，localStorage 记忆。
+    try {
+      var saved = localStorage.getItem('jevtown.theme');
+      document.documentElement.dataset.theme =
+        ['night', 'bulletin', 'instrument', 'classic'].indexOf(saved) >= 0 ? saved : 'night';
+    } catch (e) {}
+  </script>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header>
-    <h1>中文小镇</h1>
-    <p class="tagline">发一段文字，一万个 AI 人格来读：谁停下、谁点赞、谁反感、谁划走。每一次反应都是模型对类型化问题给出的概率。</p>
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="top">
+    <a class="brand" href="/">
+      <span class="seal" aria-hidden="true">镇</span>
+      <span class="brand-name"><b>中文小镇</b><small>JEVTOWN CN</small></span>
+    </a>
+    <nav class="themeswitch" role="group" aria-label="主题切换">
+      <button class="theme-btn" type="button" data-theme="night" aria-pressed="true">夜巡</button>
+      <button class="theme-btn" type="button" data-theme="bulletin" aria-pressed="false">公报</button>
+      <button class="theme-btn" type="button" data-theme="instrument" aria-pressed="false">仪器</button>
+      <button class="theme-btn" type="button" data-theme="classic" aria-pressed="false">经典</button>
+    </nav>
   </header>
 
   <main>
-    <section id="showcase" class="card" hidden>
+    <section class="hero">
+      <h1>一万个 AI 人格，<em>读你写的每一个字</em></h1>
+      <p class="sub">发一段文字进小镇：谁停下、谁点赞、谁反感、谁划走。每一次反应，都是 Jev 对类型化问题给出的概率。</p>
+    </section>
+
+    <section id="showcase" class="plate" hidden>
       <h2>示例：同一条手机转让帖，两种写法</h2>
-      <p class="hint">以下是保存下来的检查结果，纯浏览器回放，不花一分钱。</p>
+      <p class="hint">保存下来的检查结果，纯浏览器回放，不花一分钱。</p>
       <div class="examples">
         <div class="card example-a"></div>
         <div class="card example-b"></div>
       </div>
     </section>
 
-    <section id="compose" class="card">
+    <section id="compose" class="plate">
       <form id="form">
         <div class="row">
           <label for="preset">类型</label>
@@ -37,7 +60,7 @@
         <textarea id="text" rows="5" maxlength="2000"
           placeholder="写下你想发的内容……&#10;试试：一条二手手机转让、一句朋友圈观点、一个商品卖点。"></textarea>
         <div class="row between">
-          <span class="hint" id="hint">本地开发默认 mock 模式：答案确定但不花钱。</span>
+          <span class="hint" id="hint">本地默认 mock 模式，答案确定但不花钱。</span>
           <button id="go" type="submit">让小镇来读</button>
         </div>
       </form>
@@ -47,26 +70,28 @@
       </div>
     </section>
 
-    <section id="result" class="card" hidden></section>
+    <section id="result" class="plate" hidden></section>
 
     <div class="row" id="resultActions" hidden>
-      <button id="revise" type="button">改一版再发</button>
-      <span class="hint">改两个词，让同一座小镇再读一遍，两版并排对比。</span>
+      <button id="revise" class="ghost" type="button">改一版再发</button>
+      <span class="hint">改几个词，让同一座小镇再读一遍，两版并排对比。</span>
     </div>
 
-    <section id="compare" class="card" hidden>
+    <section id="compare" class="plate" hidden>
       <h2>第 1 版（对比）</h2>
     </section>
 
-    <section id="feedSection" class="card">
+    <section id="feedSection" class="plate">
       <h2>最近的小镇检查</h2>
       <ul id="feed" class="feed"></ul>
     </section>
   </main>
 
+  <div id="tooltip" role="status"></div>
+
   <footer>
-    基于 <a href="https://github.com/gaborishka/jevtown" target="_blank" rel="noopener">gaborishka/jevtown</a>（MIT）的引擎与 Worker 架构改造 ·
-    决策模型 <a href="https://typesafe.ai" target="_blank" rel="noopener">Jev</a>（System One）· 仅限本地开发，未上线
+    引擎与架构来自 <a href="https://github.com/gaborishka/jevtown" target="_blank" rel="noopener">gaborishka/jevtown</a>（MIT）。
+    决策模型：<a href="https://typesafe.ai" target="_blank" rel="noopener">Jev</a>，TypeSafe 的 System One。本地开发中，未上线。
   </footer>
 
   <script type="module" src="/app.js"></script>
