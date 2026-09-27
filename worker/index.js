@@ -303,6 +303,8 @@ async function closeWave(url, env) {
   const closing = asking(presetId, version.text, gathered);
   const parts = [];
   const missing = {};
+  let askUsd = 0;
+  let askTokens = 0;
   const budget = Number(env.CROWD_DAILY_BUDGET_USD ?? 0);
   const spent = budget > 0 && provider.name !== 'mock' && (await spentToday(env.DB, today())) >= budget;
   for (const { question, ids } of closing) {
@@ -321,6 +323,8 @@ async function closeWave(url, env) {
         versionId: `${id}.${v}`,
       });
       parts.push(part);
+      askUsd += usd;
+      askTokens += tokens;
       await addSpend(env.DB, { post: id, number: v, stage: 'ask', usd, tokens, day: today() }).run();
     } catch (error) {
       console.error('ask', question, error?.message);
@@ -329,7 +333,9 @@ async function closeWave(url, env) {
   }
   const said = mergeSaid(parts, missing);
   await env.DB.batch([
-    env.DB.prepare('UPDATE versions SET said = ? WHERE post = ? AND number = ?').bind(JSON.stringify(said), id, v),
+    // 收尾提问的花费也计入版本总账（batches 流水之外，versions.usd 是页面显示的口径）。
+    env.DB.prepare('UPDATE versions SET said = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
+      .bind(JSON.stringify(said), round2(askUsd), askTokens, id, v),
     env.DB.prepare("UPDATE posts SET state = 'done' WHERE id = ?").bind(id),
   ]);
   return json({ wave: waveInfo, travels: false, done: true, reach: reached.size, followUp: followUp && { asked: followUp.asked } });
