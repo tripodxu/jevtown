@@ -6,7 +6,7 @@
 npm test    # node --test "test/*.test.js"
 ```
 
-当前 **41 个用例**（README 里若写 39 以本文件为准；数量会随用例增加变化，
+当前 **45 个用例**（README 里若写旧数以本文件为准；数量会随用例增加变化，
 以 `npm test` 输出 `tests N` 行为准）。全部走 mock 通道，**不花真钱、不需要 key**。
 
 ## 测试布局
@@ -20,15 +20,21 @@ npm test    # node --test "test/*.test.js"
 | `test/charts.test.js` | 图谱纯函数（漏斗/折线/需求曲线数据） |
 | `test/bytes.test.js` | base64 小件 |
 | `test/pipeline.test.js` | 引擎编排（mock send 端到端） |
-| `test/worker.test.js` | Worker 集成（`unstable_dev` 起真实本地 Worker） |
+| `test/worker.test.js` | Worker 集成（`unstable_dev` 起真实本地 Worker）：全链路、版本、blocked、调用报告/决策样本、每日限额双路 429、**预算闸双路由 429 + 未花超放行**、**作者校验（无头/错令牌 403、带头放行）**、**收波 CAS 不变量**、**批次认领并发不变量** |
 | `test/helper.js` | 共享夹具（非测试文件） |
 
 ## Worker 集成测试要点
 
 - 用 wrangler 的 `unstable_dev` 在本地起真实 Worker（含 D1 本地库、assets）。
 - 已验证的关键行为：每日限额对 `/api/check` **与** `/api/version` 双路 429 一致；
-  检查→批次→收波→报告全链路。
+  检查→批次→收波→报告全链路；预算闸对 batch/wave 429；作者令牌 403/放行；
+  收波与批次的并发不变量（无 500、波次/人数恰好）。
 - 测试用本地 D1，不碰远程；`npm test` 前不需要 `npm run dev`（迁移由测试自行应用）。
+- **环境注意**：wrangler dev server 可能把 `Promise.all` 的请求**串行化**——并发类
+  用例因此一律断言**不变量**（状态码集合、waves.length = wins + 1、wave0 恰好 600），
+  不断言具体哪个请求赢；串行/并发环境下都应通过。
+- 造特殊状态的用例用 `execSync('npx wrangler d1 execute jevtown --local --command ...')`
+  直接操纵本地库（如预算闸的探测行），必须在 `finally`/文件级 `after` 钩子里清理。
 
 ## 写新测试的规则
 

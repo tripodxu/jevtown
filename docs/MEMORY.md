@@ -6,6 +6,34 @@
 
 ---
 
+## 2026-09-28 · M2 API 安全与并发正确性全部落地（4 任务合并，45 用例全绿）
+
+- **预算闸**：`overBudget(env)` 对 check/version/batch/wave 四个写路由一致生效
+  （原只有 check/version 有）；closeWave 收尾循环内的软预算检查保留为第二层。
+- **作者令牌**：迁移 0005 加 `posts.author`；`/api/check` 开局签发（随响应返回 `author`），
+  写路由校验请求头 `x-jev-author`（读路由保持公开）。runVersion 校验顺序
+  404→409→限额→预算→作者。前端 `authHeaders` 带头、`openPost` 从
+  `localStorage['jevtown.author.<post>']` 读回（feed 点开自己的帖仍能改一版）。
+  已知限制：刷新页面丢 in-memory currentAuthor（openPost 路径可恢复）；旧本地帖
+  author 为 NULL 一律 403，需重开检查。
+- **收波 CAS**：closeWave 入口原子占位 `posts.state: running→closing`，并发只有一个进；
+  空波门放在 claim **之后**（claim 成功后 plan 冻结，消除 TOCTOU）；推进路径同 batch
+  还回 running；失败走 release() 回滚。settleWave 拆分自原 closeWave（逻辑原样搬运，
+  经 SHA-256 逐字节验证）。
+- **批次认领**：`plan.answered` 改 `json_set` 条件递增认领，并发批次一个成功其余 409；
+  Jev 失败的条件回滚带 `AND json_extract(...) = start + N`——他人接着认领过就放弃回滚，
+  绝不擦掉他人认领复现 reactions 主键 500。
+- **实施期发现并修正的两个计划缺陷**（教训，后续写计划注意）：
+  1. 计划里"对 running 帖无头发 /api/version 期望 403"与锁定顺序矛盾（409 门在前）——
+     改用 blocked 帖测作者门；
+  2. 计划假设"dev server 串行化时双收波各收一波"不成立——串行化下第二次收的是**零反应
+     新波并直接置 done、跳过整个波次**（用户可达的真实缺陷），由此新增空波门。
+  本环境（wrangler dev server）会把 Promise.all 请求串行化，并发用例必须断言不变量。
+- **已知窗口**（罕见、有界，记录在案不扩成两阶段租约）：批次 claim 后进程被杀 ⇒ 该批
+  100 人跳过（报告 size<asked 可见）。
+- BYOK 贯穿所有计费路由（含收波）——settleWave 曾丢 request 导致收波段静默落 mock
+  的计费口径事故，已修复；教训：拆函数时逐个核对 request 依赖透传。
+
 ## 2026-09-28 · M1 工作流地基落地
 
 - CI：`.github/workflows/test.yml`，push/PR 自动 `npm ci && npm test`。
