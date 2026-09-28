@@ -16,6 +16,7 @@ docs/
 ├── adr/                 架构决策记录（ADR）：为什么这样做，含被否决的备选
 ├── modules/             模块深潜：shared-engine / worker-api / frontend
 ├── agent/               多 agent 协同与接力协议 + 任务卡/交接模板
+├── agent/tasks/         进行中的任务卡与交接记录（完成后删或归档 done/）
 ├── research/            调研报告与真实 API 实测记录
 └── superpowers/plans/   历史实施计划（Step 2 功能打磨）
 ```
