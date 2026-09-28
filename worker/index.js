@@ -292,9 +292,17 @@ async function runBatch(url, request, env) {
     ({ answers, usd, tokens, ms } = await provider.ask(reactionRequest(presetId, version.text, people)));
   } catch (error) {
     // 问 Jev 失败：把认领还回去，下一批（或重试）会问回这批人。
-    await env.DB.prepare(
-      "UPDATE versions SET plan = json_set(plan, '$.answered', json_extract(plan, '$.answered') - ?) WHERE post = ? AND number = ?",
-    ).bind(batch.length, id, v).run();
+    // 条件回滚：answered 仍等于 start + batch.length 才退，说明期间没人接着认领。
+    // 若他人已接着认领过（answered 更大），放弃回滚——本批 100 人跳过，与"进程被杀"窗口
+    // 同等降级，但绝不擦掉他人认领（那会让下一请求重问同一批人，撞 reactions 主键 500）。
+    try {
+      await env.DB.prepare(
+        "UPDATE versions SET plan = json_set(plan, '$.answered', json_extract(plan, '$.answered') - ?) " +
+          "WHERE post = ? AND number = ? AND json_extract(plan, '$.answered') = ?",
+      ).bind(batch.length, id, v, start + batch.length).run();
+    } catch (error2) {
+      console.error('release batch claim', id, v, error2?.message);
+    }
     throw error;
   }
 
@@ -318,7 +326,6 @@ async function runBatch(url, request, env) {
     return env.DB.prepare('INSERT INTO reactions (post, number, id, wave, reaction) VALUES (?, ?, ?, ?, ?)')
       .bind(id, v, pid, plan.wave, reaction);
   });
-  plan.answered = start + batch.length;
   if (decisionSamples) statements.push(env.DB.prepare('UPDATE versions SET decisions = ? WHERE post = ? AND number = ?').bind(JSON.stringify(decisionSamples), id, v));
   statements.push(
     // answered 已在认领时推进，这里只累加花费与 tokens。
@@ -328,7 +335,7 @@ async function runBatch(url, request, env) {
   );
   await env.DB.batch(statements);
   // drawn = 这批人各自被 Jev 判定成了什么（前端实时点亮地图用）；usd/tokens/ms = 本批调用成本。
-  return json({ answered: plan.answered, total: order.length, wave: plan.wave, drawn: drawnPairs, usd: round2(usd), tokens, ms });
+  return json({ answered: start + batch.length, total: order.length, wave: plan.wave, drawn: drawnPairs, usd: round2(usd), tokens, ms });
 }
 
 // -- POST /api/wave：收波、定去留、收尾 ----------------------------------------
