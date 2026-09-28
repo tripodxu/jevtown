@@ -6,6 +6,19 @@
 
 ---
 
+## 2026-09-28 · M3 打磨落地（45 用例不变）
+
+- README 瘦身回产品向入口（删「目录结构」「与上游的差异」两节，承接在 docs/README.md 与
+  docs/ARCHITECTURE.md）；路线图 Step 4 刷新（CAS/作者令牌 M2、observability M3 已落地）。
+- observability 开启（`wrangler.jsonc`，部署侧 Workers Logs；本地与测试无行为影响，实测
+  带着开关 45/45 通过）。
+- 最小 lint 门：`scripts/lint.mjs`（`node --check` 语法门 + tab/空格混用 + console.log 残留；
+  扫 public/worker/test，`scripts/` 是 CLI 故豁免），package.json 与 CI 接入（lint 先于
+  test，fail-fast）。已知限制：console.log 规则是文本匹配，注释/字符串里的同名字面量会
+  误报——遇误报改表述，不删规则。
+- DEPLOYMENT.md：database_id 标上线阻塞项；上线清单刷新（剩余：人格打包管线、d1 create +
+  secret 部署）。
+
 ## 2026-09-28 · M2 API 安全与并发正确性全部落地（4 任务合并，45 用例全绿）
 
 - **预算闸**：`overBudget(env)` 对 check/version/batch/wave 四个写路由一致生效

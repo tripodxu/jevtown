@@ -1,5 +1,6 @@
 // 最小 lint：语法门（node --check）+ 两条文本规则（tab/空格混用、console.log 残留）。
 // console.log 规则不扫 scripts/——那里是 CLI，打印就是它的输出。
+// 已知限制：console.log 是文本匹配，注释/字符串里的同名字面量会误报——误报改表述，不删规则。
 // 不引 eslint：多 agent 并行阶段先拦"确定错"，风格靠 docs/CONVENTIONS.md 自律。
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
