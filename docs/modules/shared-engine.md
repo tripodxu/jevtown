@@ -47,6 +47,20 @@ runCheck({ send, presetId, pool, text, versionId, prices, maxWaves, onWave, bloc
 - `demandCurve`：价格需求曲线（追问阶段，商品预设）。
 - `voicesOf`：反应者卡片数据；`minSegment`：分组最小样本量（随规模浮动）。
 
+## 空间读数：`spatial.js`（人群地形）
+
+`segments` 是按属性做的**边际**统计，答不了"哪一片人一起反感"——成片往往由属性的组合
+造成。`spatial.js` 把反应图当**空间场**读一次：
+
+- `crowdTerrain(presetId, keys, bytes, { versionId, grid, maxCluster })` → Moran's I
+  （rook 邻接，只连都被判定到的上下左右）、置换检验的 `z` / `p`、判定
+  `clustered` / `scattered` / `unclear`，以及成片格子的 id 列表 `hot` / `cold` 与重心。
+- **显著水平** α = 0.05；**置换次数**随判定人数收缩（199 / 99 / 49，`permsFor` 导出可测）。
+- 局部象限用**原始态度**判（态度 0 的中性格不参与）——离均值看的话，中性多数派会整体
+  落在均值下方，造出一块假"成片的反感"。改这段前先读 `test/spatial.test.js`。
+- 确定性：置换用 `hash32('spatial', versionId)` 播种，同 versionId 必得同结果。
+- 与 `counters` / `segments` 同构：Worker 的 `showPost` 与浏览器 `replay.js` 都调它。
+
 ## mock：`mock.js`
 
 - `createMockAsk()` 返回与真实 `ask` 同形状的假实现：按文本特征（长度、数字、价格词…）

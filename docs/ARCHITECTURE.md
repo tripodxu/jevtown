@@ -56,6 +56,7 @@ D1（posts / versions / reactions / batches）
 | `mock.js` | **新写** | 假 Jev：按文本特征 + 人格属性算确定性概率 |
 | `bytes.js` | **新写** | base64 编解码小件 |
 | `replay.js` | **新写** | 存档 JSON → 报告视图（首页示例回放） |
+| `spatial.js` | **新写** | 人群地形：Moran's I + 置换检验，读"成片还是零散" |
 
 ## 一次检查的完整数据流
 
