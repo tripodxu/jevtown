@@ -1,7 +1,8 @@
 // 100×100 的小镇地图：一个人格一个点。未到达的人融入底色，到达的按反应上色。
 // 颜色分两层：反应六色是数据墨水（presets.js 的 LOOKS，全主题不变）；
 // 底板与网格取自主题的 CSS 变量（--map-well），所以切主题时整张地图要重绘。
-// 实时地图逐批判定走 paintDelta：只补画新点亮的格子，不刷满一万格。
+// 实时地图逐批判定走 paintDelta：只补画新点亮的格子，不刷满一万格；
+// 报告地图可再传一个 terrain（shared/spatial.js 的成片格子），给它们描环。
 import { LOOKS, lookOf, PRESETS } from './shared/presets.js';
 import { persona } from './shared/personas.js';
 import { INTEREST, JOB, TEMPER, BUDGET } from './shared/vocab.js';
@@ -18,10 +19,10 @@ const cssVar = (name, fallback) => {
   return value || fallback;
 };
 
-export function drawGrid(canvas, bytes, presetId) {
+export function drawGrid(canvas, bytes, presetId, terrain = null) {
   // 修剪掉已断连的旧画布（反复渲染结果区时防泄漏），再登记新的。
   for (const [old] of drawn) if (!old.isConnected) drawn.delete(old);
-  drawn.set(canvas, { bytes, presetId, painted: null, well: '' });
+  drawn.set(canvas, { bytes, presetId, terrain, painted: null, well: '' });
   paint(canvas, drawn.get(canvas));
 }
 
@@ -36,10 +37,10 @@ export function redrawMaps() {
  * 增量重画：只补画与上次快照不同的格子，返回补画了几格。
  * 画布没登记、换了字节数组或换了预设时退回全量 drawGrid。
  */
-export function paintDelta(canvas, bytes, presetId) {
+export function paintDelta(canvas, bytes, presetId, terrain = null) {
   const entry = drawn.get(canvas);
-  if (!entry || entry.bytes !== bytes || entry.presetId !== presetId || !entry.painted) {
-    drawGrid(canvas, bytes, presetId);
+  if (!entry || entry.bytes !== bytes || entry.presetId !== presetId || entry.terrain !== terrain || !entry.painted) {
+    drawGrid(canvas, bytes, presetId, terrain);
     return bytes.length;
   }
   const keys = Object.keys(PRESETS[presetId].reactions);
@@ -60,6 +61,21 @@ function fillCell(ctx, presetId, well, id, byte, keys) {
   ctx.fillRect((id % GRID) * CELL, Math.floor(id / GRID) * CELL, CELL - 1, CELL - 1);
 }
 
+// 聚集地形：给 spatial.js 标出的成片格子描一圈环——绿=成片的乐见，红=成片的反感。
+// 环色取主题的数据墨水（--map-green / --map-red），所以换主题重画时环也跟着走。
+function ringTerrain(ctx, terrain) {
+  if (!terrain) return;
+  ctx.lineWidth = 1;
+  const ring = (ids, color) => {
+    if (!ids?.length) return;
+    ctx.strokeStyle = color;
+    // 内缩半像素：环正好压在格子边界上，不会被相邻格的填充盖掉
+    for (const id of ids) ctx.strokeRect((id % GRID) * CELL + 0.5, Math.floor(id / GRID) * CELL + 0.5, CELL - 1, CELL - 1);
+  };
+  ring(terrain.hot, cssVar('--map-green', '#3ddc84'));
+  ring(terrain.cold, cssVar('--map-red', '#ff5c5c'));
+}
+
 function paint(canvas, entry) {
   const { bytes, presetId } = entry;
   const keys = Object.keys(PRESETS[presetId].reactions);
@@ -78,6 +94,7 @@ function paint(canvas, entry) {
     if (!bytes[id]) continue;
     fillCell(ctx, presetId, entry.well, id, bytes[id], keys);
   }
+  ringTerrain(ctx, entry.terrain);
   entry.painted = bytes.slice(); // 快照，供 paintDelta 做增量
 }
 

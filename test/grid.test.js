@@ -1,18 +1,25 @@
-// 地图绘制：全量与增量的行为约定。Node 里没有 canvas，用最小桩件记录 fillRect 调用，
-// 断言「画了几格」与「底板有没有重铺」——这正是实时监控每批刷图的契约。
+// 地图绘制：全量与增量的行为约定，外加聚集地形的描环。Node 里没有 canvas，
+// 用最小桩件记录 fillRect / strokeRect 调用，断言「画了几格」「底板有没有重铺」
+// ——这正是实时监控每批刷图的契约。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // grid.js 只在调用时才碰 DOM/canvas：先装桩，再动态导入。
 const calls = [];
+const strokes = [];
 const canvases = [];
 const makeCanvas = () => {
   let fill = '';
+  let stroke = '';
   const ctx = {
     scale() {},
     set fillStyle(value) { fill = value; },
     get fillStyle() { return fill; },
     fillRect: (x, y, w, h) => calls.push({ x, y, w, h, fill }),
+    lineWidth: 1,
+    set strokeStyle(value) { stroke = value; },
+    get strokeStyle() { return stroke; },
+    strokeRect: (x, y, w, h) => strokes.push({ x, y, w, h, color: stroke }),
   };
   const canvas = { isConnected: true, width: 0, height: 0, style: {}, getContext: () => ctx, addEventListener() {} };
   canvases.push(canvas);
@@ -20,7 +27,9 @@ const makeCanvas = () => {
 };
 
 globalThis.window = { devicePixelRatio: 2 };
-globalThis.getComputedStyle = () => ({ getPropertyValue: () => ' #0a0d13 ' });
+// 令牌按名给值：真实页面里不同令牌是不同的颜色，桩件不能一律返回同一个。
+const TOKENS = { '--map-well': '#0a0d13', '--map-green': '#3ddc84', '--map-red': '#ff5c5c' };
+globalThis.getComputedStyle = () => ({ getPropertyValue: (name) => ` ${TOKENS[name] ?? '#000000'} ` });
 globalThis.document = { getElementById: () => null, createElement: () => ({}), body: { append() {} } };
 
 const { drawGrid, paintDelta, redrawMaps } = await import('../public/grid.js');
@@ -30,6 +39,7 @@ const PRESET = 'post';
 const byte = (index) => index + 1;
 const newRun = () => {
   calls.length = 0;
+  strokes.length = 0;
   for (const canvas of canvases) canvas.isConnected = false; // 清掉上一轮登记的画布
   return makeCanvas();
 };
@@ -106,4 +116,45 @@ test('redrawMaps：主题切换按新令牌全量重画', () => {
   redrawMaps();
   assert.equal(calls.length, 3, '底板 1 次 + 2 个判定格');
   assert.equal(calls[0].fill, '#0a0d13', '整张按当前主题令牌重铺');
+});
+
+test('terrain：只给成片格子描环，不碰其他格', () => {
+  const canvas = newRun();
+  const bytes = new Uint8Array(10000);
+  bytes[10] = byte(1);
+  bytes[2000] = byte(2);
+  drawGrid(canvas, bytes, PRESET, { hot: [10], cold: [2000] });
+  assert.equal(strokes.length, 2, '只描两格');
+  assert.deepEqual([strokes[0].x, strokes[0].y], [10 * 4 + 0.5, 0.5], '环要内缩半像素，免得被相邻格盖掉');
+  assert.deepEqual([strokes[1].x, strokes[1].y], [0.5, 20 * 4 + 0.5]);
+  assert.notEqual(strokes[0].color, strokes[1].color, '乐见与反感用不同颜色');
+});
+
+test('terrain：没有地形时一环都不描（实时监控走的就是这条）', () => {
+  const canvas = newRun();
+  drawGrid(canvas, new Uint8Array(10000), PRESET);
+  assert.equal(strokes.length, 0);
+});
+
+test('terrain：主题重画后环还在（走全量路径）', () => {
+  const canvas = newRun();
+  const bytes = new Uint8Array(10000);
+  bytes[10] = byte(1);
+  drawGrid(canvas, bytes, PRESET, { hot: [10], cold: [] });
+  strokes.length = 0;
+  redrawMaps();
+  assert.equal(strokes.length, 1);
+});
+
+test('terrain：换了地形就退回全量，不在旧环上叠新环', () => {
+  const canvas = newRun();
+  const bytes = new Uint8Array(10000);
+  bytes[10] = byte(1);
+  drawGrid(canvas, bytes, PRESET, { hot: [10], cold: [] });
+  calls.length = 0;
+  strokes.length = 0;
+  drawGrid(canvas, bytes, PRESET, { hot: [20], cold: [] });
+  assert.equal(calls.length, 2, '底板 1 次 + 1 个判定格');
+  assert.equal(strokes.length, 1);
+  assert.deepEqual([strokes[0].x, strokes[0].y], [20 * 4 + 0.5, 0.5]);
 });
