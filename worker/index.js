@@ -279,7 +279,24 @@ async function runBatch(url, request, env) {
   const batch = order.slice(start, start + PER_REQUEST);
   const people = batch.map((pid) => persona(pool, pid));
   const provider = providerOf(env, request);
-  const { answers, usd, tokens, ms } = await provider.ask(reactionRequest(presetId, version.text, people));
+  // 原子认领本批：只有 answered 仍等于 start 时才 +batch.length，防两个并发批次问同一批人。
+  const claim = await env.DB.prepare(
+    "UPDATE versions SET plan = json_set(plan, '$.answered', json_extract(plan, '$.answered') + ?) WHERE post = ? AND number = ? AND json_extract(plan, '$.answered') = ?",
+  ).bind(batch.length, id, v, start).run();
+  if (!claim.meta.changes) return fail('this batch was already claimed, retry', 409);
+  let answers;
+  let usd;
+  let tokens;
+  let ms;
+  try {
+    ({ answers, usd, tokens, ms } = await provider.ask(reactionRequest(presetId, version.text, people)));
+  } catch (error) {
+    // 问 Jev 失败：把认领还回去，下一批（或重试）会问回这批人。
+    await env.DB.prepare(
+      "UPDATE versions SET plan = json_set(plan, '$.answered', json_extract(plan, '$.answered') - ?) WHERE post = ? AND number = ?",
+    ).bind(batch.length, id, v).run();
+    throw error;
+  }
 
   const versionId = `${id}.${v}`;
   // 决策样本：只采第一波的第一批（曝光最靠前的人），留存 Jev 读到的原句与它给出的分布。
@@ -304,8 +321,9 @@ async function runBatch(url, request, env) {
   plan.answered = start + batch.length;
   if (decisionSamples) statements.push(env.DB.prepare('UPDATE versions SET decisions = ? WHERE post = ? AND number = ?').bind(JSON.stringify(decisionSamples), id, v));
   statements.push(
-    env.DB.prepare('UPDATE versions SET plan = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
-      .bind(JSON.stringify(plan), round2(usd), tokens, id, v),
+    // answered 已在认领时推进，这里只累加花费与 tokens。
+    env.DB.prepare('UPDATE versions SET usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
+      .bind(round2(usd), tokens, id, v),
     addSpend(env.DB, { post: id, number: v, stage: `wave${plan.wave}`, n: start, usd, tokens, ms, day: today() }),
   );
   await env.DB.batch(statements);
