@@ -269,9 +269,11 @@ async function runBatch(url, request, env) {
   const versionId = `${id}.${v}`;
   // 决策样本：只采第一波的第一批（曝光最靠前的人），留存 Jev 读到的原句与它给出的分布。
   let decisionSamples = null;
+  const drawnPairs = [];
   const statements = batch.map((pid, index) => {
     const probabilities = answers[questionId(people[index])]?.probabilities ?? {};
     const reaction = drawReaction(probabilities, pool, pid, versionId) ?? CANT_TELL;
+    drawnPairs.push({ id: pid, reaction });
     if (start === 0 && !version.decisions && decisionSamples?.length !== 10) {
       (decisionSamples ??= []).push({
         id: pid,
@@ -292,7 +294,8 @@ async function runBatch(url, request, env) {
     addSpend(env.DB, { post: id, number: v, stage: `wave${plan.wave}`, n: start, usd, tokens, ms, day: today() }),
   );
   await env.DB.batch(statements);
-  return json({ answered: plan.answered, total: order.length, wave: plan.wave });
+  // drawn = 这批人各自被 Jev 判定成了什么（前端实时点亮地图用）；usd/tokens/ms = 本批调用成本。
+  return json({ answered: plan.answered, total: order.length, wave: plan.wave, drawn: drawnPairs, usd: round2(usd), tokens, ms });
 }
 
 // -- POST /api/wave：收波、定去留、收尾 ----------------------------------------

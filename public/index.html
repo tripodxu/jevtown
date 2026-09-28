@@ -77,6 +77,22 @@
       </div>
     </section>
 
+    <section id="live" class="plate" hidden>
+      <h2>实时监控 · Jev 正在逐格判定</h2>
+      <div class="stats" id="liveStats"></div>
+      <h3>传播地图（Jev 每判完一批点亮一批）</h3>
+      <div class="map-wrap"><canvas class="grid" id="liveMap" role="img" aria-label="实时地图：已判定的格子被点亮"></canvas>
+        <span class="hint">灰色 = 还没轮到；彩色 = Jev 已给出判定。</span></div>
+      <h3>调用监控表（随时间滚动追加）</h3>
+      <div class="monitor-wrap">
+        <table class="waves monitor">
+          <thead><tr><th>时刻</th><th>阶段</th><th>进度</th><th>本次耗时</th><th>tokens</th><th>累计花费</th></tr></thead>
+          <tbody id="monitorBody"></tbody>
+        </table>
+      </div>
+      <p class="hint">花费与耗时为实时估算，精确数字以检查完成后的调用报告为准。</p>
+    </section>
+
     <section id="result" class="plate" hidden></section>
 
     <div class="row" id="resultActions" hidden>
