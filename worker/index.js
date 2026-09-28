@@ -87,6 +87,12 @@ const spentToday = async (db, day) => {
   return row?.usd ?? 0;
 };
 
+/** 全站日预算闸：超过 CROWD_DAILY_BUDGET_USD 就拒后续写操作（0 = 不限）。 */
+const overBudget = async (env) => {
+  const budget = Number(env.CROWD_DAILY_BUDGET_USD ?? 0);
+  return budget > 0 && (await spentToday(env.DB, today())) >= budget;
+};
+
 /** 一条 post 某个版本的所有反应，作为 Map<personaId, reactionId>。 */
 const reactionsMap = async (db, id, number = 1) => {
   const { results } = await db.prepare('SELECT id, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, number).all();
@@ -137,8 +143,7 @@ async function runCheck(request, env) {
     const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM posts WHERE ip = ? AND day = ?').bind(ip, day).first();
     if ((row?.n ?? 0) >= limit) return fail('today’s checks are used up, come back tomorrow', 429);
   }
-  const budget = Number(env.CROWD_DAILY_BUDGET_USD ?? 0);
-  if (budget > 0 && (await spentToday(env.DB, day)) >= budget) return fail('today’s budget is spent', 429);
+  if (await overBudget(env)) return fail('today’s budget is spent', 429);
 
   const provider = providerOf(env, request);
   const pool = 'zh';
@@ -211,8 +216,7 @@ async function runVersion(request, env) {
     const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM posts WHERE ip = ? AND day = ?').bind(ip, day).first();
     if ((row?.n ?? 0) >= limit) return fail('today’s checks are used up, come back tomorrow', 429);
   }
-  const budget = Number(env.CROWD_DAILY_BUDGET_USD ?? 0);
-  if (budget > 0 && (await spentToday(env.DB, today())) >= budget) return fail('today’s budget is spent', 429);
+  if (await overBudget(env)) return fail('today’s budget is spent', 429);
 
   const row = await env.DB.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS number FROM versions WHERE post = ?').bind(id).first();
   const number = row.number;
@@ -253,6 +257,7 @@ async function runBatch(url, request, env) {
   const post = await loadPost(env.DB, id);
   if (!post) return fail('no such post', 404);
   if (post.state !== 'running') return fail('the check is not running', 409);
+  if (await overBudget(env)) return fail('today’s budget is spent', 429);
   const version = await loadVersion(env.DB, id, v);
   const plan = JSON.parse(version.plan);
   const order = plan.history[String(plan.wave)];
@@ -306,6 +311,7 @@ async function closeWave(url, request, env) {
   const post = await loadPost(env.DB, id);
   if (!post) return fail('no such post', 404);
   if (post.state !== 'running') return fail('the check is already finished', 409);
+  if (await overBudget(env)) return fail('today’s budget is spent', 429);
   const version = await loadVersion(env.DB, id, v);
   const plan = JSON.parse(version.plan);
   const presetId = post.preset;
