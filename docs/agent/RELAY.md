@@ -11,10 +11,11 @@
 
 ## 交接放在哪
 
-- 进行中的任务：任务卡同目录留 `<任务id>-handoff.md`（从
-  [templates/handoff.md](templates/handoff.md) 复制），**最新状态置顶**。
-- 任务完成：交接内容压缩成一条进 [MEMORY.md](../MEMORY.md)（同样最新置顶），
-  然后删除临时 handoff 文件，避免仓库堆积半成品状态。
+- 任务卡与交接记录统一落盘 `docs/agent/tasks/`（入库，接力 agent 与评审 agent 都能读到）：
+  - `docs/agent/tasks/<任务id>-task.md`（从 [templates/task-card.md](templates/task-card.md) 复制）
+  - `docs/agent/tasks/<任务id>-handoff.md`（从 [templates/handoff.md](templates/handoff.md) 复制，**最新状态置顶**）
+- 任务完成：交接内容压缩成一条进 [MEMORY.md](../MEMORY.md)（同样最新置顶）；
+  handoff 文件默认删除；需要审计轨迹的任务由主控显式移入 `docs/agent/tasks/done/`。
 
 ## 交接记录规范（handoff.md）
 

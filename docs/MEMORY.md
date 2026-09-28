@@ -6,6 +6,12 @@
 
 ---
 
+## 2026-09-28 · M1 工作流地基落地
+
+- CI：`.github/workflows/test.yml`，push/PR 自动 `npm ci && npm test`。
+- PR 模板 `.github/pull_request_template.md`：任务卡 id / 拥有文件 / 验收标准附证据 / 测试数字 / 遗留风险 / 共享契约检查六节。
+- 任务卡与 handoff 固定落盘 `docs/agent/tasks/`（完成后删或归档 `done/`，要点进 MEMORY）。
+
 ## 2026-09-28 · 优化计划细化为三个可执行子计划（writing-plans/make-plan 规范）
 
 - 总纲 `docs/superpowers/plans/2026-09-28-jevtown-cn-optimization.md` 改为索引+决策锁定；
