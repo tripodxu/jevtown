@@ -573,6 +573,14 @@ canvas.grid {
 .said-row .what { color: var(--muted); }
 .said-row .lead { color: var(--text); }
 
+/* 运行心电图 */
+.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 720px) { .charts-row { grid-template-columns: 1fr; } }
+.mini { border: 1px solid var(--hairline); border-radius: 12px; background: var(--card-2); padding: 10px 12px 6px; }
+.mini-head { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; margin-bottom: 2px; }
+.chart.ekg .ekg-now { font-family: var(--font-mono); font-size: 15px; font-weight: 600; }
+.chart-empty { color: var(--muted); font-size: 12px; padding: 30px 0; text-align: center; }
+
 /* 实时监控 */
 .monitor-wrap { max-height: 300px; overflow: auto; border: 1px solid var(--hairline); border-radius: 10px; }
 .monitor thead th { position: sticky; top: 0; background: var(--card-2); }

@@ -80,6 +80,13 @@
     <section id="live" class="plate" hidden>
       <h2>实时监控 · Jev 正在逐格判定</h2>
       <div class="stats" id="liveStats"></div>
+      <h3>运行心电图</h3>
+      <div class="charts-row">
+        <div class="mini"><div class="mini-head">判定吞吐（人/秒）</div><div id="chartTput"></div></div>
+        <div class="mini"><div class="mini-head">模型耗时（ms/请求）</div><div id="chartMs"></div></div>
+      </div>
+      <h3>态度占比 · 随时间发展（乐见 / 中性 / 反感，占已判定人数）</h3>
+      <div id="chartShare"></div>
       <h3>传播地图（Jev 每判完一批点亮一批）</h3>
       <div class="map-wrap"><canvas class="grid" id="liveMap" role="img" aria-label="实时地图：已判定的格子被点亮"></canvas>
         <span class="hint">灰色 = 还没轮到；彩色 = Jev 已给出判定。</span></div>
