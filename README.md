@@ -72,24 +72,6 @@ npm test    # 45 个用例：引擎单测 + Worker 集成（unstable_dev）+ 图
 
 顶栏四个分段按钮自由切换视觉世界：**夜巡**（默认，墨色夜城）、**公报**（米纸宋体）、**仪器**（冷灰精密）、**经典**（第一版配色）。选择存 localStorage，地图与图谱随主题重绘；全部由 `public/styles.css` 的 CSS 变量令牌驱动，新增主题 = 加一组令牌 + 顶栏一个按钮。
 
-## 目录结构
-
-| 路径 | 内容 |
-|---|---|
-| `AGENTS.md` | ★ agent 入口：分层阅读协议 + 多 agent 协同铁律 |
-| `public/shared/` | ★ 引擎，Worker / 浏览器 / 终端三端共用。`rng/draw/presets/requests/feed/summary/check/personas/jev` 九个文件来自上游（MIT，最小改动：`zh` 名字键、城市分段、中文池回退、ms 透传、决策采样）；`vocab.js`（中文词表）、`labels.js`（全部中文标签单源：`presetNoun`/`BLOCKED_ZH`/决策与追问文案）、`mock.js`（假 Jev）、`bytes.js`、`replay.js` 为本项目新写 |
-| `public/` | 界面：`index.html`（发帖框在首屏，示例仅为存档回放）+ `styles.css`（四主题令牌）+ `app.js`（编排、BYOK 设置弹窗）+ `render.js`（报告渲染 + 目录）+ `charts.js`（漏斗/折线/需求曲线/报告条）+ `grid.js`（响应式地图）+ `theme.js`（主题切换）+ `showcase.js`（示例回放） |
-| `worker/index.js` | Cloudflare Worker：API + D1 + 限额（check/version 双路）+ 调用记账（逐请求耗时）+ BYOK 请求头 + 人群缓存 |
-| `migrations/` | D1 结构：posts / versions / reactions / batches；0002 追问列、0003 调用报告列、0004 决策样本列、0005 作者令牌列 |
-| `scripts/check.js` | 终端检查，产出含决策样本的存档 JSON |
-| `test/` | node:test：引擎单测 + Worker 集成（`unstable_dev`）+ 图谱纯函数 |
-| `docs/` | 项目文档：架构/约定/测试/部署 + 模块深潜 + ADR + [多 agent 协同与接力协议](./docs/agent/COLLABORATION.md) + [记忆日志](./docs/MEMORY.md)；索引见 [docs/README.md](./docs/README.md) |
-| `_research_raw/` | 上游调研原始材料（已 gitignore，仅本地保留） |
-
-## 与上游的差异
-
-中文词表与人格（Jev 读英文行、界面显示中文）、mock 供应器、四主题系统、BYOK 通道、Jev 调用记账与分阶段报告、决策现场抽样（Worker 与共享引擎双路同构）、图谱模块、每日限额双路一致、人群的 isolate 级缓存。上游的居民系统、自定义受众、MCP、OG 图未引入。
-
 ## 路线图
 
 - [x] Step 1 · 核心闭环（引擎 + Worker + D1 + 前端 + mock 全流程）
