@@ -175,3 +175,26 @@ export function reportStageZh(stage) {
   if (wave) return `第 ${Number(wave[1]) + 1} 波`;
   return stage;
 }
+
+/** 人群地形（shared/spatial.js 的判定）的中文，渲染层只从这里取。 */
+export const TERRAIN_VERDICT_ZH = {
+  clustered: '成片',
+  scattered: '零散',
+  unclear: '看不出',
+};
+
+/** 判定的一句话人话：成片 / 零散 / 与随机无异。 */
+export const TERRAIN_SAY_ZH = {
+  clustered: '像一片地形，不是撒开的散点——有一整片人群朝着同一个方向表态。',
+  scattered: '像撒开的豆子——没有哪一片人一起反感或一起叫好，各看各的。',
+  unclear: '和把地图随机打乱没有区别，看不出成片还是零散。',
+};
+
+/** 地图方位：把格坐标切成 3×3 说出人话（左上 → 右下）。 */
+const DIRECTION_ZH = ['左上', '正上', '右上', '左', '中央', '右', '左下', '正下', '右下'];
+export const directionZh = (at, grid = 100) => {
+  if (!at) return '';
+  const col = Math.min(2, Math.max(0, Math.floor((at.x / grid) * 3)));
+  const row = Math.min(2, Math.max(0, Math.floor((at.y / grid) * 3)));
+  return DIRECTION_ZH[row * 3 + col];
+};

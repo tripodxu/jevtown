@@ -13,6 +13,7 @@ import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered 
 import { drawReaction } from '../public/shared/draw.js';
 import { askQuestion, mergeSaid, listsOf } from '../public/shared/check.js';
 import { counters, segments, topSegments, voicesOf } from '../public/shared/summary.js';
+import { crowdTerrain } from '../public/shared/spatial.js';
 import { encodeBytes } from '../public/shared/bytes.js';
 import { personView } from '../public/shared/labels.js';
 import { pickProvider, PROVIDERS, ask as askJev } from '../public/shared/jev.js';
@@ -555,6 +556,7 @@ async function showPost(id, env, url, request = null) {
       glad: topSegments(all, 'glad'),
       sorry: topSegments(all, 'sorry'),
     },
+    terrain: crowdTerrain(presetId, keys, bytes, { versionId: `${id}.${v}` }),
     voices,
     decisions: version.decisions ? JSON.parse(version.decisions) : null,
     followUp: version.follow_up ? JSON.parse(version.follow_up) : null,

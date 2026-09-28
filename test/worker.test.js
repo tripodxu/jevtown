@@ -66,6 +66,24 @@ test('调用报告：分阶段次数/耗时/tokens 齐全，provider 记录在�
     assert.ok(d.reaction.length > 0);
     assert.ok(Object.keys(d.probabilities).length >= 2);
   }
+  // 人群地形：一次跑完的检查必须给出地形（判不出也要有形状，界面才知道说"看不出"）
+  const terrain = detail.terrain;
+  assert.ok(terrain, 'terrain 缺失');
+  assert.equal(terrain.judged, detail.counters.reach, '地形的人数口径 = 到达人数');
+  assert.ok(['clustered', 'scattered', 'unclear'].includes(terrain.verdict), `verdict=${terrain.verdict}`);
+  assert.ok(Array.isArray(terrain.hot) && Array.isArray(terrain.cold));
+  // 成片格必须是被判定到的格，且乐见/反感两批不重叠
+  const seen = new Set();
+  for (const [ids, key] of [[terrain.hot, 'hot'], [terrain.cold, 'cold']]) {
+    for (const id of ids) {
+      assert.ok(seen.has(id) === false, `格子 ${id} 同时进了 hot 与 cold`);
+      seen.add(id);
+      assert.ok(id >= 0 && id < 10000, `聚集格越界：${id}`);
+    }
+    // 没有格子就没有重心；有重心必有格子
+    if (ids.length === 0) assert.equal(terrain[`${key}At`], null, `${key} 为空却给了重心`);
+    else assert.ok(terrain[`${key}At`], `${key} 有格子却没有重心`);
+  }
   // 实时监控数据源：/api/batch 响应带本批的逐人判定与调用成本
   const running = await (await postJSON(worker, '/api/check', { preset: 'post', text: '实时监控数据源验证：一条普通帖子' })).json();
   const batchRes = await worker.fetch(`/api/batch?post=${running.post}&v=1`, { headers: { 'x-jev-author': running.author } });
