@@ -6,6 +6,21 @@
 
 ---
 
+## 2026-09-28 · 优化计划细化为三个可执行子计划（writing-plans/make-plan 规范）
+
+- 总纲 `docs/superpowers/plans/2026-09-28-jevtown-cn-optimization.md` 改为索引+决策锁定；
+  可执行分解拆为三个子计划，每步 2-5 分钟、TDD、完整代码、精确命令与预期输出：
+  - `2026-09-28-m1-workflow-infra.md`（CI / PR 模板 / `docs/agent/tasks/` 落盘约定，4 任务）
+  - `2026-09-28-m2-api-security.md`（预算闸→作者令牌→收波 CAS→批次认领→文档同步，5 任务；
+    用例链 41→45，每任务独立分支）
+  - `2026-09-28-m3-polish.md`（README 瘦身 / observability / 最小 lint；可选 E2E 与本地限额豁免）
+- 锁定的关键决策：作者令牌走 `x-jev-author` 请求头（不用 cookie，与 BYOK 约定同族）；
+  读操作公开、写操作鉴权；CAS 用 `posts.state` 三态（推进必须同 batch 还回 running）；
+  lint 不引 eslint（`node --check` 语法门已实测 ESM 兼容，console.log 规则豁免 scripts/）。
+- 已实测事实：`node --check` 对 ESM 全部 exit 0（Node v24.9.0）；console.log 仅存
+  `scripts/check.js`；D1 `json_set/json_extract` 可用性列为 M2 Task D 的先证步骤。
+- 用户选择：只规划不改代码；执行时按总纲「建议执行顺序」派发任务卡。
+
 ## 2026-09-28 · 优化计划已立项（只规划，未动代码）
 
 - 计划文档：`docs/superpowers/plans/2026-09-28-jevtown-cn-optimization.md`（12 项发现全部带
