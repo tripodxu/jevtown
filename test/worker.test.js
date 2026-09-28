@@ -1,5 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { execSync } from 'node:child_process';
 import { startWorker, postJSON, runToDone } from './helper.js';
 
 const worker = await startWorker();
@@ -137,5 +138,31 @@ test('每日限额：/api/check 与 /api/version 都会被 429 拦下', async ()
     assert.equal(versionRejected.status, 429);
   } finally {
     await limited.stop();
+  }
+});
+
+test('预算闸：当天已花超后，/api/batch 与 /api/wave 都被 429 拦下', async () => {
+  // 1. 用默认 worker（预算 0 = 不限）正常开一个局
+  const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '预算闸验证：一条普通帖子' })).json();
+  assert.equal(opening.state, 'running');
+
+  // 2. 直接往本地 D1 插一笔"今天已花 9.99"的探测流水（finally 里清除）
+  const day = new Date().toISOString().slice(0, 10);
+  const probe = `budgetprobe-${Date.now()}`;
+  execSync(
+    `npx wrangler d1 execute jevtown --local --command "INSERT OR REPLACE INTO batches (post, number, stage, n, usd, tokens, day) VALUES ('${probe}', 1, 'opening', 0, 9.99, 0, '${day}')"`,
+    { stdio: 'pipe' },
+  );
+
+  // 3. 起一个日预算 0.5 的 worker：batch 与 wave 都应 429
+  const gated = await startWorker({ CROWD_DAILY_BUDGET_USD: '0.5' });
+  try {
+    const batch = await gated.fetch(`/api/batch?post=${opening.post}&v=1`);
+    assert.equal(batch.status, 429, `batch=${batch.status}`);
+    const wave = await gated.fetch(`/api/wave?post=${opening.post}&v=1`, { method: 'POST' });
+    assert.equal(wave.status, 429, `wave=${wave.status}`);
+  } finally {
+    await gated.stop();
+    execSync(`npx wrangler d1 execute jevtown --local --command "DELETE FROM batches WHERE post = '${probe}'"`, { stdio: 'pipe' });
   }
 });
