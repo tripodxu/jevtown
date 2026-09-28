@@ -30,7 +30,7 @@ npm run deploy    # = wrangler d1 migrations apply jevtown --remote && wrangler 
 
 ## 上线前检查清单
 
-- [ ] `wrangler.jsonc`：`database_id` 已替换真实值（当前是占位 `00000000-…`）。
+- [ ] `wrangler.jsonc`：`database_id` 已替换真实值（当前是占位 `00000000-…`）——**上线阻塞项**。
 - [ ] 限额三变量按运营预期调整：`CROWD_DAILY_LIMIT` / `CROWD_DAILY_BUDGET_USD` /
       `CROWD_MAX_WAVES`（现值 20 / $5 / 4）。
 - [ ] `observability.enabled` 建议改 `true`（当前 false）。
@@ -38,6 +38,7 @@ npm run deploy    # = wrangler d1 migrations apply jevtown --remote && wrangler 
 - [ ] 用真实 key 跑一次 `npm run check` 抽查成本口径（预期单波 600 人 $0.01–0.02）。
 - [ ] 已知待办（来自 README 路线图 Step 4）：`/api/batch` 无身份校验（作者 cookie）、
       收波 CAS 锁、人格打包管线省 CPU——上线前至少评估前两项。
+- [ ] observability 已开启（`wrangler.jsonc`，M3 已改 true，部署前确认未被回改）。
 
 ## 成本口径（实测，2026-09-28）
 
