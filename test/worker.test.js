@@ -1,7 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
-import { startWorker, postJSON, runToDone, runBatches, authorOf } from './helper.js';
+import { startWorker, postJSON, runToDone, authorOf } from './helper.js';
 
 const worker = await startWorker();
 after(async () => { await worker.stop(); });
@@ -186,6 +186,10 @@ test('作者校验：没有 x-jev-author 头，batch/wave/version 全部 403；�
   assert.equal(blocked.state, 'blocked');
   const version = await postJSON(worker, '/api/version', { post: blocked.post, text: '别人想再发一版' });
   assert.equal(version.status, 403, `version=${version.status}`);
+
+  // 错误令牌同样 403（防未来把 === 弱化成真值判断）
+  const wrong = await worker.fetch(`/api/batch?post=${opening.post}&v=1`, { headers: { 'x-jev-author': 'wrong-token' } });
+  assert.equal(wrong.status, 403, `wrong token batch=${wrong.status}`);
 
   // 带头就能继续（防止校验把主人关在门外）
   const ok = await worker.fetch(`/api/batch?post=${opening.post}&v=1`, { headers: { 'x-jev-author': opening.author } });

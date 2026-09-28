@@ -155,16 +155,16 @@ $('form').addEventListener('submit', async (event) => {
       ? await postJSON('/api/version', { post: current.post, text })
       : await postJSON('/api/check', { preset, text, prices: preset === 'product' ? [9, 19, 39, 79] : undefined });
 
+    if (opening.author) {
+      currentAuthor = opening.author;
+      localStorage.setItem(`jevtown.author.${opening.post}`, opening.author);
+    }
     if (opening.state === 'blocked') {
       status(`Jev 拒绝发布：${opening.blocked.map((id) => BLOCKED_ZH[id] ?? id).join('、')}`, 1);
       return;
     }
     current.post = opening.post;
     current.version = opening.version;
-    if (opening.author) {
-      currentAuthor = opening.author;
-      localStorage.setItem(`jevtown.author.${opening.post}`, opening.author);
-    }
     showLive(preset);
     if (opening.unlisted?.length) {
       status(`注意：${opening.unlisted.map((id) => BLOCKED_ZH[id] ?? id).join('、')}（仍会照常检查，但不进公共流）`, 0.04);
@@ -263,6 +263,7 @@ async function openPost(id) {
   try {
     const view = await getJSON(`/api/post/${id}`);
     current.post = id;
+    currentAuthor = localStorage.getItem(`jevtown.author.${id}`);
     current.version = view.versions?.at(-1)?.number ?? 1;
     showResult(view);
   } catch (error) {

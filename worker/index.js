@@ -174,7 +174,7 @@ async function runCheck(request, env) {
       ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, prices ? JSON.stringify(prices) : null, provider.name, round2(usd), tokens),
       addSpend(env.DB, { post: id, stage: 'opening', usd, tokens, ms, day }),
     ]);
-    return json({ post: id, version: 1, state: 'blocked', blocked: opening.blocked, unlisted: opening.unlisted, checks: opening.checks });
+    return json({ post: id, version: 1, state: 'blocked', author, blocked: opening.blocked, unlisted: opening.unlisted, checks: opening.checks });
   }
 
   // 第一波：传播算法认为最该看到的人（打分越高越靠前），掺少量随机。
@@ -241,7 +241,7 @@ async function runVersion(request, env) {
       ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), provider.name, round2(usd), tokens),
       addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, ms, day: today() }),
     ]);
-    return json({ post: id, version: number, state: 'blocked', blocked: opening.blocked });
+    return json({ post: id, version: number, state: 'blocked', author: post.author, blocked: opening.blocked });
   }
 
   const people = crowdOf(pool);
