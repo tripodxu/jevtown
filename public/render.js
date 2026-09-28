@@ -3,18 +3,13 @@
 import { PRESETS, LOOKS, lookOf } from './shared/presets.js';
 import { drawGrid, attachTooltip } from './grid.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs } from './charts.js';
 import { rankedAnswers, demandCurve } from './shared/summary.js';
 import { decodeBytes } from './shared/bytes.js';
 
-const BLOCKED_ZH = {
-  hate: '仇恨攻击', sexual: '露骨色情', violence: '暴力威胁',
-  private_data: '他人隐私', illegal: '违法交易', insult: '辱骂人身攻击', gibberish: '无意义乱码',
-};
-
-export const PRESET_NOUN = (presetId) => ({ post: '帖子', listing: '闲置转让', product: '商品文案', headline: '标题' }[presetId] ?? presetId);
+export const PRESET_NOUN = presetNoun;
 export const readCheck = (p) => (p >= 0.7 ? 'yes' : p <= 0.3 ? 'no' : 'unclear');
 export const esc = (value) => String(value).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const stat = (value, label) => `<div class="stat"><b>${typeof value === 'number' ? value.toLocaleString() : value}</b><span>${label}</span></div>`;
@@ -45,11 +40,24 @@ export function renderCheck(el, result) {
 
   el.innerHTML = html.join('');
 
+  buildToc(el);
+
   const bytes = decodeBytes(result.looks);
   const canvas = el.querySelector('.grid');
   drawGrid(canvas, bytes, presetId);
   attachTooltip(canvas, bytes, presetId);
   renderLegend(el.querySelector('.legend'), presetId);
+}
+
+/** 结果页小目录：给每个 h3 发 id，顶部生成锚点 pill 行（长报告一跳直达）。 */
+function buildToc(el) {
+  const headings = [...el.querySelectorAll('h3')];
+  headings.forEach((h, i) => { h.id = `sec-${i}`; });
+  const nav = document.createElement('nav');
+  nav.className = 'toc';
+  nav.setAttribute('aria-label', '报告目录');
+  nav.innerHTML = headings.map((h, i) => `<a href="#sec-${i}">${esc(h.textContent)}</a>`).join('');
+  el.querySelector('h2').after(nav);
 }
 
 function overview(result) {
@@ -211,7 +219,11 @@ function voicesView(result) {
     `<div class="voice"><div class="who">${esc(voice.who.name)}，${voice.who.age}岁 · ${esc(voice.who.job ?? '')} · ${esc(voice.who.city)}</div>` +
     `<div class="what">${esc(REACTIONS_ZH[voice.reaction] ?? voice.reaction)}${voice.who.temper ? ` · ${esc(voice.who.temper)}` : ''}</div></div>`,
   );
-  return `<h3>人格声音</h3><div class="voices">${cards.join('')}</div>`;
+  const collapsed = cards.length > 24 ? ' collapsed' : '';
+  const more = cards.length > 24
+    ? `<button class="ghost" type="button" data-expand-voices>看全部 ${cards.length} 条声音</button>`
+    : '';
+  return `<h3>人格声音</h3><div class="voices${collapsed}">${cards.join('')}</div>${more}`;
 }
 
 function renderLegend(el, presetId) {

@@ -15,7 +15,7 @@ import { askQuestion, mergeSaid, listsOf } from '../public/shared/check.js';
 import { counters, segments, topSegments, voicesOf } from '../public/shared/summary.js';
 import { encodeBytes } from '../public/shared/bytes.js';
 import { personView } from '../public/shared/labels.js';
-import { pickProvider, ask as askJev } from '../public/shared/jev.js';
+import { pickProvider, PROVIDERS, ask as askJev } from '../public/shared/jev.js';
 import { createMockAsk } from '../public/shared/mock.js';
 import { rng, hash32 } from '../public/shared/rng.js';
 
@@ -41,14 +41,27 @@ const today = () => new Date().toISOString().slice(0, 10);
 const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 10);
 const round2 = (value) => Math.round(value * 100) / 100;
 
-/** 这台 Worker 用哪条路到 Jev：mock、TypeSafe、OpenRouter；没配 key 时自动落入 mock，本地开发零门槛。 */
-function providerOf(env) {
+/**
+ * 这台 Worker 用哪条路到 Jev，优先级：请求头 BYOK（x-jev-provider + x-jev-key，访客在页面设置里填的）
+ * → env 配置（JEV_PROVIDER + secret）→ mock（本地开发零门槛）。
+ * BYOK 的 key 只在本请求内存里用一次，不落库不打日志。
+ */
+function providerOf(env, request = null) {
+  if (request) {
+    const headerName = String(request.headers.get('x-jev-provider') ?? '').trim().toLowerCase();
+    const headerKey = String(request.headers.get('x-jev-key') ?? '').trim();
+    if (headerKey && PROVIDERS[headerName]) {
+      const picked = { ...PROVIDERS[headerName], apiKey: headerKey };
+      const retries = { left: 40 };
+      return { name: headerName, ask: (req) => askJev(picked, req, retries) };
+    }
+  }
   const wanted = String(env.JEV_PROVIDER ?? '').trim().toLowerCase();
   if (wanted !== 'mock') {
     const picked = pickProvider(env);
     if (picked) {
       const retries = { left: 40 };
-      return { name: picked.name, ask: (request) => askJev(picked, request, retries) };
+      return { name: picked.name, ask: (req) => askJev(picked, req, retries) };
     }
   }
   return { name: 'mock', ask: createMockAsk() };
@@ -91,9 +104,9 @@ export default {
     try {
       if (request.method === 'POST' && path === '/api/check') return await runCheck(request, env);
       if (request.method === 'POST' && path === '/api/version') return await runVersion(request, env);
-      if (request.method === 'GET' && path === '/api/batch') return await runBatch(url, env);
-      if (request.method === 'POST' && path === '/api/wave') return await closeWave(url, env);
-      if (request.method === 'GET' && path.startsWith('/api/post/')) return await showPost(path.slice('/api/post/'.length), env, url);
+      if (request.method === 'GET' && path === '/api/batch') return await runBatch(url, request, env);
+      if (request.method === 'POST' && path === '/api/wave') return await closeWave(url, request, env);
+      if (request.method === 'GET' && path.startsWith('/api/post/')) return await showPost(path.slice('/api/post/'.length), env, url, request);
       if (request.method === 'GET' && path === '/api/feed') return await listFeed(env);
       return fail('not found', 404);
     } catch (error) {
@@ -127,7 +140,7 @@ async function runCheck(request, env) {
   const budget = Number(env.CROWD_DAILY_BUDGET_USD ?? 0);
   if (budget > 0 && (await spentToday(env.DB, day)) >= budget) return fail('today’s budget is spent', 429);
 
-  const provider = providerOf(env);
+  const provider = providerOf(env, request);
   const pool = 'zh';
   const { answers, usd, tokens, ms } = await provider.ask(openingRequest(presetId, text));
   const opening = openingAnswers(answers);
@@ -203,7 +216,7 @@ async function runVersion(request, env) {
 
   const row = await env.DB.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS number FROM versions WHERE post = ?').bind(id).first();
   const number = row.number;
-  const provider = providerOf(env);
+  const provider = providerOf(env, request);
   const pool = post.pool;
   const { answers, usd, tokens, ms } = await provider.ask(openingRequest(post.preset, text));
   const opening = openingAnswers(answers);
@@ -234,7 +247,7 @@ async function runVersion(request, env) {
 
 // -- GET /api/batch：问 Jev 一批人 ---------------------------------------------
 
-async function runBatch(url, env) {
+async function runBatch(url, request, env) {
   const id = url.searchParams.get('post');
   const v = Number(url.searchParams.get('v') ?? '1') || 1;
   const post = await loadPost(env.DB, id);
@@ -250,7 +263,7 @@ async function runBatch(url, env) {
   const pool = post.pool;
   const batch = order.slice(start, start + PER_REQUEST);
   const people = batch.map((pid) => persona(pool, pid));
-  const provider = providerOf(env);
+  const provider = providerOf(env, request);
   const { answers, usd, tokens, ms } = await provider.ask(reactionRequest(presetId, version.text, people));
 
   const versionId = `${id}.${v}`;
@@ -284,7 +297,7 @@ async function runBatch(url, env) {
 
 // -- POST /api/wave：收波、定去留、收尾 ----------------------------------------
 
-async function closeWave(url, env) {
+async function closeWave(url, request, env) {
   const id = url.searchParams.get('post');
   const v = Number(url.searchParams.get('v') ?? '1') || 1;
   const post = await loadPost(env.DB, id);
@@ -297,7 +310,7 @@ async function closeWave(url, env) {
   const preset = PRESETS[presetId];
   const scores = JSON.parse(version.scores);
   const maxWaves = Math.min(Number(env.CROWD_MAX_WAVES ?? WAVES_MAX), WAVES_MAX);
-  const provider = providerOf(env);
+  const provider = providerOf(env, request);
 
   const waveIndex = plan.wave;
   const order = plan.history[String(waveIndex)];
@@ -407,7 +420,7 @@ async function runFollowUp(env, post, version, provider, reached, people, number
 
 // -- GET /api/post/:id：一页所需的一切 -----------------------------------------
 
-async function showPost(id, env, url) {
+async function showPost(id, env, url, request = null) {
   const post = await loadPost(env.DB, id);
   if (!post) return fail('no such post', 404);
   // ?v= 指定版本；不传则取最新版本。

@@ -6,7 +6,16 @@ const esc = (value) => String(value).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;',
 
 /** 情绪轨迹折线（SVG）。points: 数字数组，x 即序号。 */
 export function moodLine(points, { width = 560, height = 130 } = {}) {
-  if (points.length < 2) return '';
+  if (!points.length) return '';
+  if (points.length === 1) {
+    const v = points[0];
+    const tier = v >= GLAD_ENOUGH ? '绿色（传播）' : v >= 0 ? '蓝色（持平）' : '红色（负面）';
+    return `<svg class="chart" viewBox="0 0 ${width} 90" role="img" aria-label="唯一一波的情绪为 ${v.toFixed(2)}">
+      <circle cx="${width / 2}" cy="38" r="6" fill="var(--accent)" />
+      <text x="${width / 2}" y="20" text-anchor="middle" class="chart-num">唯一一波 · 情绪 ${v >= 0 ? '+' : ''}${v.toFixed(2)}（${tier}）</text>
+      <text x="${width / 2}" y="70" text-anchor="middle" class="chart-axis">第 1 波 · 只跑了一波，没有轨迹可画</text>
+    </svg>`;
+  }
   const pad = { l: 40, r: 14, t: 14, b: 26 };
   const lo = Math.min(-0.1, ...points) - 0.05;
   const hi = Math.max(0.1, ...points) + 0.05;

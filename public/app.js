@@ -2,18 +2,25 @@
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
 import { renderCheck, esc } from './render.js';
 import { initThemeSwitcher } from './theme.js';
-
-const BLOCKED_ZH = {
-  hate: '仇恨攻击', sexual: '露骨色情', violence: '暴力威胁',
-  private_data: '他人隐私', illegal: '违法交易', insult: '辱骂人身攻击', gibberish: '无意义乱码',
-};
+import { BLOCKED_ZH, presetNoun as PRESET_NOUN_OF } from './shared/labels.js';
 
 const $ = (id) => document.getElementById(id);
 // 当前正在做的检查：哪个 post 的哪个版本。
 const current = { post: null, version: 1 };
 
+// BYOK：访客自填的 Jev key（localStorage），随每个 API 请求头发给 Worker；mock 通道不发。
+const byok = () => {
+  const provider = localStorage.getItem('jevtown.provider');
+  const key = localStorage.getItem('jevtown.key');
+  return provider && key && provider !== 'mock' ? { provider, key } : null;
+};
+const authHeaders = () => {
+  const picks = byok();
+  return picks ? { 'x-jev-provider': picks.provider, 'x-jev-key': picks.key } : {};
+};
+
 const getJSON = async (url) => {
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: authHeaders() });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? res.statusText);
   return data;
@@ -22,7 +29,7 @@ const getJSON = async (url) => {
 const postJSON = async (url, body) => {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body ?? {}),
   });
   const data = await res.json().catch(() => ({}));
@@ -93,12 +100,21 @@ $('form').addEventListener('submit', async (event) => {
 function showResult(view) {
   renderCheck($('result'), view);
   $('resultActions').hidden = false;
-  // 版本 ≥2 时并排对比：左边第 1 版、右边当前版；单版本时隐藏对比卡。
+  // 版本 ≥2 时提供对比入口：对比卡懒加载（点按钮才拉第 1 版全量视图，不自动翻倍负载）。
   const aside = $('compare');
   if (current.version > 1) {
-    getJSON(`/api/post/${current.post}?v=1`).then((v1) => {
-      renderCheck(aside, v1);
-      aside.hidden = false;
+    const slot = aside.querySelector('.compare-slot') ?? Object.assign(document.createElement('div'), { className: 'compare-slot' });
+    slot.innerHTML = '<button class="ghost" type="button" id="loadCompare">载入第 1 版对比</button><span class="hint">完整重放第 1 版（地图、图谱、报告），点击才加载。</span>';
+    aside.append(slot);
+    aside.hidden = false;
+    slot.querySelector('#loadCompare').addEventListener('click', async () => {
+      slot.textContent = '载入中……';
+      try {
+        const v1 = await getJSON(`/api/post/${current.post}?v=1`);
+        renderCheck(aside, v1);
+      } catch (error) {
+        slot.innerHTML = `<span class="error">${esc(error.message)}</span>`;
+      }
     });
   } else {
     aside.hidden = true;
@@ -118,8 +134,6 @@ $('revise').addEventListener('click', async () => {
 });
 
 // -- 最近检查列表 ----------------------------------------------------------------
-
-const PRESET_NOUN_OF = (presetId) => ({ post: '帖子', listing: '闲置转让', product: '商品文案', headline: '标题' }[presetId] ?? presetId);
 
 async function loadFeed() {
   try {
@@ -149,6 +163,52 @@ async function openPost(id) {
   }
 }
 window.openPost = openPost;
+
+// 人格声音"看全部"：展开折叠的第 25 张起，按钮自己消失。
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-expand-voices]');
+  if (!btn) return;
+  btn.parentElement.querySelector('.voices')?.classList.remove('collapsed');
+  btn.remove();
+});
+
+// -- 通道设置（BYOK） -----------------------------------------------------------
+
+const modeChip = $('modeChip');
+const refreshModeChip = () => {
+  const picks = byok();
+  modeChip.textContent = picks ? `BYOK · ${picks.provider}` : '默认通道';
+};
+
+$('settingsBtn').addEventListener('click', () => {
+  $('providerSel').value = localStorage.getItem('jevtown.provider') ?? 'mock';
+  $('keyInput').value = localStorage.getItem('jevtown.key') ?? '';
+  $('settings').showModal();
+});
+
+$('saveKey').addEventListener('click', () => {
+  const provider = $('providerSel').value;
+  const key = $('keyInput').value.trim();
+  if (provider === 'mock' || !key) {
+    localStorage.removeItem('jevtown.provider');
+    localStorage.removeItem('jevtown.key');
+  } else {
+    localStorage.setItem('jevtown.provider', provider);
+    localStorage.setItem('jevtown.key', key);
+  }
+  refreshModeChip();
+  $('settings').close();
+  status(`通道已切换：${modeChip.textContent}`, 0);
+});
+
+$('clearKey').addEventListener('click', () => {
+  localStorage.removeItem('jevtown.provider');
+  localStorage.removeItem('jevtown.key');
+  $('keyInput').value = '';
+  refreshModeChip();
+});
+
+refreshModeChip();
 
 initThemeSwitcher();
 loadFeed();

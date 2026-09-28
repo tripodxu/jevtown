@@ -37,6 +37,8 @@ function paint(canvas, bytes, presetId) {
   canvas.height = GRID * CELL * dpr;
   canvas.style.width = `${GRID * CELL}px`;
   canvas.style.height = `${GRID * CELL}px`;
+  canvas.style.maxWidth = '100%';
+  canvas.style.height = 'auto';
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
   ctx.fillStyle = cssVar('--map-well', '#0a0d13');
@@ -60,8 +62,9 @@ export function attachTooltip(canvas, bytes, presetId) {
   }
   canvas.addEventListener('mousemove', (event) => {
     const rect = canvas.getBoundingClientRect();
-    const x = Math.floor((event.clientX - rect.left) / CELL);
-    const y = Math.floor((event.clientY - rect.top) / CELL);
+    const scale = GRID / rect.width; // CSS 压缩后的实际比例
+    const x = Math.floor((event.clientX - rect.left) * scale);
+    const y = Math.floor((event.clientY - rect.top) * scale);
     const inside = x >= 0 && x < GRID && y >= 0 && y < GRID;
     if (!inside) { tooltip.style.display = 'none'; return; }
     const id = y * GRID + x;

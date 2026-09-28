@@ -8,6 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23d8553c'/%3E%3Ctext x='16' y='23' font-size='18' font-family='serif' font-weight='700' text-anchor='middle' fill='%230d1017'%3E镇%3C/text%3E%3C/svg%3E">
   <script>
     // 首帧前定主题，避免闪烁；四选一，localStorage 记忆。
+    // 主题清单与 public/theme.js 的 THEMES 保持一致（此处必须内联：首帧前定主题防闪烁）。
     try {
       var saved = localStorage.getItem('jevtown.theme');
       document.documentElement.dataset.theme =
@@ -24,12 +25,16 @@
       <span class="seal" aria-hidden="true">镇</span>
       <span class="brand-name"><b>中文小镇</b><small>JEVTOWN CN</small></span>
     </a>
-    <nav class="themeswitch" role="group" aria-label="主题切换">
+    <div class="top-actions">
+      <span class="chip mode-chip" id="modeChip" title="当前 Jev 通道">默认通道</span>
+      <nav class="themeswitch" role="group" aria-label="主题切换">
       <button class="theme-btn" type="button" data-theme="night" aria-pressed="true">夜巡</button>
       <button class="theme-btn" type="button" data-theme="bulletin" aria-pressed="false">公报</button>
       <button class="theme-btn" type="button" data-theme="instrument" aria-pressed="false">仪器</button>
       <button class="theme-btn" type="button" data-theme="classic" aria-pressed="false">经典</button>
-    </nav>
+      </nav>
+      <button class="ghost settings-btn" id="settingsBtn" type="button" aria-haspopup="dialog">Key…</button>
+    </div>
   </header>
 
   <main>
@@ -37,15 +42,6 @@
       <p class="driver">由 TypeSafe <b>Jev</b> 驱动 · System One 决策模型</p>
       <h1>一万个 AI 人格，<em>读你写的每一个字</em></h1>
       <p class="sub">发一段文字进小镇：谁停下、谁点赞、谁反感、谁划走。每一个反应都是 Jev 对类型化问题给出的概率，本页所有数字都出自它的判定。</p>
-    </section>
-
-    <section id="showcase" class="plate" hidden>
-      <h2>示例：同一条手机转让帖，两种写法</h2>
-      <p class="hint">保存下来的检查结果，纯浏览器回放，不花一分钱。</p>
-      <div class="examples">
-        <div class="card example-a"></div>
-        <div class="card example-b"></div>
-      </div>
     </section>
 
     <section id="compose" class="plate">
@@ -72,6 +68,15 @@
       </div>
     </section>
 
+    <section id="showcase" class="plate" hidden>
+      <h2>存档示例：同一条手机转让帖，两种写法</h2>
+      <p class="hint">这只是历史存档回放，仅供参考。要测你自己的文字，用上面的输入框。</p>
+      <div class="examples">
+        <div class="card example-a"></div>
+        <div class="card example-b"></div>
+      </div>
+    </section>
+
     <section id="result" class="plate" hidden></section>
 
     <div class="row" id="resultActions" hidden>
@@ -88,6 +93,27 @@
       <ul id="feed" class="feed"></ul>
     </section>
   </main>
+
+  <dialog id="settings" aria-labelledby="settingsTitle">
+    <h2 id="settingsTitle">Jev 通道设置</h2>
+    <p class="hint">填你自己的 key 即刻切换真实模型。key 只存在本浏览器 localStorage、随每个请求发给本 Worker 使用，不落库不打日志；正式部署请改用 Worker secret。</p>
+    <div class="row">
+      <label for="providerSel">通道</label>
+      <select id="providerSel">
+        <option value="mock">mock（离线假答案，不花钱）</option>
+        <option value="typesafe">TypeSafe 官方 API（api.typesafe.ai）</option>
+        <option value="openrouter">OpenRouter Decisions API</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="keyInput">API Key</label>
+      <input id="keyInput" type="password" placeholder="apikey_… / sk-or-…" autocomplete="off">
+    </div>
+    <div class="row between">
+      <button class="ghost" id="clearKey" type="button">清除</button>
+      <button class="primary" id="saveKey" type="button">保存</button>
+    </div>
+  </dialog>
 
   <div id="tooltip" role="status"></div>
 
