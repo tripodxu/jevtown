@@ -5,6 +5,8 @@ import { startWorker, postJSON, runToDone } from './helper.js';
 
 const worker = await startWorker();
 after(async () => { await worker.stop(); });
+// 兜底：清掉历史泄漏的预算探测行（探测行残留会让当天所有写路由被 429 到 UTC 当天结束）。
+after(() => execSync(`npx wrangler d1 execute jevtown --local --command "DELETE FROM batches WHERE post LIKE 'budgetprobe-%'"`, { stdio: 'pipe' }));
 
 test('worker 起来了：feed 为空数组，check 开局返回第一波 600 人', async () => {
   const feed = await (await worker.fetch('/api/feed')).json();
@@ -146,23 +148,27 @@ test('预算闸：当天已花超后，/api/batch 与 /api/wave 都被 429 拦�
   const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '预算闸验证：一条普通帖子' })).json();
   assert.equal(opening.state, 'running');
 
-  // 2. 直接往本地 D1 插一笔"今天已花 9.99"的探测流水（finally 里清除）
+  // 2. 起一个日预算 0.5 的 worker。探测行的插入与 worker 停止都收进 try/finally：
+  //    startWorker 抛异常时还没插过探测行，不会污染本地 D1。
+  const gated = await startWorker({ CROWD_DAILY_BUDGET_USD: '0.5' });
   const day = new Date().toISOString().slice(0, 10);
   const probe = `budgetprobe-${Date.now()}`;
-  execSync(
-    `npx wrangler d1 execute jevtown --local --command "INSERT OR REPLACE INTO batches (post, number, stage, n, usd, tokens, day) VALUES ('${probe}', 1, 'opening', 0, 9.99, 0, '${day}')"`,
-    { stdio: 'pipe' },
-  );
-
-  // 3. 起一个日预算 0.5 的 worker：batch 与 wave 都应 429
-  const gated = await startWorker({ CROWD_DAILY_BUDGET_USD: '0.5' });
   try {
+    // 未花超：预算 0.5、当天已花 0 → 放行
+    const ok = await gated.fetch(`/api/batch?post=${opening.post}&v=1`);
+    assert.equal(ok.status, 200, `batch before spend=${ok.status}`);
+    // 直接往本地 D1 插一笔"今天已花 9.99"的探测流水
+    execSync(
+      `npx wrangler d1 execute jevtown --local --command "INSERT OR REPLACE INTO batches (post, number, stage, n, usd, tokens, day) VALUES ('${probe}', 1, 'opening', 0, 9.99, 0, '${day}')"`,
+      { stdio: 'pipe' },
+    );
+    // 已花超：batch 与 wave 都应 429
     const batch = await gated.fetch(`/api/batch?post=${opening.post}&v=1`);
     assert.equal(batch.status, 429, `batch=${batch.status}`);
     const wave = await gated.fetch(`/api/wave?post=${opening.post}&v=1`, { method: 'POST' });
     assert.equal(wave.status, 429, `wave=${wave.status}`);
   } finally {
-    await gated.stop();
+    await gated?.stop();
     execSync(`npx wrangler d1 execute jevtown --local --command "DELETE FROM batches WHERE post = '${probe}'"`, { stdio: 'pipe' });
   }
 });
