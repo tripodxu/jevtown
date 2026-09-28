@@ -1,7 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
-import { startWorker, postJSON, runToDone } from './helper.js';
+import { startWorker, postJSON, runToDone, runBatches, authorOf } from './helper.js';
 
 const worker = await startWorker();
 after(async () => { await worker.stop(); });
@@ -26,7 +26,7 @@ test('product：跑完后有价格阶梯追问，GET /api/post 能拿到 followU
     prices: [9, 19, 39, 79],
   });
   const opening = await res.json();
-  const summary = await runToDone(worker, opening.post, opening.version);
+  const summary = await runToDone(worker, opening.post, opening.version, authorOf(opening));
 
   assert.ok(summary.reach > 600, `reach=${summary.reach}`);
   const detail = await (await worker.fetch(`/api/post/${opening.post}?v=${opening.version}`)).json();
@@ -39,7 +39,7 @@ test('product：跑完后有价格阶梯追问，GET /api/post 能拿到 followU
 
 test('调用报告：分阶段次数/耗时/tokens 齐全，provider 记录在案', async () => {
   const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '调用报告验证：一条普通的帖子' })).json();
-  await runToDone(worker, opening.post, opening.version);
+  await runToDone(worker, opening.post, opening.version, authorOf(opening));
   const detail = await (await worker.fetch(`/api/post/${opening.post}?v=1`)).json();
 
   const report = detail.report;
@@ -68,7 +68,7 @@ test('调用报告：分阶段次数/耗时/tokens 齐全，provider 记录在�
   }
   // 实时监控数据源：/api/batch 响应带本批的逐人判定与调用成本
   const running = await (await postJSON(worker, '/api/check', { preset: 'post', text: '实时监控数据源验证：一条普通帖子' })).json();
-  const batchRes = await worker.fetch(`/api/batch?post=${running.post}&v=1`);
+  const batchRes = await worker.fetch(`/api/batch?post=${running.post}&v=1`, { headers: { 'x-jev-author': running.author } });
   const batch = await batchRes.json();
   assert.ok(Array.isArray(batch.drawn) && batch.drawn.length === 100, `drawn=${batch.drawn?.length}`);
   for (const pair of batch.drawn) {
@@ -81,7 +81,7 @@ test('调用报告：分阶段次数/耗时/tokens 齐全，provider 记录在�
 test('listing：跑完后有买家问题追问', async () => {
   const res = await postJSON(worker, '/api/check', { preset: 'listing', text: '出 iPhone 13，128G，电池 86%，无维修，1400 元，可小刀，包邮，联系我' });
   const opening = await res.json();
-  await runToDone(worker, opening.post, opening.version);
+  await runToDone(worker, opening.post, opening.version, authorOf(opening));
   const detail = await (await worker.fetch(`/api/post/${opening.post}?v=${opening.version}`)).json();
   assert.ok(detail.followUp.asked > 0);
   assert.ok('negotiable' in detail.followUp.totals, '买家问题里应有砍价');
@@ -89,11 +89,11 @@ test('listing：跑完后有买家问题追问', async () => {
 
 test('版本：同一帖可再发一版，两版各有各的计数，versions 列表齐全', async () => {
   const first = await (await postJSON(worker, '/api/check', { preset: 'post', text: '跑了五公里，说说我怎么坚持下来的，附训练计划' })).json();
-  await runToDone(worker, first.post, first.version);
+  await runToDone(worker, first.post, first.version, authorOf(first));
 
-  const second = await (await postJSON(worker, '/api/version', { post: first.post, text: '五公里跑三年，体重和焦虑一起下来的：我的笨办法' })).json();
+  const second = await (await postJSON(worker, '/api/version', { post: first.post, text: '五公里跑三年，体重和焦虑一起下来的：我的笨办法' }, { 'x-jev-author': authorOf(first) })).json();
   assert.equal(second.version, 2);
-  await runToDone(worker, second.post, second.version);
+  await runToDone(worker, second.post, second.version, authorOf(first));
 
   const v2 = await (await worker.fetch(`/api/post/${second.post}?v=2`)).json();
   assert.equal(v2.post.id, first.post);
@@ -155,7 +155,7 @@ test('预算闸：当天已花超后，/api/batch 与 /api/wave 都被 429 拦�
   const probe = `budgetprobe-${Date.now()}`;
   try {
     // 未花超：预算 0.5、当天已花 0 → 放行
-    const ok = await gated.fetch(`/api/batch?post=${opening.post}&v=1`);
+    const ok = await gated.fetch(`/api/batch?post=${opening.post}&v=1`, { headers: { 'x-jev-author': opening.author } });
     assert.equal(ok.status, 200, `batch before spend=${ok.status}`);
     // 直接往本地 D1 插一笔"今天已花 9.99"的探测流水
     execSync(
@@ -171,4 +171,23 @@ test('预算闸：当天已花超后，/api/batch 与 /api/wave 都被 429 拦�
     await gated?.stop();
     execSync(`npx wrangler d1 execute jevtown --local --command "DELETE FROM batches WHERE post = '${probe}'"`, { stdio: 'pipe' });
   }
+});
+
+test('作者校验：没有 x-jev-author 头，batch/wave/version 全部 403；带头放行', async () => {
+  const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '作者校验验证：一条普通帖子' })).json();
+  assert.ok(opening.author, 'check 响应应带回 author 令牌');
+
+  const batch = await worker.fetch(`/api/batch?post=${opening.post}&v=1`);
+  assert.equal(batch.status, 403, `batch=${batch.status}`);
+  const wave = await worker.fetch(`/api/wave?post=${opening.post}&v=1`, { method: 'POST' });
+  assert.equal(wave.status, 403, `wave=${wave.status}`);
+  // version 的 409 门（上一版还在跑）排在作者门之前——用 blocked 帖穿过 409 直达作者门
+  const blocked = await (await postJSON(worker, '/api/check', { preset: 'listing', text: '傻逼东西你去死吧' })).json();
+  assert.equal(blocked.state, 'blocked');
+  const version = await postJSON(worker, '/api/version', { post: blocked.post, text: '别人想再发一版' });
+  assert.equal(version.status, 403, `version=${version.status}`);
+
+  // 带头就能继续（防止校验把主人关在门外）
+  const ok = await worker.fetch(`/api/batch?post=${opening.post}&v=1`, { headers: { 'x-jev-author': opening.author } });
+  assert.equal(ok.status, 200, `batch with author=${ok.status}`);
 });

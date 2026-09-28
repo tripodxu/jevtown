@@ -18,9 +18,13 @@ const byok = () => {
   const key = localStorage.getItem('jevtown.key');
   return provider && key && provider !== 'mock' ? { provider, key } : null;
 };
+let currentAuthor = null; // 当前检查的作者令牌（/api/check 响应带回；刷新页面即失效，需重开检查）
 const authHeaders = () => {
   const picks = byok();
-  return picks ? { 'x-jev-provider': picks.provider, 'x-jev-key': picks.key } : {};
+  return {
+    ...(picks ? { 'x-jev-provider': picks.provider, 'x-jev-key': picks.key } : {}),
+    ...(currentAuthor ? { 'x-jev-author': currentAuthor } : {}),
+  };
 };
 
 const getJSON = async (url) => {
@@ -157,6 +161,10 @@ $('form').addEventListener('submit', async (event) => {
     }
     current.post = opening.post;
     current.version = opening.version;
+    if (opening.author) {
+      currentAuthor = opening.author;
+      localStorage.setItem(`jevtown.author.${opening.post}`, opening.author);
+    }
     showLive(preset);
     if (opening.unlisted?.length) {
       status(`注意：${opening.unlisted.map((id) => BLOCKED_ZH[id] ?? id).join('、')}（仍会照常检查，但不进公共流）`, 0.04);
@@ -242,7 +250,7 @@ async function loadFeed() {
           .map(
             (post) =>
               `<li><a href="javascript:openPost('${post.id}')">${esc(post.excerpt)}</a>` +
-              `<span class="meta">${esc(PRESET_NOUN_OF(post.preset))} · ${post.state === 'done' ? '已完成' : post.state === 'running' ? '进行中' : '已拒绝'}</span></li>`,
+              `<span class="meta">${esc(PRESET_NOUN_OF(post.preset))} · ${post.state === 'blocked' ? '已拒绝' : post.state === 'done' ? '已完成' : '进行中'}</span></li>`,
           )
           .join('')
       : '<li style="color:var(--muted)">还没有检查。发一段文字试试。</li>';
