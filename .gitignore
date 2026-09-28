@@ -1,5 +1,16 @@
+# 依赖与构建产物
 node_modules/
 .wrangler/
+output/
+
+# 密钥（只进本地文件或 Worker secret，严禁入库）
 .dev.vars
 .env.local
-output/
+
+# 上游调研原始材料（约 0.8MB，蒸馏结论见 docs/research/，本地保留不入库）
+_research_raw/
+
+# 系统/编辑器杂项
+.DS_Store
+Thumbs.db
+*.log

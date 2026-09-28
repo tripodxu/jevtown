@@ -2,7 +2,9 @@
 
 **由 TypeSafe [Jev](https://typesafe.ai)（System One 决策模型）驱动**：人们写，一万个 AI 人格来读。发一段文字，小镇在几秒内给出反应——谁停下、谁点赞、谁反感、谁划走。每一个反应都是 Jev 对类型化问题返回的概率，模型不写一个字；本页所有数字都出自它的判定。
 
-基于 [gaborishka/jevtown](https://github.com/gaborishka/jevtown)（MIT）的引擎与 Worker 架构改造的中文小镇版：**一个 Cloudflare Worker（API）+ D1（存储）+ 无框架静态前端（assets）**。产品调研见 [Jevtown调研报告.md](./Jevtown调研报告.md)，实施计划见 [docs/superpowers/plans/](./docs/superpowers/plans/)。
+基于 [gaborishka/jevtown](https://github.com/gaborishka/jevtown)（MIT）的引擎与 Worker 架构改造的中文小镇版：**一个 Cloudflare Worker（API）+ D1（存储）+ 无框架静态前端（assets）**。产品调研见 [docs/research/Jevtown调研报告.md](./docs/research/Jevtown调研报告.md)，实施计划见 [docs/superpowers/plans/](./docs/superpowers/plans/)。
+
+> 🤖 **给 agent**：先读 [AGENTS.md](./AGENTS.md)（入口 + 分层阅读协议），文档全集索引在 [docs/README.md](./docs/README.md)，项目记忆在 [docs/MEMORY.md](./docs/MEMORY.md)（最新在上）。不需要全量阅读仓库。
 
 > **当前状态：本地开发，未上线。** 不填 key 全流程可玩（mock 模式，零花费）；填自己的 key 即刻切真实模型。
 
@@ -29,7 +31,7 @@ npm run dev        # 应用本地 D1 迁移并启动 → http://localhost:5191
 
 - key 只存在**本浏览器 localStorage**，随每个 API 请求头发给本 Worker 使用，不落库不打日志；不填或选 mock 时走离线假答案（按文本特征 + 人格属性算出的确定性概率，小镇样貌真实但不花钱）。
 - 正式部署请改用 Worker secret（`npx wrangler secret put TYPESAFE_API_KEY`），页面上就不用填了。
-- 真实花费量级：单波 600 人约 $0.01–0.02，全城 1 万人约 $0.10–0.15（实测记录见 `output/real-api-report.md`）。
+- 真实花费量级：单波 600 人约 $0.01–0.02，全城 1 万人约 $0.10–0.15（实测记录见 [docs/research/real-api-report.md](./docs/research/real-api-report.md)）。
 
 ### 终端直跑（不经过站点）
 
@@ -43,7 +45,7 @@ npm run check -- --preset post --max-waves 2 "我为什么把每周例会砍成�
 ### 测试
 
 ```bash
-npm test    # 39 个用例：引擎单测 + Worker 集成（unstable_dev）+ 图谱纯函数，mock 通道，不花钱
+npm test    # 41 个用例：引擎单测 + Worker 集成（unstable_dev）+ 图谱纯函数，mock 通道，不花钱
 ```
 
 ---
@@ -74,12 +76,15 @@ npm test    # 39 个用例：引擎单测 + Worker 集成（unstable_dev）+ 图
 
 | 路径 | 内容 |
 |---|---|
+| `AGENTS.md` | ★ agent 入口：分层阅读协议 + 多 agent 协同铁律 |
 | `public/shared/` | ★ 引擎，Worker / 浏览器 / 终端三端共用。`rng/draw/presets/requests/feed/summary/check/personas/jev` 九个文件来自上游（MIT，最小改动：`zh` 名字键、城市分段、中文池回退、ms 透传、决策采样）；`vocab.js`（中文词表）、`labels.js`（全部中文标签单源：`presetNoun`/`BLOCKED_ZH`/决策与追问文案）、`mock.js`（假 Jev）、`bytes.js`、`replay.js` 为本项目新写 |
 | `public/` | 界面：`index.html`（发帖框在首屏，示例仅为存档回放）+ `styles.css`（四主题令牌）+ `app.js`（编排、BYOK 设置弹窗）+ `render.js`（报告渲染 + 目录）+ `charts.js`（漏斗/折线/需求曲线/报告条）+ `grid.js`（响应式地图）+ `theme.js`（主题切换）+ `showcase.js`（示例回放） |
 | `worker/index.js` | Cloudflare Worker：API + D1 + 限额（check/version 双路）+ 调用记账（逐请求耗时）+ BYOK 请求头 + 人群缓存 |
 | `migrations/` | D1 结构：posts / versions / reactions / batches；0002 追问列、0003 调用报告列、0004 决策样本列 |
 | `scripts/check.js` | 终端检查，产出含决策样本的存档 JSON |
 | `test/` | node:test：引擎单测 + Worker 集成（`unstable_dev`）+ 图谱纯函数 |
+| `docs/` | 项目文档：架构/约定/测试/部署 + 模块深潜 + ADR + [多 agent 协同与接力协议](./docs/agent/COLLABORATION.md) + [记忆日志](./docs/MEMORY.md)；索引见 [docs/README.md](./docs/README.md) |
+| `_research_raw/` | 上游调研原始材料（已 gitignore，仅本地保留） |
 
 ## 与上游的差异
 
