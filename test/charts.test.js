@@ -1,7 +1,7 @@
 // 图谱纯函数的边界情况：全部返回 HTML/SVG 字符串，可在 Node 直接验证。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { moodLine, demandChart, funnel, reportBars, fmtMs } from '../public/charts.js';
+import { moodLine, demandChart, funnel, reportBars, fmtMs, rollingChart, shareChart } from '../public/charts.js';
 
 test('moodLine：单波给点图而非空白，负情绪不炸', () => {
   const single = moodLine([0.24]);
@@ -42,4 +42,28 @@ test('reportBars：全零耗时/费用有除零保护', () => {
 test('fmtMs：秒与毫秒两种形态', () => {
   assert.equal(fmtMs(88600), '88.6s');
   assert.equal(fmtMs(683), '683ms');
+});
+
+test('rollingChart：心电图空态、读数与窗口截取', () => {
+  assert.ok(rollingChart([], {}).includes('等待第一批'));
+  const one = rollingChart([320], {});
+  assert.ok(one.includes('<svg') && one.includes('320'));
+  const rolling = rollingChart(Array.from({ length: 80 }, (_, i) => 100 + i), { window: 48 });
+  // 窗口截到末尾 48 个点（132..179），峰为窗口内最大值 179
+  assert.ok(rolling.includes('峰 179'));
+});
+
+test('shareChart：占比归一、单样本给等待文案、judged=0 不炸', () => {
+  assert.ok(shareChart([{ glad: 0, sorry: 0, judged: 0 }]).includes('积累样本'));
+  const svg = shareChart([
+    { glad: 30, sorry: 5, judged: 100 },
+    { glad: 80, sorry: 20, judged: 300 },
+    { glad: 150, sorry: 40, judged: 600 },
+  ]);
+  assert.ok(svg.includes('<svg') && svg.includes('乐见') && svg.includes('覆盖 600 人'));
+  const zero = shareChart([
+    { glad: 0, sorry: 0, judged: 0 },
+    { glad: 10, sorry: 2, judged: 50 },
+  ]);
+  assert.ok(zero.includes('<svg'));
 });
