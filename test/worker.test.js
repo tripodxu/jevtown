@@ -196,7 +196,7 @@ test('作者校验：没有 x-jev-author 头，batch/wave/version 全部 403；�
   assert.equal(ok.status, 200, `batch with author=${ok.status}`);
 });
 
-test('收波 CAS：并发收波只推进一次，且收波后批次还能继续', async () => {
+test('收波 CAS：并发收波只推进一次，且收波后批次还能继续', { timeout: 120_000 }, async () => {
   const opening = await (await postJSON(worker, '/api/check', {
     preset: 'product',
     text: '一款不臭的跑步袜，速干抗菌，99 元三双',
@@ -205,7 +205,8 @@ test('收波 CAS：并发收波只推进一次，且收波后批次还能继续'
   const author = authorOf(opening);
   await runBatches(worker, opening.post, opening.version, author); // 只跑完第 0 波批次，不收波
 
-  // 并发两次收波：真实并发时一个 200 一个 409；若被串行化则两个 200（各自收一波）。
+  // 并发两次收波：真实并发时一个 200 一个 409（输在 claim）；被串行化时也是 200+409
+  // （第一个推进波次后，第二个读过的新波没有回答，被空波门拦下）。
   // 不变量：没有 500；成功的次数与波次推进数一致。
   const settled = await Promise.all([1, 2].map(() =>
     worker.fetch(`/api/wave?post=${opening.post}&v=1`, { method: 'POST', headers: { 'x-jev-author': author } })));

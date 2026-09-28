@@ -317,33 +317,42 @@ async function runBatch(url, request, env) {
 
 async function closeWave(url, request, env) {
   const id = url.searchParams.get('post');
-  const v = Number(url.searchParams.get('v')) || 1;
+  const v = Number(url.searchParams.get('v') ?? '1') || 1;
   const post = await loadPost(env.DB, id);
   if (!post) return fail('no such post', 404);
   if (post.state !== 'running') return fail('the check is not running', 409);
   if (await overBudget(env)) return fail('today’s budget is spent', 429);
   if (!authorOk(request, post)) return fail('this check is not yours', 403);
 
-  // 当前波次还没人回答过（双击/重试的二次收波）：不能收，否则空波会被直接收尾、检查提前 done。
-  const version = await loadVersion(env.DB, id, v);
-  const wave = JSON.parse(version.plan).wave;
-  const { results: answered } = await env.DB.prepare('SELECT 1 FROM reactions WHERE post = ? AND number = ? AND wave = ? LIMIT 1').bind(id, v, wave).all();
-  if (!answered.length) return fail('this wave has no answers yet', 409);
-
   // 原子占位：同一检查的并发收波只有一个能把 running → closing，其余 409。
   const claim = await env.DB.prepare("UPDATE posts SET state = 'closing' WHERE id = ? AND state = 'running'").bind(id).run();
-  if (!claim.meta.changes) return fail('the check is already finished', 409);
+  if (!claim.meta.changes) return fail('the check is already closing', 409);
+  // 占位成功后 plan 即被冻结（batch/wave 都以 running 为门），门检查放在这里无竞态。
+  const release = async () => {
+    try {
+      await env.DB.prepare("UPDATE posts SET state = 'running' WHERE id = ? AND state = 'closing'").bind(id).run();
+    } catch (error) {
+      console.error('release closing', id, error?.message);
+    }
+  };
   try {
-    return await settleWave(env, post, id, v);
+    // 空波门：当前波次没有任何回答就不许收——否则 travels([]) 为 false 会直接走收尾、跳过整个波次。
+    const version = await loadVersion(env.DB, id, v);
+    const wave = JSON.parse(version.plan ?? '{}').wave;
+    const { results: answered } = await env.DB.prepare('SELECT 1 FROM reactions WHERE post = ? AND number = ? AND wave = ? LIMIT 1').bind(id, v, wave).all();
+    if (!answered.length) {
+      await release();
+      return fail('this wave has no answers yet', 409);
+    }
+    return await settleWave(env, post, id, v, request);
   } catch (error) {
-    // 失败要把占位还回去，否则这个检查会卡在 closing 再也动不了。
-    await env.DB.prepare("UPDATE posts SET state = 'running' WHERE id = ? AND state = 'closing'").bind(id).run();
+    await release();
     throw error;
   }
 }
 
 /** 收波本体：算情绪定去留；推进则把状态还回 running（批次还要继续），收尾则置 done。 */
-async function settleWave(env, post, id, v) {
+async function settleWave(env, post, id, v, request) {
   const version = await loadVersion(env.DB, id, v);
   const plan = JSON.parse(version.plan);
   const presetId = post.preset;
@@ -351,7 +360,7 @@ async function settleWave(env, post, id, v) {
   const preset = PRESETS[presetId];
   const scores = JSON.parse(version.scores);
   const maxWaves = Math.min(Number(env.CROWD_MAX_WAVES ?? WAVES_MAX), WAVES_MAX);
-  const provider = providerOf(env, null);
+  const provider = providerOf(env, request);
 
   const waveIndex = plan.wave;
   const order = plan.history[String(waveIndex)];
