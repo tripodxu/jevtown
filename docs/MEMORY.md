@@ -6,6 +6,21 @@
 
 ---
 
+## 2026-09-28 · 优化计划已立项（只规划，未动代码）
+
+- 计划文档：`docs/superpowers/plans/2026-09-28-jevtown-cn-optimization.md`（12 项发现全部带
+  `文件:行号` 证据，11 个任务含步骤与验收标准）。用户选择先只规划，执行时按任务卡派发。
+- **P0 安全/正确性（代码级，已读码确认）**：
+  - `/api/batch` 无身份校验、无预算闸（`worker/index.js:250-299`，限额只在 check/version
+    的 `:137`/`:211`）→ 知道 post id 即可反复烧钱；
+  - 收波无 CAS（`closeWave` 先读 state 再行动，`worker/index.js:303-339`）→ 并发双推波次；
+  - `plan.answered` 读-改-写非原子（`:258-296`）→ 并发 batch 错位/撞主键。
+- **P0 工作流地基**：无 CI（`.github/` 为空）、无 PR 模板、RELAY.md 任务卡落盘目录未定
+  （拟固定 `docs/agent/tasks/`，完成后删或归档 `done/`，要点进 MEMORY）。
+- **P1**：README 瘦身（目录结构/上游差异下沉 docs/）、observability 开启、database_id
+  占位符设上线门、最小 lint（`node --check` 脚本）。
+- **P2 可选**：Playwright smoke、本地 IP 恒 `'local'` 导致多人共享 20 次/日限额误伤。
+
 ## 2026-09-28 · 文档体系重建 + `_research_raw` 退出版本库
 
 - 新建根 [AGENTS.md](../AGENTS.md)：agent 入口，含**分层阅读协议**（L0 入口 / L1 架构 /
