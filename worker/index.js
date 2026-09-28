@@ -73,6 +73,12 @@ const loadPost = async (db, id) => (await db.prepare('SELECT * FROM posts WHERE 
 const loadVersion = async (db, id, number = 1) =>
   (await db.prepare('SELECT * FROM versions WHERE post = ? AND number = ?').bind(id, number).first()) ?? null;
 
+/** 写操作的作者校验：x-jev-author 头必须与 posts.author 一致（旧帖 author 为 NULL 时一律拒绝）。 */
+const authorOk = (request, post) => {
+  const sent = String(request?.headers.get('x-jev-author') ?? '');
+  return !!post.author && sent === post.author;
+};
+
 /** 记一笔调用流水（请求数以行计，同键冲突时累加金额与耗时）。返回 D1 语句（可直接进 db.batch，单独执行时加 .run()）。 */
 const addSpend = (db, { post, number = 1, stage, n = 0, usd = 0, tokens = 0, ms = 0, day }) =>
   db.prepare(
@@ -150,6 +156,7 @@ async function runCheck(request, env) {
   const { answers, usd, tokens, ms } = await provider.ask(openingRequest(presetId, text));
   const opening = openingAnswers(answers);
   const id = newId();
+  const author = crypto.randomUUID();
   const now = Date.now();
   const stored = {
     scores: JSON.stringify(opening.scores),
@@ -160,14 +167,14 @@ async function runCheck(request, env) {
 
   if (opening.blocked.length) {
     await env.DB.batch([
-      env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-        .bind(id, presetId, pool, text, 'blocked', now, day, ip),
+      env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip, author) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(id, presetId, pool, text, 'blocked', now, day, ip, author),
       env.DB.prepare(
         'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, prices, provider, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, prices ? JSON.stringify(prices) : null, provider.name, round2(usd), tokens),
       addSpend(env.DB, { post: id, stage: 'opening', usd, tokens, ms, day }),
     ]);
-    return json({ post: id, version: 1, state: 'blocked', blocked: opening.blocked, unlisted: opening.unlisted, checks: opening.checks });
+    return json({ post: id, version: 1, state: 'blocked', author, blocked: opening.blocked, unlisted: opening.unlisted, checks: opening.checks });
   }
 
   // 第一波：传播算法认为最该看到的人（打分越高越靠前），掺少量随机。
@@ -176,8 +183,8 @@ async function runCheck(request, env) {
   const wave0 = firstWave(people, opening.scores, presetId, random);
   const plan = { wave: 0, answered: 0, history: { 0: wave0.map((who) => who.id) } };
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(id, presetId, pool, text, 'running', now, day, ip),
+    env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip, author) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, presetId, pool, text, 'running', now, day, ip, author),
     env.DB.prepare(
       'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, prices, provider, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, JSON.stringify(plan), prices ? JSON.stringify(prices) : null, provider.name, round2(usd), tokens),
@@ -187,6 +194,7 @@ async function runCheck(request, env) {
     post: id,
     version: 1,
     state: 'running',
+    author,
     provider: provider.name,
     unlisted: opening.unlisted,
     checks: opening.checks,
@@ -217,6 +225,7 @@ async function runVersion(request, env) {
     if ((row?.n ?? 0) >= limit) return fail('today’s checks are used up, come back tomorrow', 429);
   }
   if (await overBudget(env)) return fail('today’s budget is spent', 429);
+  if (!authorOk(request, post)) return fail('this post is not yours', 403);
 
   const row = await env.DB.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS number FROM versions WHERE post = ?').bind(id).first();
   const number = row.number;
@@ -232,7 +241,7 @@ async function runVersion(request, env) {
       ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), provider.name, round2(usd), tokens),
       addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, ms, day: today() }),
     ]);
-    return json({ post: id, version: number, state: 'blocked', blocked: opening.blocked });
+    return json({ post: id, version: number, state: 'blocked', author: post.author, blocked: opening.blocked });
   }
 
   const people = crowdOf(pool);
@@ -258,6 +267,7 @@ async function runBatch(url, request, env) {
   if (!post) return fail('no such post', 404);
   if (post.state !== 'running') return fail('the check is not running', 409);
   if (await overBudget(env)) return fail('today’s budget is spent', 429);
+  if (!authorOk(request, post)) return fail('this check is not yours', 403);
   const version = await loadVersion(env.DB, id, v);
   const plan = JSON.parse(version.plan);
   const order = plan.history[String(plan.wave)];
@@ -312,6 +322,7 @@ async function closeWave(url, request, env) {
   if (!post) return fail('no such post', 404);
   if (post.state !== 'running') return fail('the check is already finished', 409);
   if (await overBudget(env)) return fail('today’s budget is spent', 429);
+  if (!authorOk(request, post)) return fail('this check is not yours', 403);
   const version = await loadVersion(env.DB, id, v);
   const plan = JSON.parse(version.plan);
   const presetId = post.preset;
