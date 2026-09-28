@@ -152,6 +152,10 @@ git commit -m "feat: apply daily budget gate to batch and wave routes"
 
 ### Task B: 作者令牌 —— 写操作必须证明"这个检查是我的"
 
+> ⚠️ **实施勘注（2026-09-28）**：本任务 Step 1 的测试原文对 **running 帖**无头发
+> `/api/version` 期望 403，与锁定的校验顺序（409 门在作者门之前）矛盾。实施时改为
+> **blocked 帖**（穿过 409 直达作者门），其余断言不变。
+
 **Files:**
 - Create: `migrations/0005_author.sql`
 - Modify: `worker/index.js`（`authorOk` 助手；`runCheck` 生成并落库 author、响应带回；`runVersion`/`runBatch`/`closeWave` 校验）
@@ -374,6 +378,11 @@ git commit -m "feat: require x-jev-author header on write routes
 ```
 
 ### Task C: 收波 CAS —— 并发 /api/wave 只有一个能推进
+
+> ⚠️ **实施勘注（2026-09-28）**：本任务原假设"dev server 串行化时两次收波各收一波"
+> 不成立——串行化下第二次收的是零反应新波并直接置 done、跳过整个波次（用户可达缺陷）。
+> 实施时新增**空波门**（claim 之后：当前波次零 reactions → 409）；settleWave 另修复
+> 透传 request 以保持 BYOK 通道一致。详见 MEMORY.md 2026-09-28 M2 条目。
 
 **Files:**
 - Modify: `worker/index.js`（`closeWave` 拆为 claim 包装 + `settleWave` 原体；推进路径恢复 `state='running'`；done 路径加状态条件）
