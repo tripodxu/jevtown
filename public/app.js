@@ -1,8 +1,12 @@
 // 前端编排：发文本 → 分步驱动检查（batch/wave）→ 交给 render.js 渲染。
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
-import { renderCheck, esc } from './render.js';
+import { renderCheck, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
 import { BLOCKED_ZH, presetNoun as PRESET_NOUN_OF } from './shared/labels.js';
+import { PRESETS } from './shared/presets.js';
+import { drawGrid } from './grid.js';
+import { fmtMs } from './charts.js';
+import { CROWD } from './shared/personas.js';
 
 const $ = (id) => document.getElementById(id);
 // 当前正在做的检查：哪个 post 的哪个版本。
@@ -44,6 +48,64 @@ const status = (line, ratio) => {
   $('statusBar').style.transform = `scaleX(${Math.min(1, Math.max(0, ratio ?? 0))})`;
 };
 
+// -- 实时监控（检查进行中的动态地图与调用流水） ----------------------------------
+
+let live = null;
+
+function showLive(presetId) {
+  live = {
+    bytes: new Uint8Array(CROWD),
+    keys: Object.keys(PRESETS[presetId].reactions),
+    preset: presetId,
+    start: performance.now(),
+    requests: 0,
+    tokens: 0,
+    usd: 0,
+    ms: 0,
+  };
+  $('monitorBody').innerHTML = '';
+  $('live').hidden = false;
+  drawGrid($('liveMap'), live.bytes, presetId);
+  updateLiveStats();
+}
+
+function updateLiveStats() {
+  let judged = 0;
+  for (const b of live.bytes) if (b) judged += 1;
+  $('liveStats').innerHTML =
+    stat(`${judged.toLocaleString()} / ${CROWD.toLocaleString()}`, 'Jev 已判定') +
+    stat(live.requests, 'Jev 请求') +
+    stat(live.tokens.toLocaleString(), 'tokens') +
+    stat(fmtMs(live.ms), '模型耗时') +
+    stat(`$${live.usd.toFixed(4)}`, '累计花费');
+}
+
+function monitorRow(cells, cls = '') {
+  const tr = document.createElement('tr');
+  if (cls) tr.className = cls;
+  const sec = ((performance.now() - live.start) / 1000).toFixed(1);
+  tr.innerHTML = `<td>${sec}s</td>` + cells.map((c) => `<td>${c}</td>`).join('');
+  const body = $('monitorBody');
+  body.prepend(tr);
+  while (body.children.length > 150) body.lastChild.remove();
+}
+
+function paintBatch(batch) {
+  for (const { id, reaction } of batch.drawn ?? []) {
+    const idx = live.keys.indexOf(reaction);
+    if (idx >= 0) live.bytes[id] = idx + 1;
+  }
+  drawGrid($('liveMap'), live.bytes, live.preset);
+  live.requests += 1;
+  live.tokens += batch.tokens ?? 0;
+  live.usd += batch.usd ?? 0;
+  live.ms += batch.ms ?? 0;
+  updateLiveStats();
+  monitorRow([`第 ${batch.wave + 1} 波`, `${batch.answered} / ${batch.total}`, `${batch.ms ?? 0}ms`, `${(batch.tokens ?? 0).toLocaleString()}`, `$${live.usd.toFixed(4)}`]);
+}
+
+const pace = () => new Promise((resolve) => setTimeout(resolve, 180)); // 节奏化：让点亮过程可见
+
 // -- 提交与分步驱动 -------------------------------------------------------------
 
 $('form').addEventListener('submit', async (event) => {
@@ -64,6 +126,7 @@ $('form').addEventListener('submit', async (event) => {
     }
     current.post = opening.post;
     current.version = opening.version;
+    showLive(preset);
     if (opening.unlisted?.length) {
       status(`注意：${opening.unlisted.map((id) => BLOCKED_ZH[id] ?? id).join('、')}（仍会照常检查，但不进公共流）`, 0.04);
     }
@@ -73,19 +136,24 @@ $('form').addEventListener('submit', async (event) => {
     while (!done) {
       for (;;) {
         const batch = await getJSON(`/api/batch?post=${current.post}&v=${current.version}`);
-        status(`第 ${batch.wave + 1} 波：Jev 已判定 ${batch.answered} / ${batch.total} 人`, batch.answered / Math.max(1, batch.total));
         if (batch.done) break;
+        paintBatch(batch);
+        status(`第 ${batch.wave + 1} 波：Jev 已判定 ${batch.answered} / ${batch.total} 人`, batch.answered / Math.max(1, batch.total));
+        await pace();
       }
       const wave = await postJSON(`/api/wave?post=${current.post}&v=${current.version}`);
       if (wave.done) {
         done = true;
+        monitorRow(['收尾', `到达 ${wave.reach}`, '', '', ''], 'wave-row');
         status('收尾完成。', 0.98);
       } else {
+        monitorRow([`第 ${wave.wave.index + 1} 波收束`, `情绪 ${wave.wave.mood >= 0 ? '+' : ''}${wave.wave.mood}`, `${wave.wave.size} 人`, '', ''], 'wave-row');
         status(`第 ${wave.wave.index + 1} 波完成，情绪 ${wave.wave.mood >= 0 ? '+' : ''}${wave.wave.mood}，文字继续传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`, 0.5);
       }
     }
 
     const view = await getJSON(`/api/post/${current.post}?v=${current.version}`);
+    $('live').hidden = true;
     showResult(view);
     status('完成。', 1);
     await loadFeed();

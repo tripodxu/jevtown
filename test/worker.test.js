@@ -63,6 +63,16 @@ test('调用报告：分阶段次数/耗时/tokens 齐全，provider 记录在�
     assert.ok(d.reaction.length > 0);
     assert.ok(Object.keys(d.probabilities).length >= 2);
   }
+  // 实时监控数据源：/api/batch 响应带本批的逐人判定与调用成本
+  const running = await (await postJSON(worker, '/api/check', { preset: 'post', text: '实时监控数据源验证：一条普通帖子' })).json();
+  const batchRes = await worker.fetch(`/api/batch?post=${running.post}&v=1`);
+  const batch = await batchRes.json();
+  assert.ok(Array.isArray(batch.drawn) && batch.drawn.length === 100, `drawn=${batch.drawn?.length}`);
+  for (const pair of batch.drawn) {
+    assert.ok(Number.isInteger(pair.id) && pair.id >= 0 && pair.id < 10000);
+    assert.ok(typeof pair.reaction === 'string' && pair.reaction.length > 0);
+  }
+  assert.ok(typeof batch.usd === 'number' && typeof batch.tokens === 'number' && batch.ms >= 0);
 }, { timeout: 120_000 });
 
 test('listing：跑完后有买家问题追问', async () => {
