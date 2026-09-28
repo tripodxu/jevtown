@@ -279,7 +279,32 @@ async function runBatch(url, request, env) {
   const batch = order.slice(start, start + PER_REQUEST);
   const people = batch.map((pid) => persona(pool, pid));
   const provider = providerOf(env, request);
-  const { answers, usd, tokens, ms } = await provider.ask(reactionRequest(presetId, version.text, people));
+  // 原子认领本批：只有 answered 仍等于 start 时才 +batch.length，防两个并发批次问同一批人。
+  const claim = await env.DB.prepare(
+    "UPDATE versions SET plan = json_set(plan, '$.answered', json_extract(plan, '$.answered') + ?) WHERE post = ? AND number = ? AND json_extract(plan, '$.answered') = ?",
+  ).bind(batch.length, id, v, start).run();
+  if (!claim.meta.changes) return fail('this batch was already claimed, retry', 409);
+  let answers;
+  let usd;
+  let tokens;
+  let ms;
+  try {
+    ({ answers, usd, tokens, ms } = await provider.ask(reactionRequest(presetId, version.text, people)));
+  } catch (error) {
+    // 问 Jev 失败：把认领还回去，下一批（或重试）会问回这批人。
+    // 条件回滚：answered 仍等于 start + batch.length 才退，说明期间没人接着认领。
+    // 若他人已接着认领过（answered 更大），放弃回滚——本批 100 人跳过，与"进程被杀"窗口
+    // 同等降级，但绝不擦掉他人认领（那会让下一请求重问同一批人，撞 reactions 主键 500）。
+    try {
+      await env.DB.prepare(
+        "UPDATE versions SET plan = json_set(plan, '$.answered', json_extract(plan, '$.answered') - ?) " +
+          "WHERE post = ? AND number = ? AND json_extract(plan, '$.answered') = ?",
+      ).bind(batch.length, id, v, start + batch.length).run();
+    } catch (error2) {
+      console.error('release batch claim', id, v, error2?.message);
+    }
+    throw error;
+  }
 
   const versionId = `${id}.${v}`;
   // 决策样本：只采第一波的第一批（曝光最靠前的人），留存 Jev 读到的原句与它给出的分布。
@@ -301,16 +326,16 @@ async function runBatch(url, request, env) {
     return env.DB.prepare('INSERT INTO reactions (post, number, id, wave, reaction) VALUES (?, ?, ?, ?, ?)')
       .bind(id, v, pid, plan.wave, reaction);
   });
-  plan.answered = start + batch.length;
   if (decisionSamples) statements.push(env.DB.prepare('UPDATE versions SET decisions = ? WHERE post = ? AND number = ?').bind(JSON.stringify(decisionSamples), id, v));
   statements.push(
-    env.DB.prepare('UPDATE versions SET plan = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
-      .bind(JSON.stringify(plan), round2(usd), tokens, id, v),
+    // answered 已在认领时推进，这里只累加花费与 tokens。
+    env.DB.prepare('UPDATE versions SET usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
+      .bind(round2(usd), tokens, id, v),
     addSpend(env.DB, { post: id, number: v, stage: `wave${plan.wave}`, n: start, usd, tokens, ms, day: today() }),
   );
   await env.DB.batch(statements);
   // drawn = 这批人各自被 Jev 判定成了什么（前端实时点亮地图用）；usd/tokens/ms = 本批调用成本。
-  return json({ answered: plan.answered, total: order.length, wave: plan.wave, drawn: drawnPairs, usd: round2(usd), tokens, ms });
+  return json({ answered: start + batch.length, total: order.length, wave: plan.wave, drawn: drawnPairs, usd: round2(usd), tokens, ms });
 }
 
 // -- POST /api/wave：收波、定去留、收尾 ----------------------------------------

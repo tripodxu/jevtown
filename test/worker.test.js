@@ -228,3 +228,21 @@ test('收波 CAS：并发收波只推进一次，且收波后批次还能继续'
   const done = await (await worker.fetch(`/api/post/${opening.post}?v=1`)).json();
   for (const wave of done.waves) assert.equal(wave.size, wave.asked, `wave ${wave.index}: ${wave.size}/${wave.asked}`);
 });
+
+test('批次认领：并发 /api/batch 不错位，第 0 波恰好问满 600 人', async () => {
+  const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '批次认领验证：一条普通帖子' })).json();
+  const headers = { 'x-jev-author': authorOf(opening) };
+
+  // 并发打批：改造前多个请求读到同一 answered，问同一批人 → reactions 主键碰撞 → 500。
+  const results = await Promise.all([1, 2, 3, 4].map(() =>
+    worker.fetch(`/api/batch?post=${opening.post}&v=1`, { headers })));
+  const codes = results.map((r) => r.status);
+  assert.ok(codes.every((c) => c === 200 || c === 409), `codes=${codes}`);
+  assert.ok(codes.includes(200), `codes=${codes}`);
+
+  // 跑完后第 0 波必须恰好 600 人各判一次（认领制不错位、不重问、不跳过）。
+  await runToDone(worker, opening.post, opening.version, authorOf(opening));
+  const detail = await (await worker.fetch(`/api/post/${opening.post}?v=1`)).json();
+  assert.equal(detail.waves[0].size, 600, `wave0=${detail.waves[0].size}`);
+  assert.equal(detail.waves[0].asked, 600);
+});
