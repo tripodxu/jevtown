@@ -23,7 +23,7 @@ D1（posts / versions / reactions / batches）
 | `public/shared/` | ★ 三端共用引擎 | 上游 9 文件（MIT 最小改动）+ 本项目 5 个新文件 |
 | `public/` | 界面：发帖框首屏、四主题、报告渲染、图表、地图 | 无框架，原生 ESM |
 | `worker/index.js` | API + D1 + 限额 + 记账 + BYOK | 单文件，按路由函数组织 |
-| `migrations/` | D1 结构，0001–0004 | 只增不改 |
+| `migrations/` | D1 结构，0001–0005 | 只增不改 |
 | `scripts/check.js` | 终端检查，复用同一引擎 | 产出存 `output/checks/` |
 | `test/` | node:test，mock 通道 | 含 Worker 集成（unstable_dev） |
 | `docs/` | 全部项目文档 | 索引见 [README.md](README.md) |

@@ -44,6 +44,18 @@
 - 花费记账：每个 Jev 调用落 `batches` 一行；`versions.usd` 必须与 `batches` 按 day 汇总口径
   一致（曾漏记收尾提问花费，见 [MEMORY.md](MEMORY.md)——改记账必查此条）。
 
+## Lint 门
+
+`npm run lint`（`scripts/lint.mjs`，CI 中先于 test 跑，先红先修）：
+
+- 语法门：所有 `public/` `worker/` `test/` 的 `.js` 过 `node --check`；
+- 缩进：不用 tab，不混用 tab/空格；
+- `console.log` 残留：worker/前端/测试一律 `console.error`；`scripts/` 是 CLI，
+  打印即输出，豁免。
+
+已知限制：console.log 规则是文本匹配，注释/字符串里的同名字面量会误报——遇到误报
+改代码表述（如拆开字符串），**不删规则**。
+
 ## 前端
 
 - `index.html` 首屏即发帖框；示例回放只在底部且标注"存档"。

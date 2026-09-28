@@ -20,5 +20,5 @@
     // mock / typesafe / openrouter；留空 = 有哪个 key 用哪个，都没有则自动落入 mock。
     "JEV_PROVIDER": "mock"
   },
-  "observability": { "enabled": false }
+  "observability": { "enabled": true }
 }

@@ -57,6 +57,7 @@
 npm install
 npm run dev     # 应用本地 D1 迁移并启动 → http://localhost:5191（默认 mock，零花费）
 npm test        # node:test：引擎单测 + Worker 集成（unstable_dev），mock 通道不花钱
+npm run lint    # 最小 lint：语法门 + tab/空格 + console.log 残留（CI 同款，先于 test 跑）
 npm run check -- --preset listing "文本"   # 终端直跑，结果存 output/checks/
 npm run deploy  # remote 迁移 + 部署（上线前必读 docs/DEPLOYMENT.md）
 ```
