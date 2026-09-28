@@ -3,7 +3,7 @@
 import { PRESETS, LOOKS, lookOf } from './shared/presets.js';
 import { drawGrid, attachTooltip } from './grid.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, directionZh,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs } from './charts.js';
 import { rankedAnswers, demandCurve } from './shared/summary.js';
@@ -29,9 +29,10 @@ export function renderCheck(el, result) {
   html.push(overview(result));
   html.push(reportView(result));
   html.push(decisionsView(result));
+  html.push(terrainView(result));
   html.push(wavesView(result));
   html.push(countsView(result));
-  html.push('<h3>小镇地图</h3><div class="map-wrap"><canvas class="grid" role="img" aria-label="小镇反应地图：一万个格子，每格一个人格的反应（悬停可看详情）"></canvas><div class="legend"></div></div>');
+  html.push('<h3>小镇地图</h3><div class="map-bar"><button class="ghost" type="button" data-terrain aria-pressed="false">看聚集地形</button><span class="hint">成片 = 这一片人朝着同一个方向表态；零散 = 各看各的。</span></div><div class="map-wrap"><canvas class="grid" role="img" aria-label="小镇反应地图：一万个格子，每格一个人格的反应（悬停可看详情）"></canvas><div class="legend"></div></div>');
   html.push(jevReading(result));
   html.push(segmentsView(result));
   html.push(saidView(result));
@@ -46,7 +47,8 @@ export function renderCheck(el, result) {
   const canvas = el.querySelector('.grid');
   drawGrid(canvas, bytes, presetId);
   attachTooltip(canvas, bytes, presetId);
-  renderLegend(el.querySelector('.legend'), presetId);
+  el.querySelector('.legend').innerHTML = reactionLegend(presetId);
+  wireTerrain(el, result, canvas, bytes, presetId);
 }
 
 /** 结果页小目录：给每个 h3 发 id，顶部生成锚点 pill 行（长报告一跳直达）。 */
@@ -107,6 +109,29 @@ function decisionsView(result) {
     </div>`;
   }).join('');
   return `<h3>Jev 的决策现场（真实问句与概率分布 · 抽样 ${list.length} 例）</h3><div class="decisions">${cards}</div>`;
+}
+
+/**
+ * 人群地形：这次的反应是连成片的还是零散的（shared/spatial.js 的判定）。
+ * 判不出来也照样说"看不出"——不藏，并把统计量与置换次数摆出来，让人自己判断。
+ */
+function terrainView(result) {
+  const t = result.terrain;
+  if (!t || t.morans === null) return '';
+  const verdict = TERRAIN_VERDICT_ZH[t.verdict] ?? t.verdict;
+  const z = t.z === null ? '' : `，置换检验 z = ${t.z >= 0 ? '+' : ''}${t.z.toFixed(1)}`;
+  const where = [
+    t.hot?.length ? `成片的乐见集中在地图${directionZh(t.hotAt)}（${t.hot.length} 格）` : '',
+    t.cold?.length ? `成片的反感在${directionZh(t.coldAt)}（${t.cold.length} 格）` : '',
+  ].filter(Boolean).join('；');
+  // 整张地图的判定与局部成片是两回事：整体"零散"照样可能有中央一小撮人一起叫好，
+  // 所以这一句用"不过"另起，不与上面的判定打架。
+  const local = where ? `不过${esc(where)}。` : '';
+  return `<h3>人群地形</h3><div class="terrain-read">
+    <span class="chip ${t.verdict}">${verdict}</span>
+    <div class="terrain-say">这次的反应<em>${verdict}</em>。${TERRAIN_SAY_ZH[t.verdict] ?? ''}</div>
+    <div class="hint">判定格 ${t.judged.toLocaleString()} · 相邻对 ${t.edges.toLocaleString()} · Moran's I = ${t.morans.toFixed(3)}（把地图随机打乱 ≈ 0，越正越成片、越负越零散${z}）。${local}</div>
+  </div>`;
 }
 
 function wavesView(result) {
@@ -226,7 +251,8 @@ function voicesView(result) {
   return `<h3>人格声音</h3><div class="voices${collapsed}">${cards.join('')}</div>${more}`;
 }
 
-function renderLegend(el, presetId) {
+/** 反应图例（地图默认态）：一个 look 一行，颜色与地图图例同源。 */
+function reactionLegend(presetId) {
   const keys = Object.keys(PRESETS[presetId].reactions);
   const seen = new Set();
   const rows = [];
@@ -236,5 +262,33 @@ function renderLegend(el, presetId) {
     seen.add(look);
     rows.push(`<span class="dot" style="background:${LOOKS[look]}"></span>${esc(REACTIONS_ZH[reaction] ?? reaction)}`);
   }
-  el.innerHTML = rows.join('');
+  return rows.join('');
+}
+
+/** 聚集地形的图例：环 = 被判为成片的格子（与地图上 ringTerrain 描的环同色）。 */
+function terrainLegend(terrain) {
+  const rows = [];
+  if (terrain.hot?.length) rows.push('<span class="dot ring hot"></span>成片的乐见');
+  if (terrain.cold?.length) rows.push('<span class="dot ring cold"></span>成片的反感');
+  return rows.join('');
+}
+
+/** 地图的「聚集地形」开关：叠上 spatial.js 标出的成片格子，图例同步换。 */
+function wireTerrain(el, result, canvas, bytes, presetId) {
+  const btn = el.querySelector('[data-terrain]');
+  const terrain = result.terrain;
+  if (!btn) return;
+  if (!terrain || (!terrain.hot?.length && !terrain.cold?.length)) {
+    btn.remove();
+    return;
+  }
+  const legend = el.querySelector('.legend');
+  let on = false;
+  btn.addEventListener('click', () => {
+    on = !on;
+    btn.textContent = on ? '看反应图' : '看聚集地形';
+    btn.setAttribute('aria-pressed', String(on));
+    drawGrid(canvas, bytes, presetId, on ? terrain : null);
+    legend.innerHTML = on ? terrainLegend(terrain) : reactionLegend(presetId);
+  });
 }

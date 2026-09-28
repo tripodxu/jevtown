@@ -666,6 +666,29 @@ canvas.grid {
 .checks .chip.no { color: var(--muted); }
 .checks .chip.unclear { color: var(--accent); border-color: var(--accent); }
 
+/* 人群地形：一句人话 + 一个统计量 + 一行出处 */
+.terrain-read { margin: 4px 0 6px; }
+.terrain-read .terrain-say { margin: 10px 0 6px; font-size: 14.5px; }
+.terrain-read .terrain-say em {
+  font-style: normal;
+  font-weight: 700;
+  padding: 0 4px;
+  background: linear-gradient(transparent 62%, var(--accent-soft) 0);
+}
+.chip.clustered { color: var(--map-green); border-color: var(--map-green); }
+.chip.scattered { color: var(--map-blue); border-color: var(--map-blue); }
+.chip.unclear { color: var(--muted); }
+
+/* 地图上方的开关条 */
+.map-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.map-bar .ghost { padding: 6px 14px; font-size: 12.5px; }
+.map-bar .ghost[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+
+/* 聚集地形的图例点是环，不是实心——与地图上描的环同色 */
+.legend .dot.ring { background: transparent; box-shadow: inset 0 0 0 2px currentColor; width: 12px; height: 12px; }
+.legend .dot.ring.hot { color: var(--map-green); }
+.legend .dot.ring.cold { color: var(--map-red); }
+
 /* 追问与人声 */
 .voices { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
 
