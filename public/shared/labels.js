@@ -156,6 +156,16 @@ export function personView(who) {
   };
 }
 
+/** 审核原因 id → 中文（app.js 状态行与 render.js 详情卡共用）。 */
+export const BLOCKED_ZH = {
+  hate: '仇恨攻击', sexual: '露骨色情', violence: '暴力威胁',
+  private_data: '他人隐私', illegal: '违法交易', insult: '辱骂人身攻击', gibberish: '无意义乱码',
+};
+
+/** 预设 id → 界面名词（检查结果标题、feed 列表共用）。 */
+export const presetNoun = (presetId) =>
+  ({ post: '帖子', listing: '闲置转让', product: '商品文案', headline: '标题' }[presetId] ?? presetId);
+
 /** 调用报告的分阶段名称（batches.stage → 中文）。 */
 export function reportStageZh(stage) {
   if (stage === 'opening') return '开局打分';

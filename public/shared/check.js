@@ -2,7 +2,7 @@
 // people are glad to see it, those who stopped answer the preset's follow-up question, and then up
 // to four questions go to up to 100 of the people it reached. The caller supplies the way to Jev, so
 // the same code runs in the terminal, in tests and, cut into pieces, in the Worker.
-import { crowd } from './personas.js';
+import { crowd, personaLine } from './personas.js';
 import { PRESETS, priceLadder, lookOf, listOf, answersFor, LISTS, NOT_SHOWN, CANT_TELL } from './presets.js';
 import { reactionRequest, followUpRequest, askRequest, openingRequest, openingAnswers, audienceRequest, audienceAnswers, questionId } from './requests.js';
 import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered, partsOf, audienceOf, audienceMask, MIN_AUDIENCE, WAVES } from './feed.js';
@@ -101,18 +101,39 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
   const people = crowd(pool);
   const keys = Object.keys(preset.reactions);
   const startedAt = performance.now();
-  const spent = { tokens: 0, usd: 0, requests: 0, failed: 0 };
+  const spent = { tokens: 0, usd: 0, requests: 0, failed: 0, ms: 0 };
   const paid = async (request) => {
     const result = await send(request);
     spent.tokens += result.tokens;
     spent.usd += result.usd;
+    spent.ms += result.ms ?? 0;
     spent.requests += 1;
     return result;
   };
 
+  /**
+   * 决策现场样本：留存 Jev 读到的原句、问题与它给出的概率分布（cap 10）。
+   * 与 Worker runBatch 的采样同构：CLI / 存档 / 站点三端都有"决策现场"可晒。
+   */
+  const decisions = [];
+  const sampleDecisions = (batch, answers) => {
+    for (const who of batch) {
+      if (decisions.length >= 10) break;
+      const probabilities = answers[questionId(who)] ?? {};
+      decisions.push({
+        id: who.id,
+        line: personaLine(who, preset),
+        ask: preset.ask,
+        probabilities,
+        reaction: drawReaction(probabilities, pool, who.id, versionId) ?? CANT_TELL,
+      });
+    }
+  };
+
   /** Asks `build(batch)` about everybody in `who`; calls answer(persona, probabilities) for each. A failed batch leaves its people untouched. */
-  const askAbout = (who, build, answer) => eachLimit(chunk(who, PER_REQUEST), AT_ONCE, async (batch) => {
+  const askAbout = (who, build, answer, { sample = false } = {}) => eachLimit(chunk(who, PER_REQUEST), AT_ONCE, async (batch) => {
     const { answers } = await paid(build(batch));
+    if (sample) sampleDecisions(batch, answers);
     for (const persona of batch) answer(persona, answers[questionId(persona)]?.probabilities ?? {});
   }, (batch, error) => {
     if (error.fatal || error.code === 'no_key') throw error;
@@ -125,7 +146,7 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
   // As on the site: a text it would not post is read by nobody, and the one request is all it costs.
   if (blocking && opening.blocked.length) {
     const { checks, unlisted, blocked } = opening;
-    return { presetId, pool, keys, scores, reactions: new Uint8Array(people.length), waves: [], reach: 0, followUp: null, said: mergeSaid([]), checks, unlisted, blocked, audience: null, ...spent, seconds: (performance.now() - startedAt) / 1000 };
+    return { presetId, pool, keys, scores, reactions: new Uint8Array(people.length), waves: [], reach: 0, followUp: null, said: mergeSaid([]), checks, unlisted, blocked, decisions: [], audience: null, ...spent, seconds: (performance.now() - startedAt) / 1000 };
   }
   let members = people;
   let reads = null;
@@ -156,7 +177,7 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
       reached.set(persona.id, reaction);
       drawn.push(reaction);
       expected += expectedTone(presetId, probabilities);
-    });
+    }, { sample: index === 0 });
     // `asked` against `size` shows how many answers failed batches took away; `expectedMood` is the mood over all possible draws.
     const finished = { index, asked: wave.length, size: drawn.length, mood: mood(presetId, drawn), expectedMood: expected / Math.max(1, drawn.length), travels: travels(presetId, drawn), seconds: (performance.now() - waveStartedAt) / 1000 };
     waves.push(finished);
@@ -191,5 +212,5 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
   const said = mergeSaid(parts, missing);
 
   const { checks, unlisted, blocked } = opening;
-  return { presetId, pool, keys, scores, reactions, waves, reach: reached.size, followUp, said, checks, unlisted, blocked, audience: reads, ...spent, seconds: (performance.now() - startedAt) / 1000 };
+  return { presetId, pool, keys, scores, reactions, waves, reach: reached.size, followUp, said, checks, unlisted, blocked, decisions, audience: reads, ...spent, seconds: (performance.now() - startedAt) / 1000 };
 }

@@ -79,7 +79,7 @@ if (result.blocked.length) {
 }
 console.log(
   `到达 ${result.reach} 人 · 停下 ${countBy((r) => r?.stopped)} · 乐见 ${countBy((r) => r?.tone === 1)} · 反感 ${countBy((r) => r?.tone === -1)} · ` +
-    `花费 $${result.usd.toFixed(4)} · ${result.seconds.toFixed(1)}s`,
+    `Jev 调用 ${result.requests} 次 / ${result.ms}ms 模型耗时 · 花费 $${result.usd.toFixed(4)} · ${result.seconds.toFixed(1)}s`,
 );
 for (const wave of result.waves) {
   console.log(`  第 ${wave.index + 1} 波：${wave.size}/${wave.asked} 人，情绪 ${wave.mood >= 0 ? '+' : ''}${wave.mood.toFixed(2)}，${wave.travels ? '继续传播' : '到此为止'}`);
@@ -119,6 +119,7 @@ fs.writeFileSync(
       checks: result.checks,
       unlisted: result.unlisted,
       said: result.said,
+      decisions: result.decisions,
       followUp: result.followUp,
       prices: result.prices ?? null,
       usd: result.usd,

@@ -229,6 +229,35 @@ button { cursor: pointer; font-family: inherit; }
   letter-spacing: 0.14em;
 }
 
+/* 顶栏右侧动作区 */
+.top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mode-chip { font-size: 11.5px; color: var(--muted); }
+.settings-btn { padding: 5px 12px; font-size: 12.5px; }
+
+dialog#settings {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow);
+  padding: 22px 24px;
+  max-width: 440px;
+  width: calc(100vw - 40px);
+}
+
+dialog#settings::backdrop { background: rgba(0, 0, 0, 0.55); }
+dialog#settings h2 { font-family: var(--font-display); font-size: 18px; margin-bottom: 8px; }
+dialog#settings .row { margin: 12px 0; }
+dialog#settings input {
+  flex: 1;
+  background: var(--inset);
+  color: var(--text);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-ctrl);
+  padding: 9px 12px;
+  font: inherit;
+}
+
 /* 主题切换（分段控件） */
 .themeswitch {
   display: flex;
@@ -487,6 +516,8 @@ button:disabled { opacity: 0.55; cursor: wait; transform: none; }
 
 canvas.grid {
   image-rendering: pixelated;
+  max-width: 100%;
+  height: auto;
   border: 1px solid var(--hairline-strong);
   border-radius: 10px;
   cursor: crosshair;
@@ -577,8 +608,11 @@ canvas.grid {
 
 .report-meta { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; }
 
+/* 人格声音折叠：默认只露 24 张，按钮展开 */
+.voices.collapsed .voice:nth-child(n + 25) { display: none; }
+
 /* Jev 决策现场卡片 */
-.decisions { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.decisions { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 
 .decision {
   border: 1px solid var(--hairline);
@@ -618,7 +652,7 @@ canvas.grid {
 .checks .chip.unclear { color: var(--accent); border-color: var(--accent); }
 
 /* 追问与人声 */
-.voices { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.voices { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
 
 .voice {
   border: 1px solid var(--hairline);
