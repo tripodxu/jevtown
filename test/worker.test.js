@@ -56,6 +56,13 @@ test('调用报告：分阶段次数/耗时/tokens 齐全，provider 记录在�
   assert.ok(report.totals.ms > 0);
   // spent 口径 = versions.usd（mock 全为 0）
   assert.equal(report.totals.usd, 0);
+  // 决策现场：首批抽样 ≤10 例，每例带 Jev 读到的原句、问题、概率分布与判定结果
+  assert.ok(Array.isArray(detail.decisions) && detail.decisions.length === 10, `decisions=${detail.decisions?.length}`);
+  for (const d of detail.decisions) {
+    assert.ok(d.line.length > 10 && d.ask.length > 10);
+    assert.ok(d.reaction.length > 0);
+    assert.ok(Object.keys(d.probabilities).length >= 2);
+  }
 }, { timeout: 120_000 });
 
 test('listing：跑完后有买家问题追问', async () => {

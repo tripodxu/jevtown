@@ -46,13 +46,13 @@ $('form').addEventListener('submit', async (event) => {
   if (!text) return;
   $('go').disabled = true;
   try {
-    status(current.post ? '再发一版：小镇重新掂量……' : '开局：小镇在掂量这段文字是写给谁的……', 0.02);
+    status(current.post ? '再发一版：Jev 重新掂量……' : '开局：Jev 正在掂量这段文字是写给谁的……', 0.02);
     const opening = current.post
       ? await postJSON('/api/version', { post: current.post, text })
       : await postJSON('/api/check', { preset, text, prices: preset === 'product' ? [9, 19, 39, 79] : undefined });
 
     if (opening.state === 'blocked') {
-      status(`小镇拒绝发布：${opening.blocked.map((id) => BLOCKED_ZH[id] ?? id).join('、')}`, 1);
+      status(`Jev 拒绝发布：${opening.blocked.map((id) => BLOCKED_ZH[id] ?? id).join('、')}`, 1);
       return;
     }
     current.post = opening.post;
@@ -66,7 +66,7 @@ $('form').addEventListener('submit', async (event) => {
     while (!done) {
       for (;;) {
         const batch = await getJSON(`/api/batch?post=${current.post}&v=${current.version}`);
-        status(`第 ${batch.wave + 1} 波：${batch.answered} / ${batch.total} 人被问过`, batch.answered / Math.max(1, batch.total));
+        status(`第 ${batch.wave + 1} 波：Jev 已判定 ${batch.answered} / ${batch.total} 人`, batch.answered / Math.max(1, batch.total));
         if (batch.done) break;
       }
       const wave = await postJSON(`/api/wave?post=${current.post}&v=${current.version}`);

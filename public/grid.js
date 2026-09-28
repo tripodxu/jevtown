@@ -72,7 +72,7 @@ export function attachTooltip(canvas, bytes, presetId) {
       `<b>${who.name.zh}</b>，${who.age}岁，${JOB[who.job]?.zh ?? who.job}，${who.city.zh}<br>` +
       `兴趣：${who.interests.map((i) => INTEREST[i]?.zh ?? i).join('、')}<br>` +
       `${TEMPER[who.temper]?.zh} · ${BUDGET[who.budget]?.zh}<br>` +
-      `反应：<b>${reaction}</b>`;
+      `Jev 判定：<b>${reaction}</b>`;
     tooltip.style.display = 'block';
     tooltip.style.left = `${event.clientX + 14}px`;
     tooltip.style.top = `${event.clientY + 14}px`;

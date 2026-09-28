@@ -33,6 +33,7 @@ export function renderCheck(el, result) {
 
   html.push(overview(result));
   html.push(reportView(result));
+  html.push(decisionsView(result));
   html.push(wavesView(result));
   html.push(countsView(result));
   html.push('<h3>小镇地图</h3><div class="map-wrap"><canvas class="grid" role="img" aria-label="小镇反应地图：一万个格子，每格一个人格的反应（悬停可看详情）"></canvas><div class="legend"></div></div>');
@@ -54,7 +55,7 @@ export function renderCheck(el, result) {
 function overview(result) {
   const c = result.counters;
   return `<h3>总览</h3><div class="stats">` +
-    stat(c.reach, '到达的人') +
+    stat(c.reach, 'Jev 逐格判定') +
     stat(c.stopped, '停下来') +
     stat(c.glad, '乐见') +
     stat(c.sorry, '反感') +
@@ -76,6 +77,28 @@ function reportView(result) {
     </div>
     <div class="report-meta">${provider}<span class="hint">分阶段明细（条长 = ${t.usd > 0 ? '花费' : '耗时'}占比）</span></div>
     ${reportBars(report.stages, reportStageZh)}`;
+}
+
+function decisionsView(result) {
+  const list = result.decisions;
+  if (!list?.length) return '';
+  const cards = list.map((d) => {
+    const entries = Object.entries(d.probabilities).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const max = entries[0]?.[1] ?? 1;
+    const bars = entries.map(([reaction, p]) => {
+      const isDrawn = reaction === d.reaction;
+      return `<div class="seg dseg${isDrawn ? ' drawn' : ''}"><span class="label">${esc(REACTIONS_ZH[reaction] ?? reaction)}</span>` +
+        `<span class="bar2"><i style="width:${Math.max(3, Math.round((p / max) * 100))}%;background:${isDrawn ? 'var(--accent)' : 'var(--muted)'}"></i></span>` +
+        `<span class="num">p=${p.toFixed(2)}</span></div>`;
+    }).join('');
+    return `<div class="decision">
+      <div class="dline">${esc(d.line)}</div>
+      <div class="dask">${esc(d.ask)}</div>
+      ${bars}
+      <div class="dverdict">Jev 判定：<b>${esc(REACTIONS_ZH[d.reaction] ?? d.reaction)}</b></div>
+    </div>`;
+  }).join('');
+  return `<h3>Jev 的决策现场（真实问句与概率分布 · 抽样 ${list.length} 例）</h3><div class="decisions">${cards}</div>`;
 }
 
 function wavesView(result) {
