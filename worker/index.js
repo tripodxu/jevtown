@@ -317,12 +317,33 @@ async function runBatch(url, request, env) {
 
 async function closeWave(url, request, env) {
   const id = url.searchParams.get('post');
-  const v = Number(url.searchParams.get('v') ?? '1') || 1;
+  const v = Number(url.searchParams.get('v')) || 1;
   const post = await loadPost(env.DB, id);
   if (!post) return fail('no such post', 404);
-  if (post.state !== 'running') return fail('the check is already finished', 409);
+  if (post.state !== 'running') return fail('the check is not running', 409);
   if (await overBudget(env)) return fail('today’s budget is spent', 429);
   if (!authorOk(request, post)) return fail('this check is not yours', 403);
+
+  // 当前波次还没人回答过（双击/重试的二次收波）：不能收，否则空波会被直接收尾、检查提前 done。
+  const version = await loadVersion(env.DB, id, v);
+  const wave = JSON.parse(version.plan).wave;
+  const { results: answered } = await env.DB.prepare('SELECT 1 FROM reactions WHERE post = ? AND number = ? AND wave = ? LIMIT 1').bind(id, v, wave).all();
+  if (!answered.length) return fail('this wave has no answers yet', 409);
+
+  // 原子占位：同一检查的并发收波只有一个能把 running → closing，其余 409。
+  const claim = await env.DB.prepare("UPDATE posts SET state = 'closing' WHERE id = ? AND state = 'running'").bind(id).run();
+  if (!claim.meta.changes) return fail('the check is already finished', 409);
+  try {
+    return await settleWave(env, post, id, v);
+  } catch (error) {
+    // 失败要把占位还回去，否则这个检查会卡在 closing 再也动不了。
+    await env.DB.prepare("UPDATE posts SET state = 'running' WHERE id = ? AND state = 'closing'").bind(id).run();
+    throw error;
+  }
+}
+
+/** 收波本体：算情绪定去留；推进则把状态还回 running（批次还要继续），收尾则置 done。 */
+async function settleWave(env, post, id, v) {
   const version = await loadVersion(env.DB, id, v);
   const plan = JSON.parse(version.plan);
   const presetId = post.preset;
@@ -330,7 +351,7 @@ async function closeWave(url, request, env) {
   const preset = PRESETS[presetId];
   const scores = JSON.parse(version.scores);
   const maxWaves = Math.min(Number(env.CROWD_MAX_WAVES ?? WAVES_MAX), WAVES_MAX);
-  const provider = providerOf(env, request);
+  const provider = providerOf(env, null);
 
   const waveIndex = plan.wave;
   const order = plan.history[String(waveIndex)];
@@ -352,7 +373,10 @@ async function closeWave(url, request, env) {
     plan.wave = waveIndex + 1;
     plan.answered = 0;
     plan.history[String(waveIndex + 1)] = next.map((who) => who.id);
-    await env.DB.prepare('UPDATE versions SET plan = ? WHERE post = ? AND number = ?').bind(JSON.stringify(plan), id, v).run();
+    await env.DB.batch([
+      env.DB.prepare('UPDATE versions SET plan = ? WHERE post = ? AND number = ?').bind(JSON.stringify(plan), id, v),
+      env.DB.prepare("UPDATE posts SET state = 'running' WHERE id = ? AND state = 'closing'").bind(id),
+    ]);
     return json({ wave: waveInfo, travels: true, next: { index: waveIndex + 1, total: next.length } });
   }
 
@@ -402,7 +426,7 @@ async function closeWave(url, request, env) {
     // 收尾提问的花费也计入版本总账（batches 流水之外，versions.usd 是页面显示的口径）。
     env.DB.prepare('UPDATE versions SET said = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
       .bind(JSON.stringify(said), round2(askUsd), askTokens, id, v),
-    env.DB.prepare("UPDATE posts SET state = 'done' WHERE id = ?").bind(id),
+    env.DB.prepare("UPDATE posts SET state = 'done' WHERE id = ? AND state = 'closing'").bind(id),
   ]);
   return json({ wave: waveInfo, travels: false, done: true, reach: reached.size, followUp: followUp && { asked: followUp.asked } });
 }

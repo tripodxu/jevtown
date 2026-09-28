@@ -1,7 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
-import { startWorker, postJSON, runToDone, authorOf } from './helper.js';
+import { startWorker, postJSON, runToDone, runBatches, authorOf } from './helper.js';
 
 const worker = await startWorker();
 after(async () => { await worker.stop(); });
@@ -194,4 +194,36 @@ test('作者校验：没有 x-jev-author 头，batch/wave/version 全部 403；�
   // 带头就能继续（防止校验把主人关在门外）
   const ok = await worker.fetch(`/api/batch?post=${opening.post}&v=1`, { headers: { 'x-jev-author': opening.author } });
   assert.equal(ok.status, 200, `batch with author=${ok.status}`);
+});
+
+test('收波 CAS：并发收波只推进一次，且收波后批次还能继续', async () => {
+  const opening = await (await postJSON(worker, '/api/check', {
+    preset: 'product',
+    text: '一款不臭的跑步袜，速干抗菌，99 元三双',
+    prices: [9, 19, 39, 79],
+  })).json();
+  const author = authorOf(opening);
+  await runBatches(worker, opening.post, opening.version, author); // 只跑完第 0 波批次，不收波
+
+  // 并发两次收波：真实并发时一个 200 一个 409；若被串行化则两个 200（各自收一波）。
+  // 不变量：没有 500；成功的次数与波次推进数一致。
+  const settled = await Promise.all([1, 2].map(() =>
+    worker.fetch(`/api/wave?post=${opening.post}&v=1`, { method: 'POST', headers: { 'x-jev-author': author } })));
+  const codes = settled.map((r) => r.status);
+  assert.ok(codes.every((c) => c === 200 || c === 409), `codes=${codes}`);
+  const wins = codes.filter((c) => c === 200).length;
+  assert.ok(wins >= 1, `codes=${codes}`);
+
+  // 每次成功收波恰好推进一个波次：history 从 {0} 起，推进 k 次后 waves 长度为 k+1。
+  const detail = await (await worker.fetch(`/api/post/${opening.post}?v=1`)).json();
+  assert.equal(detail.waves.length, wins + 1, `waves=${detail.waves.length} wins=${wins}`);
+
+  // 收波把状态还回 running：批次还能继续打（防卡死在 closing）。
+  const after = await worker.fetch(`/api/batch?post=${opening.post}&v=1`, { headers: { 'x-jev-author': author } });
+  assert.equal(after.status, 200, `batch after close=${after.status}`);
+
+  // 跑完后每个波次都问满了（没有批次错位或被跳过）。
+  await runToDone(worker, opening.post, opening.version, author);
+  const done = await (await worker.fetch(`/api/post/${opening.post}?v=1`)).json();
+  for (const wave of done.waves) assert.equal(wave.size, wave.asked, `wave ${wave.index}: ${wave.size}/${wave.asked}`);
 });
