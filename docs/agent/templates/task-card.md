@@ -1,6 +1,6 @@
 # 任务卡模板（task-card）
 
-> 用法：复制本文件为 `<任务id>-task.md`，由主控 agent 填写后派发；执行 agent 只改卡内文件。
+> 用法：复制本文件为 `docs/agent/tasks/<任务id>-task.md`，由主控 agent 填写后派发；执行 agent 只改卡内文件。
 > 任务 id 建议：`T<日期序号>`，如 `T0928-1`。
 
 ---

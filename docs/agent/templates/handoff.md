@@ -1,6 +1,6 @@
 # 交接记录模板（handoff）
 
-> 用法：任务跨 agent/跨会话接力时，复制本文件为 `<任务id>-handoff.md`。
+> 用法：任务跨 agent/跨会话接力时，复制本文件为 `docs/agent/tasks/<任务id>-handoff.md`。
 > **多轮接力：最新一段插在最上方**，旧段落下移保留，可追溯。
 > 任务完成后：压缩成一条 [MEMORY.md](../../MEMORY.md)（最新置顶），删除本文件。
 

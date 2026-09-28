@@ -46,8 +46,9 @@
    （API 形状、`labels.js` 中文单源、D1 schema）由主控 agent 统一变更。
 2. **先领任务卡再动手**：从 `docs/agent/templates/task-card.md` 复制并填写，明确
    目标 / 拥有文件 / 验收标准。
-3. **接力必须留痕**：任务未一次完成时，按 `docs/agent/templates/handoff.md` 写交接，
-   最新状态置顶；下一个 agent 从交接记录继续，不重新全量读项目。
+3. **接力必须留痕**：任务未一次完成时，按 `docs/agent/templates/handoff.md` 写交接到
+   `docs/agent/tasks/<任务id>-handoff.md`，最新状态置顶；下一个 agent 从交接记录继续，
+   不重新全量读项目。
 4. **决策与坑写进记忆**：`docs/MEMORY.md` 最新条目置顶，一次一条，写事实不写流水账。
 
 ## 常用命令
