@@ -79,7 +79,7 @@ npm test    # 45 个用例：引擎单测 + Worker 集成（unstable_dev）+ 图
 - [x] UI 全量打磨（四主题 + 图谱 + 调用报告 + 决策现场 + Jev 驱动身份）
 - [x] 审计轮（人群缓存、画布泄漏、限额一致性、移动端溢出、常量单源、懒加载、voices 折叠）
 - [ ] Step 3 · 真实模型联调扩展（measurements 风格成本报告、网关保真度复核）
-- [ ] Step 4 · 上线准备（人格打包管线省 CPU、收波 CAS 锁、作者 cookie——`/api/batch` 现无身份校验、observability 开启、`wrangler d1 create` + secret 部署）
+- [ ] Step 4 · 上线准备（人格打包管线省 CPU、`wrangler d1 create` + secret 部署；收波 CAS 锁、`/api/batch` 作者令牌、observability 开启已于 M2/M3 落地，见 [docs/MEMORY.md](./docs/MEMORY.md)）
 - [ ] Step 5 · 生态（可选）：MCP 服务器（check_text / compare_texts）、居民系统 /me、分享卡片
 
 ## 许可
