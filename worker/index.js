@@ -6,7 +6,7 @@
 //   GET  /api/post/:id  汇总一页所需的一切
 //   GET  /api/feed      最近的检查
 // 引擎全部来自 public/shared/（上游 gaborishka/jevtown，MIT），Worker 只做编排和存取。
-import { crowd, persona, CROWD } from '../public/shared/personas.js';
+import { crowd, persona, personaLine, CROWD } from '../public/shared/personas.js';
 import { PRESETS, CANT_TELL, priceLadder } from '../public/shared/presets.js';
 import { openingRequest, openingAnswers, reactionRequest, questionId, MAX_TEXT_CHARS, followUpRequest } from '../public/shared/requests.js';
 import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered } from '../public/shared/feed.js';
@@ -254,13 +254,25 @@ async function runBatch(url, env) {
   const { answers, usd, tokens, ms } = await provider.ask(reactionRequest(presetId, version.text, people));
 
   const versionId = `${id}.${v}`;
+  // 决策样本：只采第一波的第一批（曝光最靠前的人），留存 Jev 读到的原句与它给出的分布。
+  let decisionSamples = null;
   const statements = batch.map((pid, index) => {
     const probabilities = answers[questionId(people[index])]?.probabilities ?? {};
     const reaction = drawReaction(probabilities, pool, pid, versionId) ?? CANT_TELL;
+    if (start === 0 && !version.decisions && decisionSamples?.length !== 10) {
+      (decisionSamples ??= []).push({
+        id: pid,
+        line: personaLine(people[index], PRESETS[presetId]),
+        ask: PRESETS[presetId].ask,
+        probabilities,
+        reaction,
+      });
+    }
     return env.DB.prepare('INSERT INTO reactions (post, number, id, wave, reaction) VALUES (?, ?, ?, ?, ?)')
       .bind(id, v, pid, plan.wave, reaction);
   });
   plan.answered = start + batch.length;
+  if (decisionSamples) statements.push(env.DB.prepare('UPDATE versions SET decisions = ? WHERE post = ? AND number = ?').bind(JSON.stringify(decisionSamples), id, v));
   statements.push(
     env.DB.prepare('UPDATE versions SET plan = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
       .bind(JSON.stringify(plan), round2(usd), tokens, id, v),
@@ -453,6 +465,7 @@ async function showPost(id, env, url) {
       sorry: topSegments(all, 'sorry'),
     },
     voices,
+    decisions: version.decisions ? JSON.parse(version.decisions) : null,
     followUp: version.follow_up ? JSON.parse(version.follow_up) : null,
     prices: version.prices ? JSON.parse(version.prices) : null,
     versions: await versionsOf(env.DB, id),
