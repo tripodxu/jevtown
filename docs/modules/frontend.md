@@ -12,7 +12,8 @@
 | `app.js` | 编排：发起检查、驱动 batch/wave 轮询、BYOK 设置弹窗 |
 | `render.js` | 报告渲染 + 锚点目录 |
 | `charts.js` | 漏斗 / 折线 / 堆叠 / 需求曲线 / 报告条形图（canvas） |
-| `grid.js` | 100×100 响应式地图（canvas，悬停档案） |
+| `grid.js` | 100×100 响应式地图（canvas，悬停档案）：`drawGrid` 全量重画、`paintDelta` 按字节快照增量补画 |
+| `tally.js` | 实时监控的「已判定」快照：每批增量折叠出 judged/glad/sorry（纯函数，Node 可单测） |
 | `theme.js` | 主题切换（localStorage 持久化） |
 | `showcase.js` | 首页示例回放（读 `public/examples/*.json`，经 `shared/replay.js`） |
 
@@ -38,6 +39,8 @@ app.js  fetch /api/post/:id
 ## 检查进行中的实时态
 
 - 地图随每批判定 progressively 点亮；监控表滚动追加（时刻/阶段/进度/耗时/tokens/累计花费）。
+- 实时地图走 `paintDelta` 增量补画，统计走 `tally.js` 增量折叠——**每批不要全量重扫一万格**。
+  要全量重画（换一次检查、换主题）才调 `drawGrid` / `redrawMaps`。
 - 三张动态图：吞吐心电图、模型耗时曲线、态度占比堆叠图。
 - 波次收束单独成行；完成后自动切完整报告。
 

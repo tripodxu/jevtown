@@ -4,8 +4,9 @@ import { renderCheck, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
 import { BLOCKED_ZH, presetNoun as PRESET_NOUN_OF } from './shared/labels.js';
 import { PRESETS } from './shared/presets.js';
-import { drawGrid } from './grid.js';
+import { drawGrid, paintDelta } from './grid.js';
 import { fmtMs, rollingChart, shareChart } from './charts.js';
+import { newTally, foldBatch } from './tally.js';
 import { CROWD } from './shared/personas.js';
 
 const $ = (id) => document.getElementById(id);
@@ -57,9 +58,12 @@ const status = (line, ratio) => {
 let live = null;
 
 function showLive(presetId) {
+  const reactions = PRESETS[presetId].reactions;
+  const keys = Object.keys(reactions);
   live = {
-    bytes: new Uint8Array(CROWD),
-    keys: Object.keys(PRESETS[presetId].reactions),
+    tally: newTally(CROWD),
+    keys,
+    tone: keys.map((id) => reactions[id]?.tone ?? 0), // 序号 → 1/0/-1
     preset: presetId,
     start: performance.now(),
     requests: 0,
@@ -73,16 +77,14 @@ function showLive(presetId) {
   };
   $('monitorBody').innerHTML = '';
   $('live').hidden = false;
-  drawGrid($('liveMap'), live.bytes, presetId);
+  drawGrid($('liveMap'), live.tally.bytes, presetId);
   updateLiveStats();
   updateCharts();
 }
 
 function updateLiveStats() {
-  let judged = 0;
-  for (const b of live.bytes) if (b) judged += 1;
   $('liveStats').innerHTML =
-    stat(`${judged.toLocaleString()} / ${CROWD.toLocaleString()}`, 'Jev 已判定') +
+    stat(`${live.tally.judged.toLocaleString()} / ${CROWD.toLocaleString()}`, 'Jev 已判定') +
     stat(live.requests, 'Jev 请求') +
     stat(live.tokens.toLocaleString(), 'tokens') +
     stat(fmtMs(live.ms), '模型耗时') +
@@ -106,11 +108,10 @@ function monitorRow(cells, cls = '') {
 }
 
 function paintBatch(batch) {
-  for (const { id, reaction } of batch.drawn ?? []) {
-    const idx = live.keys.indexOf(reaction);
-    if (idx >= 0) live.bytes[id] = idx + 1;
-  }
-  drawGrid($('liveMap'), live.bytes, live.preset);
+  // 增量：只走本批这 100 人，不再每批把全镇一万格重扫两遍。
+  const { tally, keys, tone } = live;
+  foldBatch(tally, batch.drawn ?? [], (reaction) => keys.indexOf(reaction), (index) => tone[index] ?? 0);
+  paintDelta($('liveMap'), tally.bytes, live.preset);
   live.requests += 1;
   live.tokens += batch.tokens ?? 0;
   live.usd += batch.usd ?? 0;
@@ -118,20 +119,11 @@ function paintBatch(batch) {
 
   // 心电图采样：吞吐 = 本批判定数 / 距上次采样的墙钟；耗时 = 本批模型 ms
   const now = performance.now();
-  let judged = 0;
-  let glad = 0;
-  let sorry = 0;
-  for (const b of live.bytes) {
-    if (!b) continue;
-    judged += 1;
-    const tone = live.keys[b - 1] && PRESETS[live.preset].reactions[live.keys[b - 1]]?.tone;
-    if (tone === 1) glad += 1;
-    if (tone === -1) sorry += 1;
-  }
   const wall = live.lastSample ? (now - live.lastSample.t) / 1000 : 0;
+  const judged = tally.judged;
   live.tput.push(wall > 0.05 ? (judged - live.lastSample.judged) / wall : 0);
   live.msSeries.push(batch.ms ?? 0);
-  live.shares.push({ glad, sorry, judged });
+  live.shares.push({ glad: tally.glad, sorry: tally.sorry, judged });
   live.lastSample = { t: now, judged };
 
   updateLiveStats();

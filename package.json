@@ -12,6 +12,7 @@
     "dev": "wrangler d1 migrations apply jevtown --local && wrangler dev --port 5191",
     "deploy": "wrangler d1 migrations apply jevtown --remote && wrangler deploy",
     "check": "node scripts/check.js",
+    "bench": "node scripts/bench-tally.mjs",
     "test": "node --test \"test/*.test.js\"",
     "lint": "node scripts/lint.mjs"
   },

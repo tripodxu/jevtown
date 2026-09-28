@@ -6,8 +6,12 @@
 npm test    # node --test "test/*.test.js"
 ```
 
-当前 **45 个用例**（README 里若写旧数以本文件为准；数量会随用例增加变化，
+当前 **57 个用例**（README 里若写旧数以本文件为准；数量会随用例增加变化，
 以 `npm test` 输出 `tests N` 行为准）。全部走 mock 通道，**不花真钱、不需要 key**。
+
+```bash
+npm run bench   # 实时监控增量统计的一次性对拍（旧全量重扫 vs 新增量折叠）
+```
 
 ## 测试布局
 
@@ -18,6 +22,8 @@ npm test    # node --test "test/*.test.js"
 | `test/personas.test.js` | 人格网格、人格行生成、pool 回退 |
 | `test/feed.test.js` | 波次算法、情绪、收尾聚合 |
 | `test/charts.test.js` | 图谱纯函数（漏斗/折线/需求曲线数据） |
+| `test/grid.test.js` | 地图绘制：全量 `drawGrid` 与增量 `paintDelta` 画了几格（Node 里用 canvas 桩件记录 `fillRect`） |
+| `test/tally.test.js` | 实时监控增量统计：幂等、改判、未知反应，以及与全量重扫的对拍 |
 | `test/bytes.test.js` | base64 小件 |
 | `test/pipeline.test.js` | 引擎编排（mock send 端到端） |
 | `test/worker.test.js` | Worker 集成（`unstable_dev` 起真实本地 Worker）：全链路、版本、blocked、调用报告/决策样本、每日限额双路 429、**预算闸双路由 429 + 未花超放行**、**作者校验（无头/错令牌 403、带头放行）**、**收波 CAS 不变量**、**批次认领并发不变量** |
@@ -46,5 +52,6 @@ npm test    # node --test "test/*.test.js"
 
 ## 未覆盖/已知缺口
 
-- 无浏览器端 E2E（前端交互无自动化测试，改动 UI 靠人工核对）。
+- 无自动化浏览器 E2E（前端交互无自动化测试，改动 UI 靠人工核对）。地图绘制的「画了多少格」
+  已用 canvas 桩件在 Node 里兜住（`test/grid.test.js`），但端到端点一次「让小镇来读」仍靠人工。
 - 无 lint/格式化工具链（约定靠 [CONVENTIONS.md](CONVENTIONS.md) 自律）。

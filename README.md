@@ -45,7 +45,7 @@ npm run check -- --preset post --max-waves 2 "我为什么把每周例会砍成�
 ### 测试
 
 ```bash
-npm test    # 45 个用例：引擎单测 + Worker 集成（unstable_dev）+ 图谱纯函数，mock 通道，不花钱
+npm test    # 57 个用例：引擎单测 + Worker 集成（unstable_dev）+ 图谱/地图/增量统计纯函数，mock 通道，不花钱
 ```
 
 ---
