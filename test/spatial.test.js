@@ -1,7 +1,7 @@
 // 人群地形：成片 / 零散 / 说不准 的判定，以及置换检验的确定性与收缩。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { crowdTerrain, permsFor } from '../public/shared/spatial.js';
+import { crowdTerrain, crowdDelta, permsFor } from '../public/shared/spatial.js';
 
 // 'post' 的反应顺序：scrolled_past(1) read(2) liked(3) disliked(4) reposted(5) followed(6) blocked(7) cant_tell(8)
 const KEYS = ['scrolled_past', 'read', 'liked', 'disliked', 'reposted', 'followed', 'blocked', 'cant_tell'];
@@ -94,4 +94,89 @@ test('成片格与反感格互不重叠，且都只落在被判定到的格子�
 test('maxCluster 生效：成片再多也只交出这么多格', () => {
   const t = crowdTerrain('post', KEYS, patch(), { grid: G, versionId: 'v1', maxCluster: 3 });
   assert.equal(t.hot.length, 3);
+});
+
+// -- 两版之差 ------------------------------------------------------------
+
+const deltaOf = (before, after) => crowdDelta('post', KEYS, before, after, { grid: G, versionId: 'd1' });
+
+test('crowdDelta：只统计两版都判定到的人，单版覆盖另计', () => {
+  const before = new Uint8Array(G * G);
+  const after = new Uint8Array(G * G);
+  for (let i = 0; i < 50; i++) before[i] = NEUTRAL; // 0..49 只有第 1 版看到
+  for (let i = 25; i < 80; i++) after[i] = NEUTRAL; // 25..79 第 2 版看到
+  const d = deltaOf(before, after);
+  assert.equal(d.both, 25, '交集 25..49 共 25 人');
+  assert.equal(d.onlyBefore, 25, '0..24 只有第 1 版看到');
+  assert.equal(d.onlyAfter, 30, '50..79 只有第 2 版看到');
+  // 80..99 两版都没排到，不进任何一段——三段之和是"至少被一版排到的人"，不是全城
+  assert.equal(d.both + d.onlyBefore + d.onlyAfter, 80);
+});
+
+test('crowdDelta：差值 = 新态度 - 旧态度，向上向下分别计数', () => {
+  const before = new Uint8Array(G * G).fill(NEUTRAL);
+  const after = new Uint8Array(G * G).fill(NEUTRAL);
+  // 0..9 中性 → 乐见（+1）；10..19 乐见 → 中性（-1）；20..24 反感 → 乐见（+2）
+  for (let i = 0; i < 10; i++) after[i] = LIKED;
+  for (let i = 10; i < 20; i++) before[i] = LIKED;
+  for (let i = 20; i < 25; i++) { before[i] = DISLIKED; after[i] = LIKED; }
+  const d = deltaOf(before, after);
+  assert.equal(d.up, 15, '0..9 是 +1，20..24 是 +2');
+  assert.equal(d.down, 10, '10..19 是 -1');
+  assert.equal(d.net, 10 * 1 + 5 * 2 - 10 * 1, 'net = Σ delta');
+  assert.equal(d.codes[0], 4, 'delta=+1 ⇒ code 4');
+  assert.equal(d.codes[20], 5, 'delta=+2 ⇒ code 5');
+  assert.equal(d.codes[10], 2, 'delta=-1 ⇒ code 2');
+  assert.equal(d.codes[30], 3, 'delta=0 ⇒ code 3（不是"不可比"的 0）');
+});
+
+test('crowdDelta：不可比的格子 code=0，与"差值为 0"分得开', () => {
+  const before = new Uint8Array(G * G).fill(NEUTRAL);
+  const after = new Uint8Array(G * G); // 第 2 版一个人都没判定到
+  const d = deltaOf(before, after);
+  assert.equal(d.both, 0);
+  assert.equal(d.onlyBefore, G * G);
+  assert.equal(d.terrain.morans, null, '交集为空 ⇒ 不出结论');
+  for (const code of d.codes) assert.equal(code, 0);
+});
+
+test('crowdDelta：差场也能判成片/零散（把 Moran I 套在差场上）', () => {
+  // 左上 4×4 那一块从"划走"翻成"点赞"，其余不变 ⇒ 差场正相关 ⇒ clustered
+  const before = new Uint8Array(G * G).fill(NEUTRAL);
+  const after = new Uint8Array(G * G).fill(NEUTRAL);
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) after[y * G + x] = LIKED;
+  const d = deltaOf(before, after);
+  assert.equal(d.terrain.verdict, 'clustered');
+  assert.ok(d.terrain.morans > 0, `差场的 I 应为正，实际 ${d.terrain.morans}`);
+  assert.ok(d.terrain.hot.length > 0, '应标出成片变好的格子');
+  assert.equal(d.terrain.cold.length, 0);
+});
+
+test('crowdDelta：逐格反号（真棋盘）判零散', () => {
+  // 注意按 (x+y) 奇偶取反才是棋盘：G 是偶数，直接用 i % 2 得到的是**竖条纹**
+  // （竖直邻居同号），那不是"逐格反号"，实测会判成 unclear。
+  const before = new Uint8Array(G * G).fill(NEUTRAL);
+  const after = new Uint8Array(G * G).fill(NEUTRAL);
+  for (let i = 0; i < G * G; i++) after[i] = (((i % G) + ((i / G) | 0)) % 2) ? LIKED : DISLIKED;
+  const d = deltaOf(before, after);
+  assert.equal(d.terrain.verdict, 'scattered');
+  assert.ok(d.terrain.morans < 0);
+});
+
+test('crowdDelta：确定性——同输入两次完全一致', () => {
+  const before = new Uint8Array(G * G).fill(NEUTRAL);
+  const after = new Uint8Array(G * G).fill(NEUTRAL);
+  for (let i = 0; i < 40; i++) after[i] = LIKED;
+  assert.deepEqual(deltaOf(before, after), deltaOf(before, after));
+});
+
+test('crowdDelta：真实默认网格（100×100）也能跑', () => {
+  const n = 10000;
+  const before = new Uint8Array(n);
+  const after = new Uint8Array(n);
+  for (let i = 0; i < 3000; i++) { before[i] = NEUTRAL; after[i] = i < 900 ? LIKED : NEUTRAL; }
+  const d = crowdDelta('post', KEYS, before, after, { versionId: 'real' });
+  assert.equal(d.both, 3000);
+  assert.equal(d.up, 900);
+  assert.ok(['clustered', 'scattered', 'unclear'].includes(d.terrain.verdict));
 });
