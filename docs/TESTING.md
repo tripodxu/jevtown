@@ -6,7 +6,7 @@
 npm test    # node --test "test/*.test.js"
 ```
 
-当前 **75 个用例**（README 里若写旧数以本文件为准；数量会随用例增加变化，
+当前 **87 个用例**（README 里若写旧数以本文件为准；数量会随用例增加变化，
 以 `npm test` 输出 `tests N` 行为准）。全部走 mock 通道，**不花真钱、不需要 key**。
 
 ```bash
@@ -23,9 +23,9 @@ npm run bench   # 实时监控增量统计的一次性对拍（旧全量重扫 v
 | `test/feed.test.js` | 波次算法、情绪、收尾聚合 |
 | `test/summary.test.js` | `segments()` 预编译版**与旧实现逐字段对拍**（4 种 reach × 2 预设、子集、重复调用、最小样本门） |
 | `test/charts.test.js` | 图谱纯函数（漏斗/折线/需求曲线数据） |
-| `test/grid.test.js` | 地图绘制：全量 `drawGrid`、增量 `paintDelta`、聚集地形描环，各画了几格（Node 里用 canvas 桩件记录 `fillRect` / `strokeRect`） |
+| `test/grid.test.js` | 地图绘制：全量 `drawGrid`、增量 `paintDelta`、聚集地形描环、差分地图 `drawDelta`（发散配色的四色/半档/底板/主题重画），各画了几格（Node 里用 canvas 桩件记录 `fillRect` / `strokeRect`） |
 | `test/tally.test.js` | 实时监控增量统计：幂等、改判、未知反应，以及与全量重扫的对拍 |
-| `test/spatial.test.js` | 人群地形：成片/零散/无方差/判定不足/确定性/置换收缩/成片格不重叠 |
+| `test/spatial.test.js` | 人群地形：成片/零散/无方差/判定不足/确定性/置换收缩/成片格不重叠；两版之差 `crowdDelta`：交集口径、差值计数、不可比编码、差场成片/零散、确定性、100×100 实跑 |
 | `test/bytes.test.js` | base64 小件 |
 | `test/pipeline.test.js` | 引擎编排（mock send 端到端） |
 | `test/worker.test.js` | Worker 集成（`unstable_dev` 起真实本地 Worker）：全链路、版本、blocked、调用报告/决策样本、每日限额双路 429、**预算闸双路由 429 + 未花超放行**、**作者校验（无头/错令牌 403、带头放行）**、**收波 CAS 不变量**、**批次认领并发不变量** |
@@ -56,4 +56,8 @@ npm run bench   # 实时监控增量统计的一次性对拍（旧全量重扫 v
 
 - 无自动化浏览器 E2E（前端交互无自动化测试，改动 UI 靠人工核对）。地图绘制的「画了多少格」
   已用 canvas 桩件在 Node 里兜住（`test/grid.test.js`），但端到端点一次「让小镇来读」仍靠人工。
+  惯例：需要时写**一次性**无头 Edge + CDP 脚本（Node 全局 `WebSocket` 连 CDP，无新依赖），
+  核对完即删，不留在仓库里；脚本要等 `window.openPost` 就绪再点按钮（module 脚本挂监听前
+  点击会静默丢失）， Edge profile 每次运行用独立目录（单例锁会让复用 profile 的第二次启动
+  连到旧实例）。
 - 无 lint/格式化工具链（约定靠 [CONVENTIONS.md](CONVENTIONS.md) 自律）。

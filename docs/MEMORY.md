@@ -6,7 +6,46 @@
 
 ---
 
-## 2026-09-29 · R5 计划已写、未执行（用户在此轮叫停：整理文档、收尾）
+## 2026-09-29 · R5 创意：两版之差（差分地图），75 → 87 用例全绿
+
+- **做出来的东西**：`shared/spatial.js` 新增 `crowdDelta()`（把两版字节折成"态度差"场
+  `tone_新 - tone_旧 ∈ {-2..2}`），并把 R2 的 Moran's I **原样套在差场上**——回答
+  "你改的这几个词，是整齐地翻盘了一片人，还是零散地多哄到了几个"。
+  `terrainOf(values, judged, opts)` 从 `crowdTerrain` 抽出为真身，统计代码一行没重写；
+  原有 8 个 spatial 用例就是这次重构的安全网。差分**全在浏览器里算**：
+  Worker / API / schema / D1 一行不动，不新增 Jev 调用。
+- **三个口径**（刻意的，不是省事）：① 只统计两版都判定到的人，覆盖差异另计
+  `onlyBefore`/`onlyAfter` 单独一句话说；② 差场用原始态度之差，不偏离均值（R2 同款坑）；
+  ③ `code = delta + 3`（1..5，0 = 不可比），"差值为 0"与"不可比"分得开。
+- **界面**：对比区点「载入第 1 版对比」后，差分卡在上、第 1 版完整报告在下；
+  `drawDelta` 发散配色（绿=变好/红=变差，半档=墨水与底板各半），**刻意不用 LOOKS**——
+  那是"是什么反应"的色板，这里是"变了多少"的量表，混用会让读者把"变了"误读成"是哪种反应"。
+  差分画布无悬停档案（差分格没有"这个人是谁"可看）。
+- **真实结果**（无头 Edge 端到端跑了一次真实的"改一版再发"，mock 通道）：
+  两版各 10,000 人判定，**2,076 变好 / 2,006 变差 / 净 +45**，差场 I ≈ 0.0 ⇒ 判定
+  "看不出"——正好演示了这个功能的意义：整体翻盘规模接近抵消时，别让读者以为"改赢了"。
+  端到端 16/16 项通过（统计/口径句/图例/四主题重绘/375px 无溢出/控制台零错误）。
+- **执行期修掉计划自身的 4 处错**（都写进计划文档的「执行期修正」了）：
+  1. 覆盖差异相等时的文案会造病句（"少排到了 0 个人"）——改述为"各有 N 个人只被自己排到"；
+  2. `hot`/`cold` 在差场上的语义是"成片变好/变差"，没有照抄地形那句"成片的乐见/反感"；
+  3. **"主题切换随对比区重渲染即可"不成立**——没有任何东西会因切主题重渲染对比区，
+     差分画布于是留着上一个主题的墨水。改为登记进 `grid.js` 另册 `deltas`，
+     `redrawMaps` 一并重画（回归用例兜底）；
+  4. **375px 整页横向溢出是 R3 留下的既有缺陷**（本轮 E2E 抓出）：`.examples .card`
+     是网格项，自动最小尺寸 = 内容 min-content，被 ≤560px 的 nowrap 目录撑到 634px。
+     修法 `min-width: 0`（目录自己内部横滑）。**教训：grid/flex 里放可横滑内容的项，
+     都要显式 `min-width: 0`。**
+- **端到端方法论（可复用）**：一次性无头 Edge + CDP 脚本（Node 全局 `WebSocket`，零依赖），
+  用完即删。三个坑：① 点按钮前必须等 `window.openPost`（module 脚本挂监听前点击静默丢失）；
+  ② Edge profile 每次运行用独立目录（单例锁会让复用 profile 的第二次启动连到旧实例）；
+  ③ **本地 D1 的每日 20 次限额会被历史 E2E 会话用满**（本次开局即 429），
+  清当天 posts（含 versions/batches/reactions 依赖行）即可，只动本地开发库。
+- 提交：`240e897`（crowdDelta+terrainOf）→ `7e18ce9`（drawDelta）→ `29e2ef3`（对比区接线）
+  → `aca8275`（主题重画 + 窄屏溢出修复）。`npm run lint` ✓ 36 文件；`npm test` 87/87；
+  `npm run bench` 17.9× 一致。
+- 计划文档：`docs/superpowers/plans/2026-09-29-r5-version-delta.md`（带「执行期修正」小节）。
+
+## 2026-09-29 · R5 计划已写、未执行（已被上一节取代：该计划已于同日执行完毕）
 
 - 计划：`docs/superpowers/plans/2026-09-29-r5-version-delta.md`（**两版之差 · 差分地图**）。
   下一轮从它的 Task 1 Step 1 接上，三个设计决定已定稿，不必重新推导。
@@ -315,8 +354,9 @@
 - **主题**：四套 = `styles.css` 的 CSS 变量令牌组（夜巡默认/公报/仪器/经典），
   新增主题只加令牌 + 顶栏按钮。
 - **上游**：引擎与 Worker 架构改自 gaborishka/jevtown（MIT，谱系 a16z-infra/ai-town）；
-  引擎 9 文件为上游最小改动，`vocab/labels/mock/bytes/replay` 5 个文件为本项目新写。
-- **测试**：`node --test`，41 用例；Worker 集成用 `unstable_dev`；全程 mock 不花钱；
-  无浏览器 E2E、无 lint 工具链（靠 CONVENTIONS.md 自律）。
-- **已知待办**（README 路线图 Step 4）：`/api/batch` 无身份校验、收波 CAS 锁、
-  人格打包管线省 CPU、observability 开启、真实 `database_id` + secret 部署。
+  引擎 9 文件为上游最小改动，`vocab/labels/mock/bytes/replay/spatial` 6 个文件为本项目新写。
+- **测试**：`node --test`，87 用例（2026-09-29 R5 后）；Worker 集成用 `unstable_dev`；
+  全程 mock 不花钱；无浏览器 E2E（需要时写一次性 CDP 脚本，用完即删）；
+  `npm run lint` = `node --check` + tab/空格 + console.log 三条文本规则。
+- **已知待办**（README 路线图 Step 4）：人格打包管线省 CPU、真实 `database_id` + secret 部署
+  （`/api/batch` 作者令牌、收波 CAS、observability 已于 M2/M3 落地）。

@@ -52,7 +52,7 @@ runCheck({ send, presetId, pool, text, versionId, prices, maxWaves, onWave, bloc
   插入顺序一致）；`people` 视为不可变——若将来有人就地改人群，这张表会过期，
   要连 `crowd()` 一起改。传进来的子集各自成表，随数组被 WeakMap 回收。
 
-## 空间读数：`spatial.js`（人群地形）
+## 空间读数：`spatial.js`（人群地形 + 两版之差）
 
 `segments` 是按属性做的**边际**统计，答不了"哪一片人一起反感"——成片往往由属性的组合
 造成。`spatial.js` 把反应图当**空间场**读一次：
@@ -60,11 +60,24 @@ runCheck({ send, presetId, pool, text, versionId, prices, maxWaves, onWave, bloc
 - `crowdTerrain(presetId, keys, bytes, { versionId, grid, maxCluster })` → Moran's I
   （rook 邻接，只连都被判定到的上下左右）、置换检验的 `z` / `p`、判定
   `clustered` / `scattered` / `unclear`，以及成片格子的 id 列表 `hot` / `cold` 与重心。
+- **`terrainOf(values, judged, opts)` 是 `crowdTerrain` 的真身**（值已给定，只做统计）：
+  `crowdTerrain` 只是把字节翻成态度场的薄封装。任何"已给值"的场都能复用它——
+  `crowdDelta` 就是这么把 Moran's I 套到态度差场上的，统计代码一行没重写。
 - **显著水平** α = 0.05；**置换次数**随判定人数收缩（199 / 99 / 49，`permsFor` 导出可测）。
 - 局部象限用**原始态度**判（态度 0 的中性格不参与）——离均值看的话，中性多数派会整体
   落在均值下方，造出一块假"成片的反感"。改这段前先读 `test/spatial.test.js`。
-- 确定性：置换用 `hash32('spatial', versionId)` 播种，同 versionId 必得同结果。
+- 确定性：置换用 `hash32('spatial', versionId)` 播种，同 versionId 必得同结果；
+  `crowdDelta` 的置换种子是 `delta:${versionId}`，与检查地形互不串扰。
 - 与 `counters` / `segments` 同构：Worker 的 `showPost` 与浏览器 `replay.js` 都调它。
+
+### `crowdDelta(presetId, keys, before, after, opts)`：两版之差
+
+把两版字节折成一张"态度差"场（`tone_新 - tone_旧 ∈ {-2..2}`）与它的空间统计。
+**只统计两版都判定到的人**：只被一版排到的人不是"变中立了"，而是"这次没轮到"，
+混进来会得出"改完稿子几千人不看了"这种结论错误的话；覆盖差异另计 `onlyBefore` /
+`onlyAfter`，由界面单独一句话说明。`codes` 打包给界面：`code = delta + 3`
+（delta ∈ {-2..2} ⇒ 1..5，0 = 不可比），于是"差值为 0"与"不可比"分得开。
+**这个函数只在浏览器里跑**（对比区），Worker/API/D1 一行不动，不新增 Jev 调用。
 
 ## mock：`mock.js`
 
