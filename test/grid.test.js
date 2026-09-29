@@ -32,7 +32,7 @@ const TOKENS = { '--map-well': '#0a0d13', '--map-green': '#3ddc84', '--map-red':
 globalThis.getComputedStyle = () => ({ getPropertyValue: (name) => ` ${TOKENS[name] ?? '#000000'} ` });
 globalThis.document = { getElementById: () => null, createElement: () => ({}), body: { append() {} } };
 
-const { drawGrid, paintDelta, redrawMaps } = await import('../public/grid.js');
+const { drawGrid, paintDelta, redrawMaps, drawDelta } = await import('../public/grid.js');
 
 /** preset 'post' 的反应顺序：scrolled_past / read / liked / disliked / reposted / followed / blocked。 */
 const PRESET = 'post';
@@ -157,4 +157,51 @@ test('terrain：换了地形就退回全量，不在旧环上叠新环', () => {
   assert.equal(calls.length, 2, '底板 1 次 + 1 个判定格');
   assert.equal(strokes.length, 1);
   assert.deepEqual([strokes[0].x, strokes[0].y], [20 * 4 + 0.5, 0.5]);
+});
+
+// -- 差分地图（codes 来自 shared/spatial.js 的 crowdDelta：code = delta + 3，0 = 不可比）
+
+test('drawDelta：只画有差值的格子，0 铺底板', () => {
+  const canvas = newRun();
+  const codes = new Uint8Array(10000); // 0 = 不可比
+  codes[5] = 4;   // +1
+  codes[7] = 5;   // +2
+  codes[9] = 2;   // -1
+  codes[11] = 1;  // -2
+  codes[13] = 3;  // 差值为 0（两版态度一样）——不画
+  assert.equal(drawDelta(canvas, codes), 4, '只有 4 个格有非零差值');
+  assert.equal(calls.length, 5, '底板 1 次 + 4 个有差值的格子');
+  assert.equal(calls[0].fill, TOKENS['--map-well'], '先铺底板');
+  const painted = calls.slice(1).map((c) => c.fill);
+  assert.equal(new Set(painted).size, 4, '两档幅度 × 两个方向 = 四种颜色');
+});
+
+test('drawDelta：同号同幅度同色，异号异色（发散配色）', () => {
+  const canvas = newRun();
+  const codes = new Uint8Array(10000);
+  codes[1] = 4; codes[2] = 4; // 两个 +1
+  codes[3] = 2; codes[4] = 2; // 两个 -1
+  drawDelta(canvas, codes);
+  const at = (id) => calls.find((c) => c.x === (id % 100) * 4 && c.y === Math.floor(id / 100) * 4).fill;
+  assert.equal(at(1), at(2), '同号同幅度必须同色');
+  assert.equal(at(3), at(4));
+  assert.notEqual(at(1), at(3), '正负必须异色');
+});
+
+test('drawDelta：半档是墨水与底板的中间色（幅度小的画淡一点）', () => {
+  const canvas = newRun();
+  const codes = new Uint8Array(10000);
+  codes[1] = 4; // +1 半档
+  codes[2] = 5; // +2 满档
+  drawDelta(canvas, codes);
+  const at = (id) => calls.find((c) => c.x === (id % 100) * 4 && c.y === Math.floor(id / 100) * 4).fill;
+  assert.notEqual(at(1), at(2), '两档必须不同色');
+  assert.equal(at(2), TOKENS['--map-green'], '满档就是纯墨水');
+});
+
+test('drawDelta：全部不可比时只铺底板', () => {
+  const canvas = newRun();
+  assert.equal(drawDelta(canvas, new Uint8Array(10000)), 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].fill, TOKENS['--map-well']);
 });

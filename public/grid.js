@@ -128,3 +128,51 @@ export function attachTooltip(canvas, bytes, presetId) {
   });
   canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
 }
+
+// -- 两版之差的发散配色 ----------------------------------------------------------
+// 绿=变好、红=变差，幅度大的画满、幅度小的与底板掺半。
+// 墨水仍取主题数据墨水（--map-green / --map-red），所以四个主题各自成立。
+// 刻意不用 LOOKS：那是"这个人做了什么反应"的色板，这里是"相对上一版变了多少"的量表，
+// 语义不同——用同一套颜色会让读者把"变了"误读成"是哪种反应"。
+
+/** 两个 #rrggbb 按 t（0..1）线性掺，返回 #rrggbb。t=0 全 a，t=1 全 b。 */
+const mixHex = (a, b, t) => {
+  const left = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+  const right = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+  return `#${left.map((v, i) => Math.round(v + (right[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
+};
+
+/**
+ * 差分地图。codes 来自 shared/spatial.js 的 crowdDelta（code = delta + 3，0 = 不可比）：
+ * 1 = 大幅变差、2 = 小幅变差、3 = 没变、4 = 小幅变好、5 = 大幅变好。
+ * 返回画了几个格子。
+ *
+ * 走独立绘制路径，不登记进 drawn——差分格没有"这个人是谁"的档案可悬停，
+ * 主题切换时随对比区一起重渲染即可（renderCheck 每次都重画整张反应图）。
+ */
+export function drawDelta(canvas, codes) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = GRID * CELL * dpr;
+  canvas.height = GRID * CELL * dpr;
+  canvas.style.width = `${GRID * CELL}px`;
+  canvas.style.maxWidth = '100%';
+  canvas.style.height = 'auto';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const well = cssVar('--map-well', '#0a0d13');
+  ctx.fillStyle = well;
+  ctx.fillRect(0, 0, GRID * CELL, GRID * CELL);
+  const green = cssVar('--map-green', '#3ddc84');
+  const red = cssVar('--map-red', '#ff5c5c');
+  // 下标即 code：0 不可比、3 无变化，两头留给"半档"与"满档"
+  const inks = [null, mixHex(well, red, 1), mixHex(well, red, 0.5), null, mixHex(well, green, 0.5), mixHex(well, green, 1)];
+  let touched = 0;
+  for (let id = 0; id < codes.length; id++) {
+    const ink = inks[codes[id]];
+    if (!ink) continue;
+    ctx.fillStyle = ink;
+    ctx.fillRect((id % GRID) * CELL, Math.floor(id / GRID) * CELL, CELL - 1, CELL - 1);
+    touched += 1;
+  }
+  return touched;
+}
