@@ -98,8 +98,9 @@ export const fmtMs = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Mat
 /**
  * 态势占比图（堆叠面积，y 归一化）：覆盖人数为分母，乐见/中性/反感三条带随时间演变。
  * samples: [{ glad, sorry, judged }]，最新在末尾；judged=0 的点按全中性画。
+ * width 由调用方按容器实测宽度传进来（见 app.js 的 updateCharts）——固定 viewBox 会被窄屏缩小。
  */
-export function shareChart(samples, { width = 900, height = 150, window: win = 60 } = {}) {
+export function shareChart(samples, { width = 560, height = 150, window: win = 60 } = {}) {
   const data = samples.slice(-win);
   if (data.length < 2) return `<div class="chart-empty">积累样本中……</div>`;
   const pad = { l: 10, r: 120, t: 12, b: 22 };
@@ -132,6 +133,7 @@ export function shareChart(samples, { width = 900, height = 150, window: win = 6
   </svg>`;
 }
 
+/** 滚动窗口面积折线。width 同上，由调用方按容器实测宽度传入。 */
 export function rollingChart(samples, { width = 420, height = 110, window: win = 48, yMax, color = 'var(--accent)', unit = '', format = (v) => Math.round(v) } = {}) {
   const data = samples.slice(-win);
   if (!data.length) return `<div class="chart-empty">等待第一批数据……</div>`;

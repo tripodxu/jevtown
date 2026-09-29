@@ -92,9 +92,12 @@ function updateLiveStats() {
 }
 
 function updateCharts() {
-  $('chartTput').innerHTML = rollingChart(live.tput, { color: 'var(--accent)', unit: ' 人/s' });
-  $('chartMs').innerHTML = rollingChart(live.msSeries, { color: 'var(--map-yellow)', unit: 'ms', format: (v) => Math.round(v) });
-  $('chartShare').innerHTML = shareChart(live.shares);
+  // 同 render.js：viewBox 跟着容器走，否则窄屏把 11px 的标注缩到看不清。
+  const wide = Math.min(940, Math.max(300, $('chartShare').clientWidth || 900));
+  const narrow = Math.min(420, Math.max(260, $('chartTput').clientWidth || 420));
+  $('chartTput').innerHTML = rollingChart(live.tput, { width: narrow, color: 'var(--accent)', unit: ' 人/s' });
+  $('chartMs').innerHTML = rollingChart(live.msSeries, { width: narrow, color: 'var(--map-yellow)', unit: 'ms', format: (v) => Math.round(v) });
+  $('chartShare').innerHTML = shareChart(live.shares, { width: wide });
 }
 
 function monitorRow(cells, cls = '') {

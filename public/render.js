@@ -18,10 +18,12 @@ export { stat };
 /** 把一页结果渲染进容器 el（卡片本体）。 */
 export function renderCheck(el, result) {
   el.hidden = false;
+  // 图表的 viewBox 宽度跟着容器走：固定宽度在窄屏会把 11px 的标注缩到 4px。
+  const chartWidth = Math.min(940, Math.max(300, el.clientWidth - 56));
   const presetId = result.post.preset;
   const html = [`<h2>${esc(PRESET_NOUN(presetId))} · 检查结果</h2>`];
 
-  html.push('<div class="blocked-note" style="border-color:var(--line)">');
+  html.push('<div class="source-text">');
   html.push(`<div>文本：${esc(result.post.text.slice(0, 80))}${result.post.text.length > 80 ? '…' : ''}</div>`);
   if (result.unlisted?.length) html.push(`<div class="hint">未列入公共流：${esc(result.unlisted.map((id) => BLOCKED_ZH[id] ?? id).join('、'))}</div>`);
   html.push('</div>');
@@ -30,13 +32,13 @@ export function renderCheck(el, result) {
   html.push(reportView(result));
   html.push(decisionsView(result));
   html.push(terrainView(result));
-  html.push(wavesView(result));
+  html.push(wavesView(result, chartWidth));
   html.push(countsView(result));
   html.push('<h3>小镇地图</h3><div class="map-bar"><button class="ghost" type="button" data-terrain aria-pressed="false">看聚集地形</button><span class="hint">成片 = 这一片人朝着同一个方向表态；零散 = 各看各的。</span></div><div class="map-wrap"><canvas class="grid" role="img" aria-label="小镇反应地图：一万个格子，每格一个人格的反应（悬停可看详情）"></canvas><div class="legend"></div></div>');
   html.push(jevReading(result));
   html.push(segmentsView(result));
   html.push(saidView(result));
-  html.push(followUpView(result));
+  html.push(followUpView(result, chartWidth));
   html.push(voicesView(result));
 
   el.innerHTML = html.join('');
@@ -51,14 +53,19 @@ export function renderCheck(el, result) {
   wireTerrain(el, result, canvas, bytes, presetId);
 }
 
-/** 结果页小目录：给每个 h3 发 id，顶部生成锚点 pill 行（长报告一跳直达）。 */
+/** 报告目录：给每个 h3 发一组**本卡独有**的 id，顶部生成锚点 pill 行（长报告一跳直达）。
+ *  一页上最多有 4 张报告卡（结果 / 对比 / 两张示例），id 必须逐卡唯一——
+ *  否则点目录会跳到另一张卡的同名小节。 */
+let tocSeq = 0;
 function buildToc(el) {
   const headings = [...el.querySelectorAll('h3')];
-  headings.forEach((h, i) => { h.id = `sec-${i}`; });
+  if (headings.length < 2) return;
+  const uid = `r${(tocSeq += 1)}`;
+  headings.forEach((h, i) => { h.id = `${uid}-sec-${i}`; });
   const nav = document.createElement('nav');
   nav.className = 'toc';
   nav.setAttribute('aria-label', '报告目录');
-  nav.innerHTML = headings.map((h, i) => `<a href="#sec-${i}">${esc(h.textContent)}</a>`).join('');
+  nav.innerHTML = headings.map((h, i) => `<a href="#${uid}-sec-${i}">${esc(h.textContent)}</a>`).join('');
   el.querySelector('h2').after(nav);
 }
 
@@ -134,9 +141,9 @@ function terrainView(result) {
   </div>`;
 }
 
-function wavesView(result) {
+function wavesView(result, width) {
   if (!result.waves?.length) return '';
-  const line = moodLine(result.waves.map((w) => w.mood));
+  const line = moodLine(result.waves.map((w) => w.mood), { width });
   return `<h3>传播波次与情绪轨迹</h3>${funnel(result.waves)}${line}`;
 }
 
@@ -216,7 +223,7 @@ function saidView(result) {
   return html.join('');
 }
 
-function followUpView(result) {
+function followUpView(result, width) {
   const f = result.followUp;
   if (!f || !f.asked) return '';
   const presetId = result.post.preset;
@@ -231,7 +238,7 @@ function followUpView(result) {
   } else if (presetId === 'product' && result.prices) {
     const curve = demandCurve(f, result.prices);
     html.push(`<div class="said-row"><span class="what">问过 ${f.asked} 个停下的人，价格阶梯上的买家数（累计）：</span></div>`);
-    html.push(demandChart(curve));
+    html.push(demandChart(curve, { width }));
     const best = [...curve].sort((a, b) => b.revenue - a.revenue)[0];
     if (best) html.push(`<div class="said-row"><span class="what">收入最高的定价：¥${best.price}（${best.buyers} 人 · ¥${best.revenue.toLocaleString()}）</span></div>`);
   }
