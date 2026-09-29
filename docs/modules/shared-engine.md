@@ -46,6 +46,11 @@ runCheck({ send, presetId, pool, text, versionId, prices, maxWaves, onWave, bloc
 - `counters` / `segments` / `topSegments` / `biggestSegments`：计数与分组提升倍数（1.6× 显著线）。
 - `demandCurve`：价格需求曲线（追问阶段，商品预设）。
 - `voicesOf`：反应者卡片数据；`minSegment`：分组最小样本量（随规模浮动）。
+- **`segments()` 走预编译分组表**（`groupTable`，WeakMap 按 `people` 数组身份缓存）：
+  分组名与"这一维取哪些值"的形状是人群的常量，与一次检查无关，所以只编一次。
+  实测 19.13ms → 0.98ms。**两条不变式**：分组号按首次出现分配（输出顺序与旧 Map
+  插入顺序一致）；`people` 视为不可变——若将来有人就地改人群，这张表会过期，
+  要连 `crowd()` 一起改。传进来的子集各自成表，随数组被 WeakMap 回收。
 
 ## 空间读数：`spatial.js`（人群地形）
 
