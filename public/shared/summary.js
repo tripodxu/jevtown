@@ -41,6 +41,56 @@ const SEGMENTS = {
 };
 
 /**
+ * 人群 → 分组号的紧凑表（CSR），按 people 数组身份缓存，只算一次。
+ *
+ * 原来 `segments()` 每次调用都要在对 10 000 个人的外层循环里重做三件本该只做一次的事：
+ * `Object.entries(SEGMENTS)`（10 000 次分配）、每个维度的取值函数与数组字面量（70 000 次）、
+ * `` `${attribute}:${value}` `` 拼串再哈希（70 000 次）。实测这让 `segments()` 成了报告页
+ * 的头号开销。编码一次之后，热路径只剩整数读写。
+ *
+ * 分组号按首次出现顺序分配，所以输出顺序与旧的 Map 插入顺序一致。
+ * people 视为不可变（`crowd()` 的产物）；传进来的子集各自成表，随数组一起被 WeakMap 回收。
+ */
+const GROUP_TABLES = new WeakMap();
+
+function groupTable(people) {
+  const cached = GROUP_TABLES.get(people);
+  if (cached) return cached;
+  const groups = [];
+  const index = new Map();
+  const slot = (attribute, value) => {
+    const key = `${attribute}:${value}`;
+    let id = index.get(key);
+    if (id === undefined) {
+      index.set(key, (id = groups.length));
+      groups.push({ attribute, value });
+    }
+    return id;
+  };
+  const dimensions = Object.entries(SEGMENTS);
+  const ids = new Int32Array(people.length);
+  const start = new Int32Array(people.length + 1);
+  const owned = [];
+  for (let i = 0; i < people.length; i++) {
+    const who = people[i];
+    ids[i] = who.id;
+    for (const [attribute, valuesOf] of dimensions) {
+      for (const value of valuesOf(who)) owned.push(slot(attribute, value));
+    }
+    start[i + 1] = owned.length;
+  }
+  const table = {
+    ids,
+    start,
+    group: Int32Array.from(owned),
+    groups,
+    shopping: Uint8Array.from(groups, (one) => (one.attribute === 'shopping' ? 1 : 0)),
+  };
+  GROUP_TABLES.set(people, table);
+  return table;
+}
+
+/**
  * Every segment of the crowd: how many of its people the text reached, and what share of the whole
  * segment stopped, was glad, was sorry. People the text never reached count as not stopped, the way
  * a network counts: "56% of all runners stopped" against "10% of everybody". The lifts are those
@@ -49,34 +99,56 @@ const SEGMENTS = {
 export function segments(presetId, keys, reactions, people) {
   const preset = PRESETS[presetId];
   const all = counters(presetId, keys, reactions);
-  const tallies = new Map();
-  for (const who of people) {
-    const byte = reactions[who.id];
-    const reaction = byte === NOT_SHOWN ? null : preset.reactions[keys[byte - 1]];
-    for (const [attribute, valuesOf] of Object.entries(SEGMENTS)) {
-      if (attribute === 'shopping' && !preset.market) continue;
-      for (const value of valuesOf(who)) {
-        const id = `${attribute}:${value}`;
-        let tally = tallies.get(id);
-        if (!tally) tallies.set(id, (tally = { attribute, value, size: 0, reached: 0, stopped: 0, glad: 0, sorry: 0 }));
-        tally.size += 1;
-        if (!reaction) continue;
-        tally.reached += 1;
-        if (reaction.stopped) tally.stopped += 1;
-        if (reaction.tone === 1) tally.glad += 1;
-        if (reaction.tone === -1) tally.sorry += 1;
-      }
+  const { ids, start, group, groups, shopping } = groupTable(people);
+  const reactionsOf = preset.reactions;
+  const market = Boolean(preset.market);
+  const width = groups.length;
+  const reach = new Int32Array(width);
+  const stopped = new Int32Array(width);
+  const glad = new Int32Array(width);
+  const sorry = new Int32Array(width);
+  const sizes = new Int32Array(width);
+
+  for (let i = 0; i < people.length; i++) {
+    const byte = reactions[ids[i]];
+    let hit = 0;
+    let tone = 0;
+    if (byte !== NOT_SHOWN) {
+      const reaction = reactionsOf[keys[byte - 1]];
+      hit = reaction?.stopped ? 1 : 0;
+      tone = reaction?.tone ?? 0;
+    }
+    for (let k = start[i]; k < start[i + 1]; k++) {
+      const g = group[k];
+      if (!market && shopping[g]) continue; // 非市场预设不统计"想买"，这些组保持 0 而被下面滤掉
+      sizes[g] += 1;
+      if (!byte) continue;
+      reach[g] += 1;
+      stopped[g] += hit;
+      if (tone === 1) glad[g] += 1;
+      else if (tone === -1) sorry[g] += 1;
     }
   }
-  const lift = (count, size, total) => (total ? count / size / (total / people.length) : 0);
-  return [...tallies.values()]
-    .filter((tally) => tally.size >= minSegment(people.length))
-    .map((tally) => ({
-      ...tally,
-      stoppedLift: lift(tally.stopped, tally.size, all.stopped),
-      gladLift: lift(tally.glad, tally.size, all.glad),
-      sorryLift: lift(tally.sorry, tally.size, all.sorry),
-    }));
+
+  const floor = minSegment(people.length);
+  const lift = (count, sizeOf, total) => (total ? count / sizeOf / (total / people.length) : 0);
+  const out = [];
+  for (let g = 0; g < width; g++) {
+    if (sizes[g] < floor) continue;
+    out.push({
+      attribute: groups[g].attribute,
+      value: groups[g].value,
+      size: sizes[g],
+      reached: reach[g],
+      stopped: stopped[g],
+      glad: glad[g],
+      sorry: sorry[g],
+      stoppedLift: lift(stopped[g], sizes[g], all.stopped),
+      gladLift: lift(glad[g], sizes[g], all.glad),
+      sorryLift: lift(sorry[g], sizes[g], all.sorry),
+    });
+  }
+  return out;
 }
 
 /**
