@@ -6,7 +6,7 @@
 npm test    # node --test "test/*.test.js"
 ```
 
-当前 **69 个用例**（README 里若写旧数以本文件为准；数量会随用例增加变化，
+当前 **75 个用例**（README 里若写旧数以本文件为准；数量会随用例增加变化，
 以 `npm test` 输出 `tests N` 行为准）。全部走 mock 通道，**不花真钱、不需要 key**。
 
 ```bash
@@ -21,8 +21,9 @@ npm run bench   # 实时监控增量统计的一次性对拍（旧全量重扫 v
 | `test/vocab.test.js` | 中文词表完整性（列数、id 唯一、回退） |
 | `test/personas.test.js` | 人格网格、人格行生成、pool 回退 |
 | `test/feed.test.js` | 波次算法、情绪、收尾聚合 |
+| `test/summary.test.js` | `segments()` 预编译版**与旧实现逐字段对拍**（4 种 reach × 2 预设、子集、重复调用、最小样本门） |
 | `test/charts.test.js` | 图谱纯函数（漏斗/折线/需求曲线数据） |
-| `test/grid.test.js` | 地图绘制：全量 `drawGrid` 与增量 `paintDelta` 画了几格（Node 里用 canvas 桩件记录 `fillRect`） |
+| `test/grid.test.js` | 地图绘制：全量 `drawGrid`、增量 `paintDelta`、聚集地形描环，各画了几格（Node 里用 canvas 桩件记录 `fillRect` / `strokeRect`） |
 | `test/tally.test.js` | 实时监控增量统计：幂等、改判、未知反应，以及与全量重扫的对拍 |
 | `test/spatial.test.js` | 人群地形：成片/零散/无方差/判定不足/确定性/置换收缩/成片格不重叠 |
 | `test/bytes.test.js` | base64 小件 |

@@ -20,7 +20,7 @@ D1（posts / versions / reactions / batches）
 
 | 路径 | 职责 | 备注 |
 |---|---|---|
-| `public/shared/` | ★ 三端共用引擎 | 上游 9 文件（MIT 最小改动）+ 本项目 5 个新文件 |
+| `public/shared/` | ★ 三端共用引擎 | 上游 9 文件（MIT 最小改动）+ 本项目 6 个新文件 |
 | `public/` | 界面：发帖框首屏、四主题、报告渲染、图表、地图 | 无框架，原生 ESM |
 | `worker/index.js` | API + D1 + 限额 + 记账 + BYOK | 单文件，按路由函数组织 |
 | `migrations/` | D1 结构，0001–0005 | 只增不改 |
@@ -101,5 +101,12 @@ GET  /api/post/:id      报告与图谱的数据源（含调用报告与决策�
 
 引擎与 Worker 架构改造自 [gaborishka/jevtown](https://github.com/gaborishka/jevtown)（MIT），
 其思路源于 [a16z-infra/ai-town](https://github.com/a16z-infra/ai-town)。主要差异：中文词表
-与人格、mock 供应器、四主题、BYOK、调用记账与分阶段报告、决策现场抽样、图谱模块。
+与人格、mock 供应器、四主题、BYOK、调用记账与分阶段报告、决策现场抽样、图谱模块，
+以及本项目新增的**人群地形**（`spatial.js` 的 Moran 空间自相关，报告里的「人群地形」段与
+地图的「聚集地形」层）。
 上游的居民系统、自定义受众、MCP、OG 图未引入（路线图见 README）。
+
+> 引擎里还留着两处**上游有、这里没接**的能力：`check.js` 的 `audience`（"只给某类人看"，
+  含 `rateAudience` / `partsOf` / `audienceOf`）与 `feed.js` 的 `partsOf` / `audienceMask`。
+  Worker 与前端都没走这条路；`summary.js` 的 `inAudience` 同理是备而不用。
+  计划文档 `2026-09-29-r5-version-delta.md` 的两版之差会用到同一类"子集人群"思路。

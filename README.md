@@ -45,7 +45,7 @@ npm run check -- --preset post --max-waves 2 "我为什么把每周例会砍成�
 ### 测试
 
 ```bash
-npm test    # 69 个用例：引擎单测 + Worker 集成（unstable_dev）+ 图谱/地图/增量统计/空间自相关，mock 通道，不花钱
+npm test    # 75 个用例：引擎单测 + Worker 集成（unstable_dev）+ 图谱/地图/增量统计/空间自相关/分组对拍，mock 通道，不花钱
 ```
 
 ---
@@ -80,6 +80,9 @@ npm test    # 69 个用例：引擎单测 + Worker 集成（unstable_dev）+ 图
 - [x] Step 2 · 功能打磨（追问 / 版本对比 / 示例回放）
 - [x] UI 全量打磨（四主题 + 图谱 + 调用报告 + 决策现场 + Jev 驱动身份）
 - [x] 审计轮（人群缓存、画布泄漏、限额一致性、移动端溢出、常量单源、懒加载、voices 折叠）
+- [x] 迭代轮 R1–R4（实时监控与地图增量渲染、人群地形 Moran 空间自相关、报告页全量打磨、
+      `segments()` 预编译）——计划与复盘见 [docs/superpowers/plans/](./docs/superpowers/plans/) 与 [docs/MEMORY.md](./docs/MEMORY.md)
+- [ ] 迭代轮 R5 起（两版之差的差分地图，计划已写未执行；再往后按 优化→创意→前端 轮换）
 - [ ] Step 3 · 真实模型联调扩展（measurements 风格成本报告、网关保真度复核）
 - [ ] Step 4 · 上线准备（人格打包管线省 CPU、`wrangler d1 create` + secret 部署；收波 CAS 锁、`/api/batch` 作者令牌、observability 开启已于 M2/M3 落地，见 [docs/MEMORY.md](./docs/MEMORY.md)）
 - [ ] Step 5 · 生态（可选）：MCP 服务器（check_text / compare_texts）、居民系统 /me、分享卡片
