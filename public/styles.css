@@ -887,5 +887,10 @@ footer a:hover { color: var(--text); }
 
   /* 窄屏地图与图例改为上下排：并排时 400px 的画布被挤成细条，图例也只剩一列窄字 */
   .map-wrap { flex-direction: column; gap: 12px; }
+
+  /* 示例卡是网格项：自动最小尺寸 = 内容 min-content，会把单列轨道撑到 600 多像素，
+     整页跟着出现横向滚动条。目录此时已是 nowrap 滚动条（自己内部横滑），
+     所以给网格项 min-width: 0，让轨道收缩到视口宽。与上面 .legend 同一套路。 */
+  .examples .card { min-width: 0; }
   .legend { min-width: 0; }
 }

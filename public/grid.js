@@ -13,6 +13,9 @@ const GRID = 100;
 // 已画过的画布登记在案：主题切换时逐张重绘；painted = 上次真正画上去的字节快照，
 // 实时地图靠它做增量补画，不必每批判定就刷满一万格。
 const drawn = new Map();
+// 差分画布另册登记：它没有悬停档案、不走 drawn 的字节快照与增量逻辑，
+// 但主题切换时 redrawMaps 必须也按新令牌重画它——否则差分图留着上个主题的墨水。
+const deltas = new Map();
 
 const cssVar = (name, fallback) => {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -30,6 +33,9 @@ export function drawGrid(canvas, bytes, presetId, terrain = null) {
 export function redrawMaps() {
   for (const [canvas, entry] of drawn) {
     if (canvas.isConnected) paint(canvas, entry);
+  }
+  for (const [canvas, codes] of deltas) {
+    if (canvas.isConnected) drawDelta(canvas, codes);
   }
 }
 
@@ -147,10 +153,12 @@ const mixHex = (a, b, t) => {
  * 1 = 大幅变差、2 = 小幅变差、3 = 没变、4 = 小幅变好、5 = 大幅变好。
  * 返回画了几个格子。
  *
- * 走独立绘制路径，不登记进 drawn——差分格没有"这个人是谁"的档案可悬停，
- * 主题切换时随对比区一起重渲染即可（renderCheck 每次都重画整张反应图）。
+ * 画布登记进 deltas（不进 drawn）：没有"这个人是谁"的档案可悬停、没有增量路径，
+ * 但主题切换时 redrawMaps 要按新令牌把它重画一遍。
  */
 export function drawDelta(canvas, codes) {
+  for (const [old] of deltas) if (!old.isConnected) deltas.delete(old); // 清掉已断连的旧画布
+  deltas.set(canvas, codes);
   const dpr = window.devicePixelRatio || 1;
   canvas.width = GRID * CELL * dpr;
   canvas.height = GRID * CELL * dpr;

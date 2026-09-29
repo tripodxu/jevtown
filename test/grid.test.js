@@ -205,3 +205,20 @@ test('drawDelta：全部不可比时只铺底板', () => {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].fill, TOKENS['--map-well']);
 });
+
+test('drawDelta：登记在案——主题切换后 redrawMaps 按新令牌重画差分图', () => {
+  // 差分画布不走 drawn 的增量路径，但主题切换必须重画：否则留着上个主题的墨水。
+  const canvas = newRun();
+  const codes = new Uint8Array(10000);
+  codes[1] = 5; // 大幅变好
+  drawDelta(canvas, codes);
+  calls.length = 0;
+  TOKENS['--map-green'] = '#00ff00'; // 换主题 = 换令牌
+  try {
+    redrawMaps();
+    assert.equal(calls.length, 2, '底板 1 次 + 1 个有差值的格子');
+    assert.equal(calls[1].fill, '#00ff00', '差分图跟着新主题的墨水重画');
+  } finally {
+    TOKENS['--map-green'] = '#3ddc84'; // 还原，不影响后面的用例
+  }
+});
