@@ -739,6 +739,18 @@ canvas.grid {
 .legend .dot.ring.hot { color: var(--map-green); }
 .legend .dot.ring.cold { color: var(--map-red); }
 
+/* 两版之差：排版借地形段（同一套 say/统计行），图例点是实心——差分是实色量表，不是环 */
+.delta-read { margin: 4px 0 6px; }
+.delta-read .terrain-say { margin: 14px 0 6px; font-size: 14.5px; }
+.delta-read .terrain-say em {
+  font-style: normal;
+  font-weight: 700;
+  padding: 0 4px;
+  background: linear-gradient(transparent 62%, var(--accent-soft) 0);
+}
+.delta-legend { min-width: 0; }
+canvas.grid.diff { cursor: default; }
+
 /* 追问与人声 */
 .voices { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
 

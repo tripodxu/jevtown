@@ -1,13 +1,14 @@
 // 视图渲染：app.js（实时检查）与 showcase.js（示例回放）共用。
 // 输入形状 = GET /api/post/:v 的 payload（replay.js 能从存档 JSON 拼出同一形状）。
 import { PRESETS, LOOKS, lookOf } from './shared/presets.js';
-import { drawGrid, attachTooltip } from './grid.js';
+import { drawGrid, attachTooltip, drawDelta } from './grid.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, directionZh,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs } from './charts.js';
 import { rankedAnswers, demandCurve } from './shared/summary.js';
 import { decodeBytes } from './shared/bytes.js';
+import { crowdDelta } from './shared/spatial.js';
 
 export const PRESET_NOUN = presetNoun;
 export const readCheck = (p) => (p >= 0.7 ? 'yes' : p <= 0.3 ? 'no' : 'unclear');
@@ -298,4 +299,58 @@ function wireTerrain(el, result, canvas, bytes, presetId) {
     drawGrid(canvas, bytes, presetId, on ? terrain : null);
     legend.innerHTML = on ? terrainLegend(terrain) : reactionLegend(presetId);
   });
+}
+
+/**
+ * 两版之差：改一版再发之后，"你改的这几个词让谁改了主意"。
+ * 全部在浏览器里算——两版的 looks 本来就都在内存里，不新增 Jev 调用。
+ * 只对同预设的两版有意义：预设不同则反应词表不同，差值没有可比性，直接留空。
+ */
+export function renderDelta(el, after, before) {
+  if (!before || before.post.preset !== after.post.preset) {
+    el.innerHTML = '';
+    return;
+  }
+  const presetId = after.post.preset;
+  const keys = Object.keys(PRESETS[presetId].reactions);
+  const d = crowdDelta(presetId, keys, decodeBytes(before.looks), decodeBytes(after.looks), {
+    versionId: `${after.post.id}-${before.post.id}`,
+  });
+  if (!d.both) {
+    el.innerHTML = '<h3>两版之差</h3><div class="delta-read"><p class="hint">两版没有任何一个人被同时判定到，没有可比的差分。</p></div>';
+    return;
+  }
+  // 覆盖差异单独说一句：只被一版排到的人不是"变中立了"，是这次没轮到。
+  const reach = d.onlyBefore || d.onlyAfter
+    ? d.onlyAfter === d.onlyBefore
+      ? `两版各有 ${d.onlyAfter.toLocaleString()} 个人只被自己排到。`
+      : `这一版比上一版${d.onlyAfter > d.onlyBefore ? '多' : '少'}排到了 ${Math.abs(d.onlyAfter - d.onlyBefore).toLocaleString()} 个人。`
+    : '两版的传播范围一样大。';
+  const verdict = TERRAIN_VERDICT_ZH[d.terrain.verdict] ?? d.terrain.verdict;
+  const where = [
+    d.terrain.hot.length ? `成片变好集中在地图${directionZh(d.terrain.hotAt)}（${d.terrain.hot.length} 格）` : '',
+    d.terrain.cold.length ? `成片变差集中在地图${directionZh(d.terrain.coldAt)}（${d.terrain.cold.length} 格）` : '',
+  ].filter(Boolean).join('；');
+  el.innerHTML = `<h3>两版之差</h3>
+    <div class="delta-read">
+      <div class="stats">
+        ${stat(d.up.toLocaleString(), '变好的人')}
+        ${stat(d.down.toLocaleString(), '变差的人')}
+        ${stat(d.net.toLocaleString(), '净态度变化')}
+        ${stat(d.both.toLocaleString(), '两版都看到的人')}
+      </div>
+      <div class="terrain-say">改动的分布<em>${verdict}</em>。${DELTA_SAY_ZH[d.terrain.verdict] ?? ''}</div>
+      <div class="hint">差分只统计两版都被判定到的 ${d.both.toLocaleString()} 人（只被一版排到的人不算"变中立"）。${esc(reach)}${where ? `${esc(where)}。` : ''}差场的 Moran's I = ${d.terrain.morans === null ? '不可比' : d.terrain.morans.toFixed(3)}</div>
+    </div>
+    <div class="map-bar"><span class="hint">差分图：绿=变好，红=变差，颜色越满变化越大；底色=两版都没排到或没有变化。</span></div>
+    <div class="map-wrap"><canvas class="grid diff" role="img" aria-label="差分地图：这一版相对上一版，哪些人变好、哪些人变差"></canvas><div class="legend delta-legend">${deltaLegend()}</div></div>`;
+  drawDelta(el.querySelector('canvas.diff'), d.codes);
+}
+
+/** 差分图例：两档幅度 × 两个方向（与 drawDelta 的 inks 同色，半档 = 墨水与底板各半）。 */
+function deltaLegend() {
+  return '<span class="dot" style="background:color-mix(in srgb, var(--map-green) 50%, var(--map-well))"></span>小幅变好'
+    + '<span class="dot" style="background:var(--map-green)"></span>大幅变好'
+    + '<span class="dot" style="background:color-mix(in srgb, var(--map-red) 50%, var(--map-well))"></span>小幅变差'
+    + '<span class="dot" style="background:var(--map-red)"></span>大幅变差';
 }

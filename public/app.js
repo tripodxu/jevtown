@@ -1,6 +1,6 @@
 // 前端编排：发文本 → 分步驱动检查（batch/wave）→ 交给 render.js 渲染。
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
-import { renderCheck, esc, stat } from './render.js';
+import { renderCheck, renderDelta, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
 import { BLOCKED_ZH, presetNoun as PRESET_NOUN_OF } from './shared/labels.js';
 import { PRESETS } from './shared/presets.js';
@@ -213,7 +213,12 @@ function showResult(view) {
       slot.textContent = '载入中……';
       try {
         const v1 = await getJSON(`/api/post/${current.post}?v=1`);
-        renderCheck(aside, v1);
+        // renderCheck 会清空容器，所以第 1 版渲染进子节点，差分卡才不会被一起清掉
+        const diff = document.createElement('div');
+        const v1card = document.createElement('div');
+        slot.replaceChildren(diff, v1card);
+        renderCheck(v1card, v1);
+        renderDelta(diff, view, v1);
       } catch (error) {
         slot.innerHTML = `<span class="error">${esc(error.message)}</span>`;
       }

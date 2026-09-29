@@ -192,6 +192,13 @@ export const TERRAIN_SAY_ZH = {
   unclear: '和把地图随机打乱没有区别，看不出成片还是零散。',
 };
 
+/** 两版之差（shared/spatial.js 的 crowdDelta）的中文，渲染层只从这里取。 */
+export const DELTA_SAY_ZH = {
+  clustered: '翻盘是成片的——你改的这几个词，把一整片人从划走推到了点赞那边。',
+  scattered: '翻盘是零散的——没有哪一片人整齐地改了主意，你多哄到的是零散几个。',
+  unclear: '看不出成片：改动落在地图上是随机的，没有哪一片人整齐地转过来。',
+};
+
 /** 地图方位：把格坐标切成 3×3 说出人话（左上 → 右下）。 */
 const DIRECTION_ZH = ['左上', '正上', '右上', '左', '中央', '右', '左下', '正下', '右下'];
 export const directionZh = (at, grid = 100) => {
