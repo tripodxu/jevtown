@@ -66,6 +66,14 @@ app.js  fetch /api/post/:id
 - 消费方：人格声音卡（flex 布局 + .v-body）与地图悬停档案（tooltip 首行，inline）。
 - `pool` 随 `base.post.pool` 下发（R17 的加法契约变更：Worker showPost 与 replay.js 都带）。
 
+## 报告顶部的小镇快报（R23 起）
+
+- 数据 = `summary.js` 的 `reportBrief(counters, waves, segments)`：只做选择与百分比
+  （best/worst 取 topSegments 名单首位，无显著群体为 null），**措辞在 render.js 的
+  briefView**——句式全部是名词短语 + 括号注记（`最买账：编织手工（兴趣 · 11% · 4.3×全城）`），
+  分支只有"单波/多波"两套模板，防病句（R5 教训）。
+- 每句的数字都来自 payload 既有字段，与总览 KPI 同口径；Jev 不写一个字。
+
 ## 报告里的「每一波的人都是什么反应」（R14 起 · 每波构成）
 
 - 数据 = `summary.js` 的 `waveMix()`：`looks`（每人什么反应）× `reach`（每人第几波看到）

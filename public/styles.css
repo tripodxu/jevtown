@@ -397,6 +397,23 @@ h3::after {
   background: var(--hairline);
 }
 
+/* 小镇快报（R23）：报告最前的 TL;DR 盒，em 高亮沿用 terrain-say 的笔触 */
+.brief {
+  background: var(--inset);
+  border-radius: var(--r-ctrl);
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+
+.brief-line { margin: 5px 0; font-size: 14px; }
+
+.brief-line em {
+  font-style: normal;
+  font-weight: 700;
+  padding: 0 4px;
+  background: linear-gradient(transparent 62%, var(--accent-soft) 0);
+}
+
 /* ---------- 表单 ---------- */
 
 .row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }

@@ -7,7 +7,7 @@ import {
   REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart, waveMixChart } from './charts.js';
-import { rankedAnswers, demandCurve, sliceHeatmap, waveMix } from './shared/summary.js';
+import { rankedAnswers, demandCurve, sliceHeatmap, waveMix, reportBrief } from './shared/summary.js';
 import { decodeBytes } from './shared/bytes.js';
 import { crowdDelta } from './shared/spatial.js';
 import { crowd } from './shared/personas.js';
@@ -30,6 +30,7 @@ export function renderCheck(el, result) {
   const presetId = result.post.preset;
   const html = [`<h2 tabindex="-1">${esc(PRESET_NOUN(presetId))} · 检查结果</h2>`];
 
+  html.push(briefView(result));
   html.push('<div class="source-text">');
   html.push(`<div>文本：${esc(result.post.text.slice(0, 80))}${result.post.text.length > 80 ? '…' : ''}</div>`);
   if (result.unlisted?.length) html.push(`<div class="hint">未列入公共流：${esc(result.unlisted.map((id) => BLOCKED_ZH[id] ?? id).join('、'))}</div>`);
@@ -84,8 +85,30 @@ function buildToc(el) {
   el.querySelector('h2').after(nav);
 }
 
-function overview(result) {
-  const c = result.counters;
+/**
+ * 小镇快报（R23）：报告最前的三行式 TL;DR。选择逻辑在 summary.js 的 reportBrief，
+ * 措辞在这里——句式全部是名词短语 + 括号注记（不搭从句，无病句风险），
+ * 数字来自 payload 的既有字段，Jev 不写一个字。
+ */
+function briefView(result) {
+  if (!result.counters?.reach || !result.waves?.length) return '';
+  const brief = reportBrief(result.counters, result.waves, result.segments ?? {});
+  const pct = (v) => Math.round(v * 100);
+  const lines = [
+    brief.waves > 1
+      ? `文字传了 <em>${brief.waves} 波</em>，${brief.reach.toLocaleString()} 人读到，在第 ${brief.waves} 波收住。`
+      : `文字只传了第 1 波，<em>${brief.reach.toLocaleString()} 人</em>读到。`,
+    `乐见 <em>${pct(brief.gladPct)}%</em> · 反感 ${pct(brief.sorryPct)}% · ${pct(brief.stoppedPct)}% 的人停下来。`,
+  ];
+  const groupNote = (segment, key, title) =>
+    `${title}：<em>${esc(segmentValueZh(segment.attribute, segment.value))}</em>` +
+    `（${esc(SEGMENT_ZH[segment.attribute] ?? segment.attribute)} · ${pct(segment[key] / segment.size)}% · ${liftOf(segment, key)}×全城）`;
+  if (brief.best) lines.push(groupNote(brief.best, 'glad', '最买账'));
+  if (brief.worst) lines.push(groupNote(brief.worst, 'sorry', '反感最集中'));
+  return `<div class="brief">${lines.map((line) => `<p class="brief-line">${line}</p>`).join('')}</div>`;
+}
+
+function overview(result) {  const c = result.counters;
   return `<h3>总览</h3><div class="stats">` +
     stat(c.reach, 'Jev 逐格判定') +
     stat(c.stopped, '停下来') +

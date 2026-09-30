@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { crowd, CROWD } from '../public/shared/personas.js';
-import { segments, minSegment, sliceHeatmap, waveMix } from '../public/shared/summary.js';
+import { segments, minSegment, sliceHeatmap, waveMix, reportBrief } from '../public/shared/summary.js';
 import { PRESETS, NOT_SHOWN } from '../public/shared/presets.js';
 import { INTEREST_ROW_ZH } from '../public/shared/vocab.js';
 import { REACTIONS_ZH } from '../public/shared/labels.js';
@@ -232,4 +232,31 @@ test('waveMix：反应序按全城次数降序，各波同序跨波可比', () =
     '段序必须跟全城次数走，而不是每波自己排');
   // 计数守恒
   assert.equal(wave2.mix.reduce((sum, m) => sum + m.count, 0), 1500);
+});
+
+// -- 小镇快报（reportBrief）：TL;DR 的数据面——选择与百分比，措辞归渲染层
+
+test('reportBrief：单波/多波与百分比口径', () => {
+  const counters = { reach: 2100, stopped: 537, glad: 165, sorry: 12 };
+  const brief = reportBrief(counters, [{ index: 0 }, { index: 1 }], {});
+  assert.equal(brief.waves, 2);
+  assert.equal(brief.reach, 2100);
+  assert.equal(Math.round(brief.gladPct * 100), Math.round((165 / 2100) * 100));
+  assert.equal(brief.best, null, '无 segments 时条件句数据为 null');
+});
+
+test('reportBrief：best/worst 取显著名单首位（topSegments 已按 lift 排序）', () => {
+  const segments = {
+    glad: [{ attribute: 'interest', value: 'running', size: 300, glad: 180, gladLift: 1.8 }],
+    sorry: [{ attribute: 'age', value: '45-59', size: 500, sorry: 60, sorryLift: 1.5 }],
+  };
+  const brief = reportBrief({ reach: 2100, stopped: 0, glad: 0, sorry: 0 }, [{ index: 0 }], segments);
+  assert.equal(brief.best.attribute, 'interest');
+  assert.equal(brief.worst.attribute, 'age');
+});
+
+test('reportBrief：reach 为 0 时也给出形状（渲染层负责不渲染）', () => {
+  const brief = reportBrief({ reach: 0, stopped: 0, glad: 0, sorry: 0 }, [], {});
+  assert.equal(brief.waves, 0);
+  assert.equal(brief.gladPct, 0);
 });

@@ -273,6 +273,25 @@ export function waveMix(presetId, keys, looks, reach) {
 }
 
 /**
+ * 小镇快报：报告顶部的三行式 TL;DR 的数据面。只做选择与百分比，不做措辞——
+ * 句子由 render.js 按固定模板拼装（模板可审，选择逻辑可测）。
+ * best/worst 来自 topSegments 的既有门（lift ≥ 1.3 且 ≥ 8 人），无显著群体为 null。
+ * → { waves, reach, gladPct, sorryPct, stoppedPct, best, worst }
+ */
+export function reportBrief(counters, waves, segmentsByKind = {}) {
+  const reach = Math.max(1, counters.reach);
+  return {
+    waves: waves.length,
+    reach: counters.reach,
+    gladPct: counters.glad / reach,
+    sorryPct: counters.sorry / reach,
+    stoppedPct: counters.stopped / reach,
+    best: segmentsByKind.glad?.[0] ?? null,
+    worst: segmentsByKind.sorry?.[0] ?? null,
+  };
+}
+
+/**
  * When nobody stands out (the text worked on everybody alike, as a text that reached the whole crowd
  * does): the biggest groups, ordered by how much of each took part.
  */
