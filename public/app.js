@@ -249,7 +249,8 @@ async function loadFeed() {
       ? data.posts
           .map(
             (post) =>
-              `<li><a href="javascript:openPost('${post.id}')">${esc(post.excerpt)}</a>` +
+              // 真 URL：报告可分享/刷新/中键新开；点击在本页拦截打开（下方委托）
+              `<li><a href="/?post=${encodeURIComponent(post.id)}" data-post="${esc(post.id)}">${esc(post.excerpt)}</a>` +
               `<span class="meta">${esc(PRESET_NOUN_OF(post.preset))} · ${post.state === 'blocked' ? '已拒绝' : post.state === 'done' ? '已完成' : '进行中'}</span></li>`,
           )
           .join('')
@@ -258,6 +259,29 @@ async function loadFeed() {
     $('feed').innerHTML = '<li class="error">读取失败：worker 没在跑？先 npm run dev。</li>';
   }
 }
+
+// feed 点击委托：本页打开报告并 pushState（回退键可回首页）；修饰键点击仍走浏览器默认（新标签）
+$('feed').addEventListener('click', (event) => {
+  const link = event.target.closest('a[data-post]');
+  if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  history.pushState(null, '', `/?post=${encodeURIComponent(link.dataset.post)}`);
+  openPost(link.dataset.post);
+});
+
+// 回退/前进：URL 带 ?post= 就开对应报告，没有就收起报告回首页
+window.addEventListener('popstate', () => {
+  const id = new URLSearchParams(location.search).get('post');
+  if (id) {
+    openPost(id);
+    return;
+  }
+  $('result').replaceChildren();
+  $('result').hidden = true;
+  $('resultActions').hidden = true;
+  $('compare').hidden = true;
+  current.post = null;
+});
 
 async function openPost(id) {
   try {
@@ -272,12 +296,19 @@ async function openPost(id) {
 }
 window.openPost = openPost;
 
-// 人格声音"看全部"：展开折叠的第 25 张起，按钮自己消失。
+// 人格声音"看全部"：展开折叠的第 25 张起，按钮自己消失；焦点交给第一张新展开的卡，
+// 键盘用户不被扔回页面顶部。
 document.addEventListener('click', (event) => {
   const btn = event.target.closest('[data-expand-voices]');
   if (!btn) return;
-  btn.parentElement.querySelector('.voices')?.classList.remove('collapsed');
+  const grid = btn.parentElement.querySelector('.voices');
+  grid?.classList.remove('collapsed');
   btn.remove();
+  const first = grid?.querySelector('.voice:nth-child(25)');
+  if (first) {
+    first.tabIndex = -1;
+    first.focus();
+  }
 });
 
 // -- 通道设置（BYOK） -----------------------------------------------------------
@@ -320,3 +351,7 @@ refreshModeChip();
 
 initThemeSwitcher();
 loadFeed();
+
+// 深链：带着 ?post=<id> 打开页面时直接呈现那份报告（feed 链接与分享链接都落在这里）
+const wanted = new URLSearchParams(location.search).get('post');
+if (wanted) openPost(wanted);

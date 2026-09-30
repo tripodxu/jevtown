@@ -83,6 +83,18 @@ app.js  fetch /api/post/:id
 - voices 卡片默认折叠 24 条，可展开全部（防 DOM 过重）。
 - BYOK key 只进 localStorage，弹窗在 `app.js`；请求头由 Worker 侧 `providerOf` 消费。
 
+## 交互细节（R6 起）
+
+- **地图悬停档案**（`grid.js` 的 `attachTooltip`）：悬停走 `pointermove`（`pointerType === 'touch'`
+  的拖动不算悬停），触摸屏点按走 `pointerdown`——点一下出档案，同格再点收起。
+- **tooltip 定位**必须过 `clampTip(x, y, w, h, vw, vh)`（纯函数，有单测）：默认光标右下，
+  右缘放不下翻左、下缘放不下翻上，最后钳进视口留 12px。别改回裸 `clientY + 14`——
+  画布在折叠线下时 tooltip 会被视口裁掉（R6 取证实测 tipBottom 3487 / vh 805）。
+- **报告深链**：feed 链接是真 URL（`/?post=<id>`），点击在 `app.js` 委托拦截 +
+  `pushState`，回退键收起报告；页面载入读 `?post=` 直开。**不要再写 `javascript:` URL**。
+- 检查进度的 `#statusLine` 带 `role="status"`（屏幕阅读器播报）；voices「看全部」展开后
+  焦点交给第一张新露出的卡。
+
 ## 窄屏约定（≤560px）
 
 - 目录改单行横向滚动（右缘渐隐 + 细滚动条），不用换行——换行会占掉近 250px。

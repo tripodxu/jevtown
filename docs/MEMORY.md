@@ -6,6 +6,29 @@
 
 ---
 
+## 2026-09-30 · R6 前端：交互可达性细节（87 → 93 用例全绿）
+
+- **方向判定**：`impeccable context` = `SCOPED_EXISTING_ALLOWED`，refinement——四主题、
+  文案、地图绘制算法、动效一律不动，只修取证到的交互缺陷。静态审计（1100/375 × 四主题）
+  无横向溢出、无控制台错误；窄屏 5 个"越界"A 元素全部是 `.toc` 内部横滚（预期行为）。
+- **tooltip 视口钳制（真缺陷）**：`attachTooltip` 恒 `clientY + 14`，画布在折叠线下时
+  悬停下缘 tooltip 被视口裁掉（实测 tipBottom 3487 / vh 805）。抽出纯函数 `clampTip`
+  （右缘翻左、下缘翻上、钳进视口留 12px），6 个单测兜住边界（含 tooltip 比视口宽）。
+- **触摸档案**：悬停改走 `pointermove`（`pointerType==='touch'` 的拖动不算），
+  点按走 `pointerdown`（同格再点收起）。**坑**：触摸 tap 后浏览器会补发合成
+  mousemove/mousedown，若监听 mousemove 做 toggle 会被合成事件打穿——
+  用 pointer 事件区分输入源才立得住。
+- **报告深链**：feed 链接从 `javascript:openPost(...)` 改成真 `href="/?post=<id>"`
+  （可分享/刷新/中键新开），点击委托 + `pushState`，popstate 收起报告，载入读
+  `?post=` 直开。
+- **顺带**：`#statusLine` 补 `role="status"`（检查全程对屏幕阅读器可见）；
+  voices「看全部」展开后焦点交给第一张新露出的卡（原来按钮自删、焦点掉回 body）。
+- **验证**：`npm run lint` ✓ 36 文件；`npm test` 93/93（+6 clampTip 用例）；
+  CDP 实测——折叠线下悬停 tooltip 完整可见（tipBottom 775 < vh 805）、触摸
+  tap→收→拖动不重开→tap、`?post=` 直开出报告、回退收起、窄屏四主题零溢出、
+  控制台零错误。临时 CDP 脚本已删除。
+- 计划文档：`docs/superpowers/plans/2026-09-30-r6-interaction-polish.md`。
+
 ## 2026-09-29 · R5 创意：两版之差（差分地图），75 → 87 用例全绿
 
 - **做出来的东西**：`shared/spatial.js` 新增 `crowdDelta()`（把两版字节折成"态度差"场
@@ -355,7 +378,7 @@
   新增主题只加令牌 + 顶栏按钮。
 - **上游**：引擎与 Worker 架构改自 gaborishka/jevtown（MIT，谱系 a16z-infra/ai-town）；
   引擎 9 文件为上游最小改动，`vocab/labels/mock/bytes/replay/spatial` 6 个文件为本项目新写。
-- **测试**：`node --test`，87 用例（2026-09-29 R5 后）；Worker 集成用 `unstable_dev`；
+- **测试**：`node --test`，93 用例（2026-09-30 R6 后）；Worker 集成用 `unstable_dev`；
   全程 mock 不花钱；无浏览器 E2E（需要时写一次性 CDP 脚本，用完即删）；
   `npm run lint` = `node --check` + tab/空格 + console.log 三条文本规则。
 - **已知待办**（README 路线图 Step 4）：人格打包管线省 CPU、真实 `database_id` + secret 部署

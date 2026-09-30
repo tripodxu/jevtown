@@ -112,14 +112,18 @@ export function attachTooltip(canvas, bytes, presetId) {
     tooltip = Object.assign(document.createElement('div'), { id: 'tooltip', role: 'status' });
     document.body.append(tooltip);
   }
-  canvas.addEventListener('mousemove', (event) => {
+  // 触摸点开的格子：同格再点=收起（触摸屏没有 mouseleave 可走）
+  let pinned = -1;
+
+  const cellAt = (event) => {
     const rect = canvas.getBoundingClientRect();
     const scale = GRID / rect.width; // CSS 压缩后的实际比例
     const x = Math.floor((event.clientX - rect.left) * scale);
     const y = Math.floor((event.clientY - rect.top) * scale);
-    const inside = x >= 0 && x < GRID && y >= 0 && y < GRID;
-    if (!inside) { tooltip.style.display = 'none'; return; }
-    const id = y * GRID + x;
+    return x >= 0 && x < GRID && y >= 0 && y < GRID ? y * GRID + x : -1;
+  };
+
+  const render = (id) => {
     const who = persona('zh', id);
     const byte = bytes[id];
     const reaction = byte ? REACTIONS_ZH[keys[byte - 1]] ?? keys[byte - 1] : '没看到这条';
@@ -129,10 +133,57 @@ export function attachTooltip(canvas, bytes, presetId) {
       `${TEMPER[who.temper]?.zh} · ${BUDGET[who.budget]?.zh}<br>` +
       `Jev 判定：<b>${reaction}</b>`;
     tooltip.style.display = 'block';
-    tooltip.style.left = `${event.clientX + 14}px`;
-    tooltip.style.top = `${event.clientY + 14}px`;
+  };
+
+  // innerHTML 与 display 先行，offsetWidth/offsetHeight 此刻已可读；钳位只动 left/top
+  const place = (event) => {
+    const pos = clampTip(
+      event.clientX, event.clientY,
+      tooltip.offsetWidth, tooltip.offsetHeight,
+      window.innerWidth, window.innerHeight,
+    );
+    tooltip.style.left = `${pos.left}px`;
+    tooltip.style.top = `${pos.top}px`;
+  };
+
+  const show = (event) => { render(cellAt(event)); place(event); };
+  const hide = () => { pinned = -1; tooltip.style.display = 'none'; };
+
+  // 悬停走 pointermove（区分得了输入源）：手指拖动不算悬停，触摸档案走 pointerdown 的点按
+  canvas.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'touch') return;
+    pinned = -1;
+    if (cellAt(event) < 0) { tooltip.style.display = 'none'; return; }
+    show(event);
+  });
+  // 触摸屏没有 hover：点一下出档案，同格再点收起
+  canvas.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'touch') return;
+    const id = cellAt(event);
+    if (id >= 0 && id === pinned) { hide(); return; }
+    pinned = id;
+    if (id < 0) { tooltip.style.display = 'none'; return; }
+    show(event);
   });
   canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+}
+
+/**
+ * 视口钳制：tooltip 默认落在光标右下（+14px）；右缘放不下翻到光标左侧，
+ * 下缘放不下翻到光标上方；最后钳进视口，四周留 12px 边距。
+ * 纯函数：不量 DOM，宽高与视口由调用方量好传入（宽高在 innerHTML 设置后立即可读）。
+ */
+export function clampTip(x, y, w, h, vw, vh) {
+  const GAP = 14;
+  const PAD = 12;
+  let left = x + GAP;
+  let top = y + GAP;
+  if (left + w > vw - PAD) left = x - GAP - w; // 右缘放不下 → 翻到光标左侧
+  if (top + h > vh - PAD) top = y - GAP - h;   // 下缘放不下 → 翻到光标上方
+  return {
+    left: Math.min(Math.max(left, PAD), Math.max(PAD, vw - PAD - w)),
+    top: Math.min(Math.max(top, PAD), Math.max(PAD, vh - PAD - h)),
+  };
 }
 
 // -- 两版之差的发散配色 ----------------------------------------------------------

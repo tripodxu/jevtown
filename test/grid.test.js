@@ -32,7 +32,7 @@ const TOKENS = { '--map-well': '#0a0d13', '--map-green': '#3ddc84', '--map-red':
 globalThis.getComputedStyle = () => ({ getPropertyValue: (name) => ` ${TOKENS[name] ?? '#000000'} ` });
 globalThis.document = { getElementById: () => null, createElement: () => ({}), body: { append() {} } };
 
-const { drawGrid, paintDelta, redrawMaps, drawDelta } = await import('../public/grid.js');
+const { drawGrid, paintDelta, redrawMaps, drawDelta, clampTip } = await import('../public/grid.js');
 
 /** preset 'post' 的反应顺序：scrolled_past / read / liked / disliked / reposted / followed / blocked。 */
 const PRESET = 'post';
@@ -221,4 +221,38 @@ test('drawDelta：登记在案——主题切换后 redrawMaps 按新令牌重�
   } finally {
     TOKENS['--map-green'] = '#3ddc84'; // 还原，不影响后面的用例
   }
+});
+
+// -- 悬停提示的视口钳制（纯函数，宽高与视口由调用方量好传入）
+
+test('clampTip：默认落在光标右下（+14px）', () => {
+  assert.deepEqual(clampTip(100, 100, 200, 120, 1200, 800), { left: 114, top: 114 });
+});
+
+test('clampTip：右缘放不下翻到光标左侧', () => {
+  const p = clampTip(1150, 100, 200, 120, 1200, 800);
+  assert.equal(p.left, 1150 - 14 - 200);
+  assert.equal(p.top, 114, '纵向不受横向溢出影响');
+});
+
+test('clampTip：下缘放不下翻到光标上方', () => {
+  const p = clampTip(100, 750, 200, 120, 1200, 800);
+  assert.equal(p.top, 750 - 14 - 120);
+  assert.equal(p.left, 114, '横向不受纵向溢出影响');
+});
+
+test('clampTip：右下双溢出各翻各的，互不干扰', () => {
+  const p = clampTip(1150, 750, 200, 120, 1200, 800);
+  assert.equal(p.left, 1150 - 14 - 200);
+  assert.equal(p.top, 750 - 14 - 120);
+});
+
+test('clampTip：翻到左侧仍越界时钳进视口边距（tooltip 比视口宽也不出负坐标）', () => {
+  const p = clampTip(10, 100, 400, 120, 300, 800);
+  assert.equal(p.left, 12);
+});
+
+test('clampTip：贴近视口原点时钳到 12px 边距', () => {
+  const p = clampTip(0, 0, 200, 120, 1200, 800);
+  assert.deepEqual(p, { left: 14, top: 14 });
 });
