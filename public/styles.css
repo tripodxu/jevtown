@@ -399,11 +399,14 @@ h3::after {
 
 /* 小镇快报（R23）：报告最前的 TL;DR 盒，em 高亮沿用 terrain-say 的笔触 */
 .brief {
+  position: relative;
   background: var(--inset);
   border-radius: var(--r-ctrl);
   padding: 12px 16px;
   margin-bottom: 14px;
 }
+
+.brief-copy { position: absolute; top: 8px; right: 10px; padding: 2px 10px; font-size: 12px; }
 
 .brief-line { margin: 5px 0; font-size: 14px; }
 

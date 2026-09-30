@@ -105,7 +105,11 @@ function briefView(result) {
     `（${esc(SEGMENT_ZH[segment.attribute] ?? segment.attribute)} · ${pct(segment[key] / segment.size)}% · ${liftOf(segment, key)}×全城）`;
   if (brief.best) lines.push(groupNote(brief.best, 'glad', '最买账'));
   if (brief.worst) lines.push(groupNote(brief.worst, 'sorry', '反感最集中'));
-  return `<div class="brief">${lines.map((line) => `<p class="brief-line">${line}</p>`).join('')}</div>`;
+  const plain = lines.map((line) => line.replace(/<[^>]+>/g, '')).join('\n');
+  const copy = 'clipboard' in navigator
+    ? `<button class="ghost brief-copy" type="button" data-copy-brief="${esc(plain)}">复制</button>`
+    : '';
+  return `<div class="brief">${copy}${lines.map((line) => `<p class="brief-line">${line}</p>`).join('')}</div>`;
 }
 
 function overview(result) {  const c = result.counters;

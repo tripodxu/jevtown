@@ -299,6 +299,12 @@ function showResult(view) {
         slot.replaceChildren(diff, v1card);
         renderCheck(v1card, v1);
         renderDelta(diff, view, v1);
+        // 焦点随内容走：载入完成后落在差分卡标题，键盘/SR 用户不被留在已消失的按钮处
+        const deltaTitle = diff.querySelector('h3');
+        if (deltaTitle) {
+          deltaTitle.tabIndex = -1;
+          deltaTitle.focus({ preventScroll: true });
+        }
       } catch (error) {
         slot.innerHTML = `<span class="error">${esc(error.message)}</span>`;
       }
@@ -411,6 +417,19 @@ document.addEventListener('click', (event) => {
     first.tabIndex = -1;
     first.focus();
   }
+});
+
+// 快报复制（R27）：纯文本进剪贴板，按钮给两秒反馈；失败也说话，不装成功
+document.addEventListener('click', async (event) => {
+  const btn = event.target.closest('[data-copy-brief]');
+  if (!btn) return;
+  try {
+    await navigator.clipboard.writeText(btn.dataset.copyBrief);
+    btn.textContent = '已复制';
+  } catch {
+    btn.textContent = '复制失败';
+  }
+  setTimeout(() => { btn.textContent = '复制'; }, 2000);
 });
 
 // -- 通道设置（BYOK） -----------------------------------------------------------
