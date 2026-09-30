@@ -6,6 +6,23 @@
 
 ---
 
+## 2026-09-30 · R25 优化：报告快照列——showPost 从 1 万行读降到 1 行（118 用例全绿）
+
+- **取证（代码级）**：`showPost` 每次执行 `SELECT id, wave, reaction FROM reactions`——
+  全城检查 1 万行的读与传，且是最热的读路径（每次查看/刷新/对比区回拉）。D1 按
+  rows_read 计费，免费档 5M 行/天 ≈ 500 次报告查看见底。
+- **做法**：迁移 0007 给 versions 加 `looks`/`reach` 两列；settleWave 用 `reached` 与
+  `plan.history` 就地组装两份字节，与"置 done"同批写入；showPost 双路径——有快照解码
+  （每波反应名单从 bytes × waveBytes 无损重建，reactions 一次不读），running 中与
+  迁移前旧版走既有逐行回退（实时语义不变，向后兼容）。
+- **一致性**：R7 地形缓存同一洞察（冻结后不变）；既有 worker 测试全部经由 showPost——
+  快照路径被传播层/地形/调用报告用例覆盖，回退路径被 running 中用例覆盖。另补断言：
+  快照的 looks 与 reach 到达集合一致。
+- **验证**：lint ✓；118/118；本地实测——R25 后的帖走快照、迁移前的旧版（looks NULL）
+  走回退路径照常出全量报告（reach 10000 / 4 波 / 地形）。
+- **收益口径**：结构论证（快照命中 = 0 行 reactions 读），1 万行 → 1 行。
+- 计划文档：`docs/superpowers/plans/2026-09-30-r25-report-snapshot.md`。
+
 ## 2026-09-30 · R24 前端：两版数字对照（118 用例不变）
 
 - **缺口**：差分卡给了"变好/变差 + 差分地图"，但两版头条数字（到达/停下/乐见/反感）

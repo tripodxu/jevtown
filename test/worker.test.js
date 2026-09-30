@@ -280,6 +280,13 @@ test('传播层：GET /api/post 带回逐人波次字节，逐波计数与 waves
   assert.deepEqual([...perWave.keys()].sort((a, b) => a - b), detail.waves.map((w) => w.index + 1), '出现过的波次号与 waves 一致');
   for (const wave of detail.waves) assert.equal(perWave.get(wave.index + 1), wave.size, `第 ${wave.index + 1} 波计数不符`);
   assert.ok([...reach].every((w) => w >= 0 && w <= 4), '波次字节在 0..4');
+
+  // R25 快照路径：收波时写进 versions 的 looks 必须与 reach 同口径（读路径已不再读 reactions）
+  const looks = decodeBytes(detail.looks);
+  assert.equal(looks.length, CROWD);
+  assert.equal([...looks].filter(Boolean).length, detail.counters.reach, 'looks 非零格数 = 到达人数');
+  assert.deepEqual([...looks.keys()].filter((id) => looks[id]), [...reach.keys()].filter((id) => reach[id]),
+    'looks 与 reach 的到达集合一致');
 });
 
 test('地形缓存：running 时逐批更新（不得喂旧缓存），冻结后重复读取一致', { timeout: 120_000 }, async () => {

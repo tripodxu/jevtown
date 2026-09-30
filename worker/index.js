@@ -14,7 +14,7 @@ import { drawReaction } from '../public/shared/draw.js';
 import { askQuestion, mergeSaid, listsOf } from '../public/shared/check.js';
 import { counters, segments, topSegments, voicesOf } from '../public/shared/summary.js';
 import { crowdTerrain } from '../public/shared/spatial.js';
-import { encodeBytes } from '../public/shared/bytes.js';
+import { encodeBytes, decodeBytes } from '../public/shared/bytes.js';
 import { personView } from '../public/shared/labels.js';
 import { pickProvider, PROVIDERS, ask as askJev } from '../public/shared/jev.js';
 import { createMockAsk } from '../public/shared/mock.js';
@@ -481,10 +481,25 @@ async function settleWave(env, post, id, v, request) {
     }
   }
   const said = mergeSaid(parts, missing);
+  // 报告快照（R25）：冻结的两份字节随"置 done"同批写入——读路径从 1 万行 reactions 降到 1 行。
+  // bytes 来自 reached（pid → reaction）；waveBytes 用 plan.history（波次 → 名单）回填，
+  // 只标记真正被判定到的人（批次失败的问过但没答，不算到达）。
+  const snapKeys = Object.keys(preset.reactions);
+  const snapBytes = new Uint8Array(CROWD);
+  const snapWave = new Uint8Array(CROWD);
+  for (const [pid, reaction] of reached) {
+    const index = snapKeys.indexOf(reaction);
+    snapBytes[pid] = index >= 0 ? index + 1 : 0;
+  }
+  for (const waveKey of Object.keys(plan.history)) {
+    for (const pid of plan.history[waveKey]) {
+      if (reached.has(pid)) snapWave[pid] = Number(waveKey) + 1;
+    }
+  }
   await env.DB.batch([
     // 收尾提问的花费也计入版本总账（batches 流水之外，versions.usd 是页面显示的口径）。
-    env.DB.prepare('UPDATE versions SET said = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
-      .bind(JSON.stringify(said), round4(askUsd), askTokens, id, v),
+    env.DB.prepare('UPDATE versions SET said = ?, looks = ?, reach = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
+      .bind(JSON.stringify(said), encodeBytes(snapBytes), encodeBytes(snapWave), round4(askUsd), askTokens, id, v),
     env.DB.prepare("UPDATE posts SET state = 'done' WHERE id = ? AND state = 'closing'").bind(id),
   ]);
   return json({ wave: waveInfo, travels: false, done: true, reach: reached.size, followUp: followUp && { asked: followUp.asked } });
@@ -546,22 +561,41 @@ async function showPost(id, env, url, request = null) {
 
   const people = crowdOf(post.pool);
   const plan = JSON.parse(version.plan ?? '{}');
-  // 反应流水、版本列表、调用报告互相独立：并行取，省两个 D1 往返（showPost 是最热的读路径）。
-  const [{ results: rows }, versions, report] = await Promise.all([
-    env.DB.prepare('SELECT id, wave, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, v).all(),
-    versionsOf(env.DB, id),
-    callReport(env.DB, id, v, version),
-  ]);
   const bytes = new Uint8Array(CROWD);
   // 传播层：reactions 表本来就有 wave 列，拼成"第几波看到"的字节（0 = 没看到）随报告带回。
   const waveBytes = new Uint8Array(CROWD);
   const byWave = new Map();
-  for (const row of rows) {
-    const index = keys.indexOf(row.reaction);
-    bytes[row.id] = index >= 0 ? index + 1 : 0;
-    waveBytes[row.id] = row.wave + 1;
-    if (!byWave.has(row.wave)) byWave.set(row.wave, []);
-    byWave.get(row.wave).push(row.reaction);
+  let versions;
+  let report;
+  if (version.looks) {
+    // 快照路径（R25）：冻结版报告的两份字节已在收波时写进 versions，
+    // 每波反应名单可从 bytes × waveBytes 无损重建——reactions 表一次都不用读。
+    bytes.set(decodeBytes(version.looks));
+    waveBytes.set(decodeBytes(version.reach ?? ''));
+    for (let pid = 0; pid < bytes.length; pid++) {
+      const wave = waveBytes[pid] - 1;
+      if (!bytes[pid] || wave < 0) continue;
+      if (!byWave.has(wave)) byWave.set(wave, []);
+      byWave.get(wave).push(keys[bytes[pid] - 1]);
+    }
+    versions = await versionsOf(env.DB, id);
+    report = await callReport(env.DB, id, v, version);
+  } else {
+    // 回退路径：running 中的版本（或迁移前的旧帖）没有快照，逐行现读。
+    const [{ results: rows }, versions_, report_] = await Promise.all([
+      env.DB.prepare('SELECT id, wave, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, v).all(),
+      versionsOf(env.DB, id),
+      callReport(env.DB, id, v, version),
+    ]);
+    for (const row of rows) {
+      const index = keys.indexOf(row.reaction);
+      bytes[row.id] = index >= 0 ? index + 1 : 0;
+      waveBytes[row.id] = row.wave + 1;
+      if (!byWave.has(row.wave)) byWave.set(row.wave, []);
+      byWave.get(row.wave).push(row.reaction);
+    }
+    versions = versions_;
+    report = report_;
   }
   const waves = Object.keys(plan.history ?? {})
     .sort((a, b) => a - b)
