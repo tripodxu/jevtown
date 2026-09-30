@@ -112,17 +112,8 @@ const addSpend = (db, { post, number = 1, stage, n = 0, usd = 0, tokens = 0, ms 
   )
     .bind(post, number, stage, n, round4(usd), Math.round(tokens), Math.round(ms), day);
 
-/** 全站今天已花掉多少（CROWD_DAILY_BUDGET_USD 的对手盘）。 */
-const spentToday = async (db, day) => {
-  const row = await db.prepare('SELECT COALESCE(SUM(usd), 0) AS usd FROM batches WHERE day = ?').bind(day).first();
-  return row?.usd ?? 0;
-};
-
-/** 全站日预算闸：超过 CROWD_DAILY_BUDGET_USD 就拒后续写操作（0 = 不限）。 */
-const overBudget = async (env) => {
-  const budget = Number(env.CROWD_DAILY_BUDGET_USD ?? 0);
-  return budget > 0 && (await spentToday(env.DB, today())) >= budget;
-};
+// R28：站点不提供站方 key——每 IP 每日限额与全站日预算两个闸整体退役
+//（它们保护的站方钱包不存在了；真实检查一律走访客自填的 BYOK key，无 key 即 mock）。
 
 /** 一条 post 某个版本的所有反应，作为 Map<personaId, reactionId>。 */
 const reactionsMap = async (db, id, number = 1) => {
@@ -167,15 +158,7 @@ async function runCheck(request, env) {
     : null;
   if (presetId === 'product' && !prices) return fail('product 需要 prices：至少两个正数的数组，如 [9,19,39,79]');
 
-  const ip = request.headers.get('CF-Connecting-IP') ?? 'local';
   const day = today();
-  const limit = Number(env.CROWD_DAILY_LIMIT ?? 0);
-  if (limit > 0) {
-    const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM posts WHERE ip = ? AND day = ?').bind(ip, day).first();
-    if ((row?.n ?? 0) >= limit) return fail('today’s checks are used up, come back tomorrow', 429);
-  }
-  if (await overBudget(env)) return fail('today’s budget is spent', 429);
-
   const provider = providerOf(env, request);
   const pool = 'zh';
   const { answers, usd, tokens, ms } = await provider.ask(openingRequest(presetId, text));
@@ -241,15 +224,7 @@ async function runVersion(request, env) {
   if (!post) return fail('no such post', 404);
   if (post.state === 'running') return fail('previous version is still running', 409);
 
-  // 与 runCheck 同一限额：新版本也是一次新检查。
-  const ip = request.headers.get('CF-Connecting-IP') ?? 'local';
   const day = today();
-  const limit = Number(env.CROWD_DAILY_LIMIT ?? 0);
-  if (limit > 0) {
-    const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM posts WHERE ip = ? AND day = ?').bind(ip, day).first();
-    if ((row?.n ?? 0) >= limit) return fail('today’s checks are used up, come back tomorrow', 429);
-  }
-  if (await overBudget(env)) return fail('today’s budget is spent', 429);
   if (!authorOk(request, post)) return fail('this post is not yours', 403);
 
   const row = await env.DB.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS number FROM versions WHERE post = ?').bind(id).first();
@@ -291,7 +266,6 @@ async function runBatch(url, request, env) {
   const post = await loadPost(env.DB, id);
   if (!post) return fail('no such post', 404);
   if (post.state !== 'running') return fail('the check is not running', 409);
-  if (await overBudget(env)) return fail('today’s budget is spent', 429);
   if (!authorOk(request, post)) return fail('this check is not yours', 403);
   const version = await loadVersion(env.DB, id, v);
   const plan = JSON.parse(version.plan);
@@ -371,7 +345,6 @@ async function closeWave(url, request, env) {
   const post = await loadPost(env.DB, id);
   if (!post) return fail('no such post', 404);
   if (post.state !== 'running') return fail('the check is not running', 409);
-  if (await overBudget(env)) return fail('today’s budget is spent', 429);
   if (!authorOk(request, post)) return fail('this check is not yours', 403);
 
   // 原子占位：同一检查的并发收波只有一个能把 running → closing，其余 409。
@@ -453,14 +426,8 @@ async function settleWave(env, post, id, v, request) {
   let askUsd = 0;
   let askTokens = 0;
   let askMs = 0;
-  const budget = Number(env.CROWD_DAILY_BUDGET_USD ?? 0);
-  const spent = budget > 0 && provider.name !== 'mock' && (await spentToday(env.DB, today())) >= budget;
   for (const { question, ids } of closing) {
     if (!ids.length) continue;
-    if (spent) {
-      for (const list of listsOf(question, presetId, ids, reactionOf)) missing[list] = 'budget';
-      continue;
-    }
     try {
       const { part, usd, tokens, ms } = await askQuestion(provider.ask, question, {
         presetId,

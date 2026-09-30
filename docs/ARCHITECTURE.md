@@ -22,7 +22,7 @@ D1（posts / versions / reactions / batches）
 |---|---|---|
 | `public/shared/` | ★ 三端共用引擎 | 上游 9 文件（MIT 最小改动）+ 本项目 6 个新文件 |
 | `public/` | 界面：发帖框首屏、四主题、报告渲染、图表、地图 | 无框架，原生 ESM |
-| `worker/index.js` | API + D1 + 限额 + 记账 + BYOK | 单文件，按路由函数组织 |
+| `worker/index.js` | API + D1 + 记账 + BYOK | 单文件，按路由函数组织 |
 | `migrations/` | D1 结构，0001–0005 | 只增不改 |
 | `scripts/check.js` | 终端检查，复用同一引擎 | 产出存 `output/checks/` |
 | `test/` | node:test，mock 通道 | 含 Worker 集成（unstable_dev） |
@@ -34,7 +34,7 @@ D1（posts / versions / reactions / batches）
 `public/shared/` 不 import 任何平台 API，靠注入的 `send`（或 `ask`）与决策模型通信，
 因此同一份代码可跑在：
 
-- **Worker**：`worker/index.js` 提供 `send`（带 BYOK 头、记账、限额）
+- **Worker**：`worker/index.js` 提供 `send`（带 BYOK 头、记账）
 - **浏览器**：`app.js` 通过本站 API 间接驱动，不直连 Jev
 - **Node 终端**：`scripts/check.js` 直连 provider，跑完整 `runCheck`
 
@@ -76,16 +76,16 @@ GET  /api/post/:id      报告与图谱的数据源（含调用报告与决策�
 - 决策样本（问句 + 概率分布）在 Worker 与共享引擎双路同构留存，供「Jev 的决策现场」展示。
 - 人群按 isolate 级缓存，同一文本重复检查不重算。
 
-## 限额与配置（wrangler.jsonc 明文 vars）
+## 配置（wrangler.jsonc 明文 vars）
 
 | 变量 | 现值 | 含义 |
 |---|---|---|
-| `CROWD_DAILY_LIMIT` | 20 | 每 IP 每日检查数 |
-| `CROWD_DAILY_BUDGET_USD` | 5 | 全站每日花费上限（0=不限） |
 | `CROWD_MAX_WAVES` | 4 | 文本最多传几波（1=仅第一波 600 人） |
 | `JEV_PROVIDER` | mock | mock / typesafe / openrouter；留空=有哪个 key 用哪个 |
 
-限额对 `/api/check` 与 `/api/version` 双路生效（一致性有测试守护，见 [TESTING.md](TESTING.md)）。
+站点不提供站方 key：**所有真实检查一律走访客自填的 BYOK key**（花自己的钱），无 key 即
+mock。曾经的每 IP 每日限额与全站日预算闸（R28 前）已整体退役——它们保护的站方钱包
+不存在了。
 
 ## 关键设计约束
 

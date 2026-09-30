@@ -141,55 +141,8 @@ test('blocked 帖的详情页：state=blocked 且没有计数与地图', async (
   assert.ok(detail.blocked.includes('insult'));
 });
 
-test('每日限额：/api/check 与 /api/version 都会被 429 拦下', async () => {
-  const limited = await startWorker({ CROWD_DAILY_LIMIT: '2' });
-  try {
-    // 共享 D1 里可能已有今天建的帖子：先数一数现状，再验证"超限必 429"。
-    const feed = await (await limited.fetch('/api/feed')).json();
-    const existing = feed.posts.length;
-    assert.ok(existing >= 2, `限额用例需要已有帖子做基数，现仅 ${existing}`);
 
-    const rejected = await postJSON(limited, '/api/check', { preset: 'post', text: '这条应该被每日限额拦住' });
-    assert.equal(rejected.status, 429);
 
-    // 已完成的帖子再发一版同样过不了限额门。
-    const done = feed.posts.find((post) => post.state === 'done');
-    const versionRejected = await postJSON(limited, '/api/version', { post: done.id, text: '限额下不许再发' });
-    assert.equal(versionRejected.status, 429);
-  } finally {
-    await limited.stop();
-  }
-});
-
-test('预算闸：当天已花超后，/api/batch 与 /api/wave 都被 429 拦下', async () => {
-  // 1. 用默认 worker（预算 0 = 不限）正常开一个局
-  const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '预算闸验证：一条普通帖子' })).json();
-  assert.equal(opening.state, 'running');
-
-  // 2. 起一个日预算 0.5 的 worker。探测行的插入与 worker 停止都收进 try/finally：
-  //    startWorker 抛异常时还没插过探测行，不会污染本地 D1。
-  const gated = await startWorker({ CROWD_DAILY_BUDGET_USD: '0.5' });
-  const day = new Date().toISOString().slice(0, 10);
-  const probe = `budgetprobe-${Date.now()}`;
-  try {
-    // 未花超：预算 0.5、当天已花 0 → 放行
-    const ok = await gated.fetch(`/api/batch?post=${opening.post}&v=1`, { headers: { 'x-jev-author': opening.author } });
-    assert.equal(ok.status, 200, `batch before spend=${ok.status}`);
-    // 直接往本地 D1 插一笔"今天已花 9.99"的探测流水
-    execSync(
-      `npx wrangler d1 execute jevtown --local --command "INSERT OR REPLACE INTO batches (post, number, stage, n, usd, tokens, day) VALUES ('${probe}', 1, 'opening', 0, 9.99, 0, '${day}')"`,
-      { stdio: 'pipe' },
-    );
-    // 已花超：batch 与 wave 都应 429
-    const batch = await gated.fetch(`/api/batch?post=${opening.post}&v=1`);
-    assert.equal(batch.status, 429, `batch=${batch.status}`);
-    const wave = await gated.fetch(`/api/wave?post=${opening.post}&v=1`, { method: 'POST' });
-    assert.equal(wave.status, 429, `wave=${wave.status}`);
-  } finally {
-    await gated?.stop();
-    execSync(`npx wrangler d1 execute jevtown --local --command "DELETE FROM batches WHERE post = '${probe}'"`, { stdio: 'pipe' });
-  }
-});
 
 test('作者校验：没有 x-jev-author 头，batch/wave/version 全部 403；带头放行', async () => {
   const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '作者校验验证：一条普通帖子' })).json();
@@ -321,3 +274,5 @@ test('版本深链：?v= 指到不存在的版本返回 404（不 500）', { tim
   const latest = await worker.fetch(`/api/post/${opening.post}`);
   assert.equal(latest.status, 200, '不带 v 仍取最新版');
 });
+
+
