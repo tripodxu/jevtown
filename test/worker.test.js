@@ -312,3 +312,12 @@ test('地形缓存：running 时逐批更新（不得喂旧缓存），冻结后
   assert.deepEqual(t3.hot, t4.hot);
   assert.deepEqual(t3.cold, t4.cold);
 });
+
+test('版本深链：?v= 指到不存在的版本返回 404（不 500）', { timeout: 120_000 }, async () => {
+  const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '版本深链验证：一条普通帖子' })).json();
+  await runToDone(worker, opening.post, opening.version, authorOf(opening));
+  const missing = await worker.fetch(`/api/post/${opening.post}?v=999`);
+  assert.equal(missing.status, 404);
+  const latest = await worker.fetch(`/api/post/${opening.post}`);
+  assert.equal(latest.status, 200, '不带 v 仍取最新版');
+});

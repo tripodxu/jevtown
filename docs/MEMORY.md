@@ -6,6 +6,19 @@
 
 ---
 
+## 2026-09-30 · R26 创意：版本深链 + 修 v 越界 500（118 → 119 用例全绿）
+
+- **点子**：R6 的报告深链只能看最新版——"第 1 版当时什么样"无法分享。补全：
+  `?post=<id>&v=<n>` 直开指定版本，深链/回退键都认 v；多版本帖（R24 的）实测
+  `?v=1` 打开的 reach=600（第 1 版）而非 10000。
+- **顺带修查出的潜在 bug**：`?v=999` 此前 **500**——`loadVersion` 对不存在的版本返回
+  null，showPost 未判空直接解引用。改 404（测试钉住）。
+- **实现**：`openPost(id, versionHint)`——hint 请求 `?v=` 并把 `current.version` 定死
+  （对比区的"改一版再发"基于 current.version，深链视角下行为一致）；载入/popstate 读
+  `post` + `v` 双参数；feed 点击仍指最新版。
+- **验证**：lint ✓；119/119（+1 404 用例）；E2E 三断言（v1 直开/URL 保持/越界报错不崩）。
+- 计划文档：`docs/superpowers/plans/2026-09-30-r26-version-deeplink.md`。
+
 ## 2026-09-30 · R25 优化：报告快照列——showPost 从 1 万行读降到 1 行（118 用例全绿）
 
 - **取证（代码级）**：`showPost` 每次执行 `SELECT id, wave, reaction FROM reactions`——

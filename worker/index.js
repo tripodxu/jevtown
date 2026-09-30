@@ -548,6 +548,7 @@ async function showPost(id, env, url, request = null) {
     v = row?.number ?? 1;
   }
   const version = await loadVersion(env.DB, id, v);
+  if (!version) return fail('no such version', 404);
   const presetId = post.preset;
   const preset = PRESETS[presetId];
   const keys = Object.keys(preset.reactions);

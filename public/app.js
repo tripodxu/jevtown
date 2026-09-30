@@ -362,11 +362,12 @@ $('feed').addEventListener('click', (event) => {
   openPost(link.dataset.post);
 });
 
-// 回退/前进：URL 带 ?post= 就开对应报告，没有就收起报告回首页
+// 回退/前进：URL 带 ?post= 就开对应报告（?v= 指定版本），没有就收起报告回首页
 window.addEventListener('popstate', () => {
-  const id = new URLSearchParams(location.search).get('post');
+  const params = new URLSearchParams(location.search);
+  const id = params.get('post');
   if (id) {
-    openPost(id);
+    openPost(id, Number(params.get('v')) || null);
     return;
   }
   $('result').replaceChildren();
@@ -376,7 +377,7 @@ window.addEventListener('popstate', () => {
   current.post = null;
 });
 
-async function openPost(id) {
+async function openPost(id, versionHint = null) {
   status('正在打开报告……', 0.15);
   announce('正在打开报告');
   // 骨架过渡：匹配报告的布局形状（标题行 + 两行文字 + 一大块），比空白和转圈都诚实
@@ -384,10 +385,10 @@ async function openPost(id) {
   result.hidden = false;
   result.innerHTML = '<div class="skeleton" aria-hidden="true"><div class="sk sk-line" style="width:34%"></div><div class="sk sk-line" style="width:88%"></div><div class="sk sk-line" style="width:72%"></div><div class="sk sk-block"></div><div class="sk sk-line" style="width:60%"></div></div>';
   try {
-    const view = await getJSON(`/api/post/${id}`);
+    const view = await getJSON(`/api/post/${id}${versionHint ? `?v=${versionHint}` : ''}`);
     current.post = id;
     currentAuthor = localStorage.getItem(`jevtown.author.${id}`);
-    current.version = view.versions?.at(-1)?.number ?? 1;
+    current.version = versionHint ?? view.versions?.at(-1)?.number ?? 1;
     showResult(view);
   } catch (error) {
     result.hidden = true; // 骨架不留在原地装样子
@@ -453,6 +454,7 @@ refreshModeChip();
 initThemeSwitcher();
 loadFeed();
 
-// 深链：带着 ?post=<id> 打开页面时直接呈现那份报告（feed 链接与分享链接都落在这里）
-const wanted = new URLSearchParams(location.search).get('post');
-if (wanted) openPost(wanted);
+// 深链：带着 ?post=<id>（可选 &v=<版本号>）打开页面时直接呈现那份报告
+const params = new URLSearchParams(location.search);
+const wanted = params.get('post');
+if (wanted) openPost(wanted, Number(params.get('v')) || null);
