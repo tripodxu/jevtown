@@ -15,6 +15,7 @@
 | `grid.js` | 100×100 响应式地图（canvas，悬停档案）：`drawGrid` 全量重画、`paintDelta` 按字节快照增量补画、`drawReach` 传播层 |
 | `tally.js` | 实时监控的「已判定」快照：每批增量折叠出 judged/glad/sorry（纯函数，Node 可单测） |
 | `avatar.js` | 人格头像：hash32 驱动的 5×5 镜像 identicon，颜色只取主题令牌（R17，纯函数） |
+| `sharecard.js` | 分享卡片：报告读数 + 地图快照合成 1200×630 PNG，命令式 canvas（R20） |
 | `theme.js` | 主题切换（localStorage 持久化） |
 | `showcase.js` | 首页示例回放（读 `public/examples/*.json`，经 `shared/replay.js`） |
 

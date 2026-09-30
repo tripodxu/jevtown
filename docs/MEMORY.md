@@ -6,6 +6,22 @@
 
 ---
 
+## 2026-09-30 · R20 创意：分享卡片（112 → 115 用例全绿）
+
+- **点子**（路线图 Step 5「分享卡片」提前落地）：结果动作区「存为图片」——报告读数 +
+  地图快照合成 1200×630 PNG 下载。纯浏览器合成（`canvas.toBlob`），数据全是既有
+  payload 字段，零新增调用。
+- **实现**：新文件 `public/sharecard.js`（命令式 canvas，与 charts.js 的 SVG 字符串
+  路线不同源）；颜色取主题令牌 computed 值（卡片随当前主题）；地图快照
+  `drawImage(报告画布)` 圆角裁切；KPI 用等宽字、乐见绿/反感红取数据墨水。
+  `app.js` 存 `lastView` 供按钮取数。
+- **自查两处**：① 地形行初版内联了措辞映射，造出"这次反应反应零散"的病句——改用
+  labels.js 的 `TERRAIN_VERDICT_ZH` 单源（中文单源规则不是摆设）；② E2E 的 async
+  evaluate 忘了 `awaitPromise: true`，返回 `{}` 差点误判失败。
+- **验证**：lint ✓ 41 文件；115/115（+3 canvas 桩件用例：快照恰一次/KPI 上画面/
+  无地形不硬造）；E2E blob 126KB + 卡片视觉（截图）+ 控制台零错误。
+- 计划文档：`docs/superpowers/plans/2026-09-30-r20-share-card.md`。
+
 ## 2026-09-30 · R19 优化：人格打包管线（111 → 112 用例全绿，路线图 Step 4 项落地）
 
 - **问题**：isolate 首个请求要现场算 1 万人格（Node 实测 130–142ms CPU），免费档单请求

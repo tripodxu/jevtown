@@ -7,11 +7,14 @@ import { PRESETS } from './shared/presets.js';
 import { drawGrid, paintDelta } from './grid.js';
 import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
 import { newTally, foldBatch } from './tally.js';
+import { renderShareCard } from './sharecard.js';
 import { CROWD } from './shared/personas.js';
 
 const $ = (id) => document.getElementById(id);
 // 当前正在做的检查：哪个 post 的哪个版本。
 const current = { post: null, version: 1 };
+// 最近一次渲染的报告 payload（分享卡片的数据源）
+let lastView = null;
 
 // BYOK：访客自填的 Jev key（localStorage），随每个 API 请求头发给 Worker；mock 通道不发。
 const byok = () => {
@@ -274,6 +277,7 @@ $('form').addEventListener('submit', async (event) => {
 });
 
 function showResult(view) {
+  lastView = view;
   renderCheck($('result'), view);
   $('resultActions').hidden = false;
   // 焦点随视线走：键盘/屏幕阅读器从报告标题继续，而不是留在触发处
@@ -306,6 +310,19 @@ function showResult(view) {
 }
 
 // -- 改一版再发 ------------------------------------------------------------------
+
+// 分享卡片：报告读数 + 地图快照合成 PNG 下载（纯浏览器合成，数据是 lastView 的既有字段）
+$('saveCard').addEventListener('click', async () => {
+  if (!lastView) return;
+  const mapCanvas = document.querySelector('#result canvas.grid');
+  const card = renderShareCard(lastView, mapCanvas);
+  const blob = await new Promise((resolve) => card.toBlob(resolve, 'image/png'));
+  if (!blob) return;
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement('a'), { href: url, download: `jevtown-${lastView.post.id}.png` });
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+});
 
 $('revise').addEventListener('click', async () => {
   if (!current.post) return;
