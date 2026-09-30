@@ -2,6 +2,7 @@
 // 输入形状 = GET /api/post/:v 的 payload（replay.js 能从存档 JSON 拼出同一形状）。
 import { PRESETS, LOOKS, lookOf } from './shared/presets.js';
 import { drawGrid, attachTooltip, drawDelta, drawReach, reachInk } from './grid.js';
+import { avatarSvg } from './avatar.js';
 import {
   REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh,
 } from './shared/labels.js';
@@ -286,9 +287,11 @@ function followUpView(result, width) {
 
 function voicesView(result) {
   if (!result.voices?.length) return '';
+  const pool = result.post.pool ?? 'zh';
   const cards = result.voices.map((voice) =>
-    `<div class="voice"><div class="who">${esc(voice.who.name)}，${voice.who.age}岁 · ${esc(voice.who.job ?? '')} · ${esc(voice.who.city)}</div>` +
-    `<div class="what">${esc(REACTIONS_ZH[voice.reaction] ?? voice.reaction)}${voice.who.temper ? ` · ${esc(voice.who.temper)}` : ''}</div></div>`,
+    `<div class="voice">${avatarSvg(pool, voice.id, { size: 36 })}` +
+    `<div class="v-body"><div class="who">${esc(voice.who.name)}，${voice.who.age}岁 · ${esc(voice.who.job ?? '')} · ${esc(voice.who.city)}</div>` +
+    `<div class="what">${esc(REACTIONS_ZH[voice.reaction] ?? voice.reaction)}${voice.who.temper ? ` · ${esc(voice.who.temper)}` : ''}</div></div></div>`,
   );
   const collapsed = cards.length > 24 ? ' collapsed' : '';
   const more = cards.length > 24

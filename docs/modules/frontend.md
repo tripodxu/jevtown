@@ -14,6 +14,7 @@
 | `charts.js` | 漏斗 / 折线 / 堆叠 / 需求曲线 / 报告条形图 / 切片热力图（canvas→SVG 混合：折线面积用 SVG，漏斗条形用 DOM） |
 | `grid.js` | 100×100 响应式地图（canvas，悬停档案）：`drawGrid` 全量重画、`paintDelta` 按字节快照增量补画、`drawReach` 传播层 |
 | `tally.js` | 实时监控的「已判定」快照：每批增量折叠出 judged/glad/sorry（纯函数，Node 可单测） |
+| `avatar.js` | 人格头像：hash32 驱动的 5×5 镜像 identicon，颜色只取主题令牌（R17，纯函数） |
 | `theme.js` | 主题切换（localStorage 持久化） |
 | `showcase.js` | 首页示例回放（读 `public/examples/*.json`，经 `shared/replay.js`） |
 
@@ -55,6 +56,14 @@ app.js  fetch /api/post/:id
   t 下限 0.58 是复算出来的：四主题深底板全部 ≥3:1（0.55 只有 2.99），别调回去。
 - 传播层**关悬停档案**（格子的语义是波次不是反应，档案里没有"第几波"可说）：
   `attachTooltip` 认 `canvas.dataset.tipOff === '1'`；`paintDelta` 碰传播层画布直接不动。
+
+## 人格头像（R17 起）
+
+- `avatar.js` 的 `avatarSvg(pool, id, { size })`：hash32(pool, id) 作 LCG 种子走出位流，
+  左 3 列生成、右 2 列**镜像**（对称才像脸）；格子 = `--accent` 浓淡（opacity 0.35–0.89），
+  底 = `--card-2`，**没有任何硬编码色**，四主题自动跟随。确定性：同一 id 永远同一张脸。
+- 消费方：人格声音卡（flex 布局 + .v-body）与地图悬停档案（tooltip 首行，inline）。
+- `pool` 随 `base.post.pool` 下发（R17 的加法契约变更：Worker showPost 与 replay.js 都带）。
 
 ## 报告里的「每一波的人都是什么反应」（R14 起 · 每波构成）
 

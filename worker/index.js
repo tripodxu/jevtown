@@ -537,7 +537,7 @@ async function showPost(id, env, url, request = null) {
   const preset = PRESETS[presetId];
   const keys = Object.keys(preset.reactions);
   const base = {
-    post: { id: post.id, preset: presetId, text: post.text, state: post.state, created_at: post.created_at },
+    post: { id: post.id, preset: presetId, text: post.text, state: post.state, created_at: post.created_at, pool: post.pool },
     checks: JSON.parse(version.checks ?? '{}'),
     unlisted: JSON.parse(version.unlisted ?? '[]'),
     blocked: JSON.parse(version.blocked ?? '[]'),

@@ -14,7 +14,7 @@ export function replayToView(saved) {
   const people = crowd(saved.pool ?? 'zh');
   const all = segments(presetId, keys, bytes, people);
   return {
-    post: { id: saved.versionId, preset: presetId, text: saved.text, state: 'done' },
+    post: { id: saved.versionId, preset: presetId, text: saved.text, state: 'done', pool: saved.pool ?? 'zh' },
     counters: counters(presetId, keys, bytes),
     waves: saved.waves,
     looks: encodeBytes(bytes),

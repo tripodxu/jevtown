@@ -8,6 +8,7 @@ import { LOOKS, lookOf, PRESETS } from './shared/presets.js';
 import { persona } from './shared/personas.js';
 import { INTEREST, JOB, TEMPER, BUDGET } from './shared/vocab.js';
 import { REACTIONS_ZH } from './shared/labels.js';
+import { avatarSvg } from './avatar.js';
 
 const CELL = 4;
 const GRID = 100;
@@ -176,7 +177,7 @@ export function attachTooltip(canvas, bytes, presetId) {
     const byte = bytes[id];
     const reaction = byte ? REACTIONS_ZH[keys[byte - 1]] ?? keys[byte - 1] : '没看到这条';
     tooltip.innerHTML =
-      `<b>${who.name.zh}</b>，${who.age}岁，${JOB[who.job]?.zh ?? who.job}，${who.city.zh}<br>` +
+      `${avatarSvg('zh', id, { size: 32 })}<b>${who.name.zh}</b>，${who.age}岁，${JOB[who.job]?.zh ?? who.job}，${who.city.zh}<br>` +
       `兴趣：${who.interests.map((i) => INTEREST[i]?.zh ?? i).join('、')}<br>` +
       `${TEMPER[who.temper]?.zh} · ${BUDGET[who.budget]?.zh}<br>` +
       `Jev 判定：<b>${reaction}</b>`;
