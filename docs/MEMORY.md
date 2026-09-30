@@ -6,6 +6,20 @@
 
 ---
 
+## 2026-09-30 · R18 前端：实时图表悬停读数（111 用例不变）
+
+- **缺口**：三张监控图只有当前值+峰值，回看"第 30 批时吞吐多少"没有入口——数据就在
+  `live.tput/msSeries/shares` 里。**svg 每批 innerHTML 重建 ⇒ 监听必须挂常驻容器**
+  （事件委托），x 反算样本序号后插临时竖参考线 + `.chart-read` 读数；leave 清除；
+  读数批次号 = 绝对批次号（图表只画最近窗口，roll 48 / share 60）。
+- **抓到的 bug（自测抓的）**：`CHART_PADS[kind === 'ms' ? 'roll' : kind]` —— kind='tput'
+  查不到键得 undefined，吞吐图悬停静默抛 TypeError；占比图先测通了所以有假象。
+  修法：折线两图共用 'roll' 留白，`CHART_PADS` 从 charts.js 导出（改 pad 同步它）。
+  另一处自查：局部变量 `const window` 遮蔽全局，改 `win`。
+- **验证**：lint ✓；111/111；E2E 三图读数（第 16 批 · 489 人/s / 第 10 批 · 661ms /
+  第 23 批 · 乐见 17% · 反感 4%）+ leave 清除 + 异常清零 + 375px 零溢出。
+- 计划文档：`docs/superpowers/plans/2026-09-30-r18-chart-hover.md`。
+
 ## 2026-09-30 · R17 创意：程序化人格头像（108 → 111 用例全绿）
 
 - **点子**：一万个居民各有一张确定性的"脸"——`hash32(pool, id)` 作 LCG 种子走出位流，

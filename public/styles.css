@@ -645,10 +645,24 @@ canvas.grid {
 /* 运行心电图 */
 .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 720px) { .charts-row { grid-template-columns: 1fr; } }
-.mini { border: 1px solid var(--hairline); border-radius: 12px; background: var(--card-2); padding: 10px 12px 6px; }
+.mini { position: relative; border: 1px solid var(--hairline); border-radius: 12px; background: var(--card-2); padding: 10px 12px 6px; }
+#chartShare { position: relative; }
 .mini-head { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; margin-bottom: 2px; }
 .chart.ekg .ekg-now { font-family: var(--font-mono); font-size: 15px; font-weight: 600; }
 .chart-empty { color: var(--muted); font-size: 12px; padding: 30px 0; text-align: center; }
+
+/* 悬停读数（R18）：右上角小读数 + svg 内的竖参考线 */
+.chart-read {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.hover-line { stroke: var(--accent); stroke-width: 1; opacity: 0.55; }
 
 /* 实时监控 */
 .monitor-wrap { max-height: 300px; overflow: auto; border: 1px solid var(--hairline); border-radius: 10px; padding: 4px; }

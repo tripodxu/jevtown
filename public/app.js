@@ -5,7 +5,7 @@ import { initThemeSwitcher } from './theme.js';
 import { BLOCKED_ZH, presetNoun as PRESET_NOUN_OF } from './shared/labels.js';
 import { PRESETS } from './shared/presets.js';
 import { drawGrid, paintDelta } from './grid.js';
-import { fmtMs, rollingChart, shareChart } from './charts.js';
+import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
 import { newTally, foldBatch } from './tally.js';
 import { CROWD } from './shared/personas.js';
 
@@ -106,6 +106,65 @@ function updateCharts() {
   $('chartMs').innerHTML = rollingChart(live.msSeries, { width: narrow, color: 'var(--map-yellow)', unit: 'ms', format: (v) => Math.round(v) });
   $('chartShare').innerHTML = shareChart(live.shares, { width: wide });
 }
+
+// -- 图表悬停读数：容器常驻（svg 每批重建），委托挂容器上不丢 -------------------
+// offsetX 不用 event.offsetX（target 可能是 svg 内部元素），一律按 svg 的 rect 换算；
+// 图表只画最近一个窗口（roll 48 / share 60），读数标注的是"第 N 批"的绝对批次号。
+
+const hoverLine = (svg, x) => {
+  svg?.querySelector('.hover-line')?.remove();
+  if (x == null || !svg) return;
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', x);
+  line.setAttribute('x2', x);
+  line.setAttribute('y1', '0');
+  line.setAttribute('y2', '100%');
+  line.setAttribute('class', 'hover-line');
+  svg.append(line);
+};
+
+const hoverReadout = (host, text) => {
+  let el = host.querySelector('.chart-read');
+  if (!text) {
+    el?.remove();
+    return;
+  }
+  if (!el) {
+    el = Object.assign(document.createElement('div'), { className: 'chart-read' });
+    host.append(el);
+  }
+  el.textContent = text;
+};
+
+function wireChartHover(host, kind, readoutOf) {
+  host.addEventListener('pointermove', (event) => {
+    if (!live) return;
+    const svg = host.querySelector('svg[data-chart]');
+    if (!svg) return;
+    const samples = kind === 'share' ? live.shares : kind === 'tput' ? live.tput : live.msSeries;
+    const win = kind === 'share' ? 60 : 48;
+    const data = samples.slice(-win);
+    if (data.length < 2) return;
+    const pad = CHART_PADS[kind === 'share' ? 'share' : 'roll']; // 两张折线图共用 roll 的留白
+    const rect = svg.getBoundingClientRect();
+    const innerW = rect.width - pad.l - pad.r;
+    const frac = (event.clientX - rect.left - pad.l) / innerW;
+    if (frac < 0 || frac > 1) return; // 出了绘图区就不显示读数
+    const i = Math.round(frac * (data.length - 1));
+    const batchNo = samples.length - data.length + i + 1;
+    hoverLine(svg, (pad.l + (i / (data.length - 1)) * innerW).toFixed(1));
+    hoverReadout(host, readoutOf(data[i], batchNo));
+  });
+  host.addEventListener('pointerleave', () => {
+    hoverLine(host.querySelector('svg[data-chart]'), null);
+    hoverReadout(host, '');
+  });
+}
+
+wireChartHover($('chartTput'), 'tput', (v, n) => `第 ${n} 批 · ${Math.round(v)} 人/s`);
+wireChartHover($('chartMs'), 'ms', (v, n) => `第 ${n} 批 · ${Math.round(v)}ms`);
+wireChartHover($('chartShare'), 'share', (v, n) =>
+  v.judged ? `第 ${n} 批 · 乐见 ${Math.round((v.glad / v.judged) * 100)}% · 反感 ${Math.round((v.sorry / v.judged) * 100)}%` : `第 ${n} 批`);
 
 function monitorRow(cells, cls = '') {
   const tr = document.createElement('tr');

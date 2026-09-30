@@ -129,6 +129,10 @@ app.js  fetch /api/post/:id
 
 ## 交互细节（R6 起）
 
+- **实时图表悬停读数**（R18）：三张监控图支持 hover——容器级 pointermove 委托（**svg
+  每批 innerHTML 重建，监听必须挂常驻容器**），x 反算样本序号后插临时竖参考线 +
+  `.chart-read` 右上读数；换算参数 `CHART_PADS` 由 charts.js 导出（改 pad 同步它）。
+  图表只画最近窗口（roll 48 / share 60），读数的批次号是绝对序号。
 - **地图悬停档案**（`grid.js` 的 `attachTooltip`）：悬停走 `pointermove`（`pointerType === 'touch'`
   的拖动不算悬停），触摸屏点按走 `pointerdown`——点一下出档案，同格再点收起。
 - **tooltip 定位**必须过 `clampTip(x, y, w, h, vw, vh)`（纯函数，有单测）：默认光标右下，

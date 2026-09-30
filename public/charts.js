@@ -5,6 +5,12 @@ import { LOOKS, lookOf } from './shared/presets.js';
 
 const esc = (value) => String(value).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
+/** 悬停读数的换算参数（app.js 的容器委托用；改 pad 记得同步这里）。 */
+export const CHART_PADS = {
+  roll: { l: 10, r: 54 },
+  share: { l: 10, r: 120 },
+};
+
 /** 情绪轨迹折线（SVG）。points: 数字数组，x 即序号。 */
 export function moodLine(points, { width = 560, height = 130 } = {}) {
   if (!points.length) return '';
@@ -147,7 +153,7 @@ export function shareChart(samples, { width = 560, height = 150, window: win = 6
     <text x="${width - pad.r + 8}" y="${pad.t + 74}" class="chart-axis">覆盖 ${reach.toLocaleString()} 人</text>`;
   const labels = `<text x="${x(0).toFixed(1)}" y="${height - 6}" class="chart-axis">开始</text>
     <text x="${x(data.length - 1).toFixed(1)}" y="${height - 6}" text-anchor="end" class="chart-axis">现在</text>`;
-  return `<svg class="chart ekg" viewBox="0 0 ${width} ${height}" role="img" aria-label="态度占比随时间发展：乐见、中性、反感各占已判定人数的比例">
+  return `<svg class="chart ekg" data-chart="share" viewBox="0 0 ${width} ${height}" role="img" aria-label="态度占比随时间发展：乐见、中性、反感各占已判定人数的比例">
     <path d="${band(neutralTopOf, sorryTopOf)}" fill="var(--map-blue)" opacity="0.28" />
     <path d="${band(sorryTopOf, gladOf)}" fill="var(--map-red)" opacity="0.5" />
     <path d="${band(gladOf, () => 0)}" fill="var(--map-green)" opacity="0.5" />
@@ -173,7 +179,7 @@ export function rollingChart(samples, { width = 420, height = 110, window: win =
     const gy = (pad.t + f * innerH).toFixed(1);
     return `<line x1="${pad.l}" y1="${gy}" x2="${pad.l + innerW}" y2="${gy}" class="chart-zero" opacity="0.45" />`;
   }).join('');
-  return `<svg class="chart ekg" viewBox="0 0 ${width} ${height}" role="img" aria-label="滚动监控曲线，当前 ${format(last)}${unit}">
+  return `<svg class="chart ekg" data-chart="roll" viewBox="0 0 ${width} ${height}" role="img" aria-label="滚动监控曲线，当前 ${format(last)}${unit}">
     ${grid}
     <path d="${area}" fill="${color}" opacity="0.13" />
     <path d="${pts}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" />
