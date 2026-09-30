@@ -802,6 +802,24 @@ canvas.grid {
 .delta-legend { min-width: 0; }
 canvas.grid.diff { cursor: default; }
 
+/* 两版头条数字对照（R24）：old → new 一行一个，差值按语义着色 */
+.delta-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 18px;
+  background: var(--inset);
+  border-radius: var(--r-ctrl);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.dkpi { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.dkpi-label { color: var(--muted); min-width: 34px; }
+.dkpi-nums { font-family: var(--font-mono); font-size: 12.5px; }
+.dkpi-diff { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.dkpi-diff.ok { color: var(--ok); }
+.dkpi-diff.bad { color: var(--bad); }
+
 /* 追问与人声 */
 .voices { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
 

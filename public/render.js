@@ -443,6 +443,7 @@ export function renderDelta(el, after, before) {
   ].filter(Boolean).join('；');
   el.innerHTML = `<h3>两版之差</h3>
     <div class="delta-read">
+      ${deltaKpis(before.counters, after.counters)}
       <div class="stats">
         ${stat(d.up.toLocaleString(), '变好的人')}
         ${stat(d.down.toLocaleString(), '变差的人')}
@@ -455,6 +456,30 @@ export function renderDelta(el, after, before) {
     <div class="map-bar"><span class="hint">差分图：绿=变好，红=变差，颜色越满变化越大；底色=两版都没排到或没有变化。</span></div>
     <div class="map-wrap"><canvas class="grid diff" role="img" aria-label="差分地图：这一版相对上一版，哪些人变好、哪些人变差"></canvas><div class="legend delta-legend">${deltaLegend()}</div></div>`;
   drawDelta(el.querySelector('canvas.diff'), d.codes);
+}
+
+/**
+ * 两版头条数字对照（R24）：old → new 一行一个，差值按语义着色
+ * （乐见↑=好、停下↑=好、反感↑=坏、到达=中性——数据墨水之外的语义色用 --ok/--bad 令牌）。
+ */
+function deltaKpis(before, after) {
+  const rows = [
+    ['reach', '到达', 0],
+    ['stopped', '停下', 1],
+    ['glad', '乐见', 1],
+    ['sorry', '反感', -1],
+  ];
+  const items = rows.map(([key, label, goodWhenUp]) => {
+    const oldV = before?.[key] ?? 0;
+    const newV = after?.[key] ?? 0;
+    const diff = newV - oldV;
+    const tone = diff === 0 || goodWhenUp === 0 ? '' : (diff > 0) === (goodWhenUp === 1) ? 'ok' : 'bad';
+    const diffText = diff === 0 ? '持平' : `${diff > 0 ? '+' : '−'}${Math.abs(diff).toLocaleString()}`;
+    return `<div class="dkpi"><span class="dkpi-label">${label}</span>` +
+      `<span class="dkpi-nums">${oldV.toLocaleString()} → ${newV.toLocaleString()}</span>` +
+      `<span class="dkpi-diff ${tone}">${diffText}</span></div>`;
+  });
+  return `<div class="delta-kpis">${items.join('')}</div>`;
 }
 
 /** 差分图例：两档幅度 × 两个方向（与 drawDelta 的 inks 同色，半档 = 墨水与底板各半）。 */
