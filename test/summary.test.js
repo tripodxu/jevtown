@@ -3,9 +3,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { crowd, CROWD } from '../public/shared/personas.js';
-import { segments, minSegment, sliceHeatmap } from '../public/shared/summary.js';
+import { segments, minSegment, sliceHeatmap, waveMix } from '../public/shared/summary.js';
 import { PRESETS, NOT_SHOWN } from '../public/shared/presets.js';
 import { INTEREST_ROW_ZH } from '../public/shared/vocab.js';
+import { REACTIONS_ZH } from '../public/shared/labels.js';
 
 const SEGMENTS = {
   interest: (who) => who.interests,
@@ -185,4 +186,50 @@ test('sliceHeatmap：最小样本门——判定不足 25 人的格子不下结�
   assert.equal(games.share, null, '不足 25 人不给占比');
   assert.equal(data.rows[1].cells[0].share, null, '零判定的街区同样不下结论');
   assert.equal(data.cityShare, 1, '全城口径按已判定算');
+});
+
+// -- 每波反应构成（waveMix）：looks × reach 交叉计数，看传播稀释
+
+test('waveMix：交叉计数——Σ段=波大小、Σ波=判定数', () => {
+  const keys = keysOf('post');
+  const liked = keys.indexOf('liked') + 1;
+  const bytes = new Uint8Array(CROWD).fill(liked); // 全城都判成 liked
+  const reach = new Uint8Array(CROWD);
+  const people2 = crowd('zh');
+  for (const who of people2) {
+    if (who.id < 600) reach[who.id] = 1;
+    else if (who.id < 2100) reach[who.id] = 2;
+  }
+  const data = waveMix('post', keys, bytes, reach);
+  assert.equal(data.total, 2100);
+  assert.deepEqual(data.waves.map((w) => w.size), [600, 1500]);
+  assert.equal(data.waves[0].mix.length, 1, '单一反应只有一段');
+  assert.deepEqual([data.waves[0].mix[0].count, data.waves[0].mix[0].share], [600, 1]);
+  assert.equal(data.waves[0].mix[0].zh, REACTIONS_ZH.liked, '中文标签来自 labels.js 单源');
+  // 没到达的人不进任何波
+  assert.ok(data.waves.every((w) => w.wave >= 1));
+});
+
+test('waveMix：反应序按全城次数降序，各波同序跨波可比', () => {
+  const keys = keysOf('post');
+  const liked = keys.indexOf('liked') + 1;
+  const disliked = keys.indexOf('disliked') + 1;
+  const scrolled = keys.indexOf('scrolled_past') + 1;
+  const bytes = new Uint8Array(CROWD);
+  const reach = new Uint8Array(CROWD);
+  const people2 = crowd('zh');
+  for (const who of people2) {
+    if (who.id >= 2100) continue;
+    reach[who.id] = who.id < 600 ? 1 : 2;
+    // 第 1 波全 liked；第 2 波 2/3 scrolled、1/3 liked → 全城 liked(900) > scrolled(1000)? 算给它：scrolled 1000、liked 1100
+    bytes[who.id] = who.id < 600 ? liked : who.id % 3 === 0 ? disliked : who.id % 2 === 0 ? scrolled : liked;
+  }
+  const data = waveMix('post', keys, bytes, reach);
+  const wave2 = data.waves.find((w) => w.wave === 2);
+  const likedCount = wave2.mix.find((m) => m.reaction === 'liked')?.count ?? 0;
+  const scrolledCount = wave2.mix.find((m) => m.reaction === 'scrolled_past')?.count ?? 0;
+  assert.ok(scrolledCount > likedCount ? wave2.mix[0].reaction === 'scrolled_past' : wave2.mix[0].reaction === 'liked',
+    '段序必须跟全城次数走，而不是每波自己排');
+  // 计数守恒
+  assert.equal(wave2.mix.reduce((sum, m) => sum + m.count, 0), 1500);
 });

@@ -1,6 +1,7 @@
 // 轻量图谱：无依赖，返回 HTML/SVG 字符串，由 render.js 组装进报告页。
 // 折线/面积用 SVG（清晰、可缩放），漏斗与条形用 DOM（复用主题令牌与等宽数字）。
 import { GLAD_ENOUGH } from './shared/feed.js';
+import { LOOKS, lookOf } from './shared/presets.js';
 
 const esc = (value) => String(value).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
@@ -56,9 +57,30 @@ export function demandChart(steps, { width = 560, height = 140 } = {}) {
   </svg>`;
 }
 
+/**
+ * 每波反应构成（DOM 堆叠条）：一根条 = 一波，段色 = LOOKS 反应墨水（与地图图例同源）。
+ * 这里用类别色是语义正确的——它就是"什么反应"，不是量表（区别于传播层的单色渐满）。
+ * mix 来自 summary.js 的 waveMix（各波同序）；段标题承载精确计数，窄屏由 .seg 家族规则兜底。
+ */
+export function waveMixChart(mix) {
+  const rows = mix.waves.map(({ wave, size, mix: parts }) => {
+    const segs = parts
+      .map((part) => {
+        const color = LOOKS[lookOf(mix.presetId, part.reaction)];
+        const pct = Math.round(part.share * 100);
+        return `<i style="width:${Math.max(2, part.share * 100)}%;background:${color}" ` +
+          `title="第 ${wave} 波 · ${esc(part.zh)} ${part.count.toLocaleString()} 人（${pct}%）"></i>`;
+      })
+      .join('');
+    const top = parts.slice(0, 2).map((part) => `${esc(part.zh)} ${Math.round(part.share * 100)}%`).join(' · ');
+    return `<div class="seg"><span class="label">第 ${wave} 波 · ${size.toLocaleString()} 人</span>` +
+      `<span class="bar2 mix">${segs}</span><span class="num">${top}</span></div>`;
+  });
+  return `<div class="funnel">${rows.join('')}</div>`;
+}
+
 /** 波次漏斗（DOM）。waves: [{ index, size, asked, mood, travels }]。 */
-export function funnel(waves) {
-  if (!waves.length) return '';
+export function funnel(waves) {  if (!waves.length) return '';
   const max = Math.max(...waves.map((w) => w.size), 1);
   const rows = waves.map((wave) => {
     const tier = wave.mood >= GLAD_ENOUGH ? 'go' : wave.mood >= 0 ? 'hold' : 'drop';

@@ -5,8 +5,8 @@ import { drawGrid, attachTooltip, drawDelta, drawReach, reachInk } from './grid.
 import {
   REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh,
 } from './shared/labels.js';
-import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart } from './charts.js';
-import { rankedAnswers, demandCurve, sliceHeatmap } from './shared/summary.js';
+import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart, waveMixChart } from './charts.js';
+import { rankedAnswers, demandCurve, sliceHeatmap, waveMix } from './shared/summary.js';
 import { decodeBytes } from './shared/bytes.js';
 import { crowdDelta } from './shared/spatial.js';
 import { crowd } from './shared/personas.js';
@@ -39,6 +39,7 @@ export function renderCheck(el, result) {
   html.push(decisionsView(result));
   html.push(terrainView(result));
   html.push(wavesView(result, chartWidth));
+  html.push(waveMixView(result));
   html.push(countsView(result));
   // 地图三视图：反应（恒有）/ 传播（逐人波次数据在时）/ 聚集地形（有成片格子时）。
   // 数据不在就摘掉对应按钮——旧存档没有 waveOf，传播按钮优雅缺席。
@@ -158,6 +159,18 @@ function wavesView(result, width) {
   if (!result.waves?.length) return '';
   const line = moodLine(result.waves.map((w) => w.mood), { width });
   return `<h3>传播波次与情绪轨迹</h3>${funnel(result.waves)}${line}`;
+}
+
+/**
+ * 每波反应构成：`reach`（第几波看到）× `looks`（什么反应）交叉成堆叠条，
+ * 传播稀释（第 1 波乐见、越往后越中性划走）一眼可见。旧存档无 reach → 优雅缺席。
+ */
+function waveMixView(result) {
+  if (!result.looks || !result.reach || !result.waves?.length) return '';
+  const presetId = result.post.preset;
+  const mix = waveMix(presetId, Object.keys(PRESETS[presetId].reactions), decodeBytes(result.looks), decodeBytes(result.reach));
+  if (!mix.total) return '';
+  return `<h3>每一波的人都是什么反应</h3>${waveMixChart(mix)}`;
 }
 
 function countsView(result) {

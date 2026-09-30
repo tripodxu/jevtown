@@ -4,6 +4,7 @@
 import { PRESETS, REASONS, lookOf, answersFor, questionOfList, NOT_SHOWN, CANT_TELL } from './presets.js';
 import { MIN_ASKED } from './feed.js';
 import { INTERESTS, INTEREST_COLUMNS, INTEREST_ROW_ZH } from './vocab.js';
+import { REACTIONS_ZH } from './labels.js';
 import { unit } from './rng.js';
 
 /** Segments smaller than this are not reported: a handful of people is noise. */
@@ -223,6 +224,52 @@ export function sliceHeatmap(presetId, keys, reactions, people) {
     cells: slices.filter((slice) => slice.row === row).sort((a, b) => a.col - b.col),
   }));
   return { rows, cityShare: judged ? glad / judged : 0, judged, minSample: MIN_SLICE };
+}
+
+/**
+ * 每波反应构成：`looks`（每人什么反应）× `reach`（每人第几波看到）交叉计数。
+ * 波次漏斗只给"每波多少人 + 情绪均值"，看不见构成——传播稀释（第 1 波是乐见的，
+ * 越往后越中性划走）要靠这个切面。只数到达过的人（reach ≥ 1）。
+ * 各波用同一份反应序（按全城次数降序），跨波才可比。
+ * → { waves: [{ wave, size, mix: [{ reaction, zh, count, share }] }], total }
+ */
+export function waveMix(presetId, keys, looks, reach) {
+  const reactionsOf = PRESETS[presetId].reactions;
+  const byWave = new Map();
+  let total = 0;
+  for (let id = 0; id < looks.length; id++) {
+    const wave = reach[id];
+    const look = looks[id];
+    if (!wave || !look) continue;
+    total += 1;
+    let entry = byWave.get(wave);
+    if (!entry) byWave.set(wave, (entry = { wave, counts: new Uint32Array(keys.length) }));
+    entry.counts[look - 1] += 1;
+  }
+  // 全城次数定序（各波同序才跨波可比），没出现的反应不进条
+  const order = keys
+    .map((reaction, index) => {
+      let count = 0;
+      for (const { counts } of byWave.values()) count += counts[index];
+      return { reaction, count, zh: REACTIONS_ZH[reaction] ?? reaction };
+    })
+    .sort((a, b) => b.count - a.count);
+  const waves = [...byWave.values()]
+    .sort((a, b) => a.wave - b.wave)
+    .map(({ wave, counts }) => {
+      const size = counts.reduce((sum, count) => sum + count, 0);
+      return {
+        wave,
+        size,
+        mix: order
+          .filter((one) => counts[keys.indexOf(one.reaction)] > 0)
+          .map((one) => {
+            const count = counts[keys.indexOf(one.reaction)];
+            return { reaction: one.reaction, zh: one.zh, count, share: count / size };
+          }),
+      };
+    });
+  return { waves, total, presetId };
 }
 
 /**

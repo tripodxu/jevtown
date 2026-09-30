@@ -630,6 +630,11 @@ canvas.grid {
   align-self: center;
 }
 .seg .bar2 i { display: block; height: 100%; border-radius: 3px; }
+/* 堆叠条（每波反应构成）：段并排铺满一根条 */
+.seg .bar2.mix { display: flex; }
+.seg .bar2.mix i { display: block; border-radius: 0; }
+.seg .bar2.mix i:first-child { border-radius: 3px 0 0 3px; }
+.seg .bar2.mix i:last-child { border-radius: 0 3px 3px 0; }
 .seg .num { color: var(--muted); min-width: 96px; font-family: var(--font-mono); font-size: 12px; }
 
 /* 小镇在说 */
