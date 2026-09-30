@@ -92,9 +92,18 @@ export function poolFor(text, fallback = 'zh') {
   return POOLS[fallback] ? fallback : 'zh';
 }
 
-/** The whole crowd of a pool, in grid order. Takes a few dozen milliseconds. */
+/**
+ * The whole crowd of a pool, in grid order. First call takes ~130ms, so results are memoized
+ * per pool: the homepage computes the town once instead of three times (two showcase replays
+ * plus the slice heatmap), and the Worker's crowdOf wrapper rides on this for free.
+ * Deterministic and the vocab is static, so there is no invalidation path. Callers must treat
+ * the returned array as immutable — mutating it poisons the memo for everyone.
+ */
+const crowdMemo = new Map();
 export function crowd(pool) {
-  return Array.from({ length: CROWD }, (_, id) => persona(pool, id));
+  let people = crowdMemo.get(pool);
+  if (!people) crowdMemo.set(pool, (people = Array.from({ length: CROWD }, (_, id) => persona(pool, id))));
+  return people;
 }
 
 /**

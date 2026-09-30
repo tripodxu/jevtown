@@ -49,6 +49,15 @@ test('crowd 一次给出全城', () => {
   assert.equal(people[9999].id, 9999);
 });
 
+test('crowd 按 pool 备忘：二次调用同一数组（首页只算一次全城）', () => {
+  const first = crowd('zh');
+  const t0 = performance.now();
+  const second = crowd('zh');
+  const ms = performance.now() - t0;
+  assert.equal(second, first, '同一性：必须是同一个数组，不是重算的等价副本');
+  assert.ok(ms < 20, `二次调用应近免费，实测 ${ms.toFixed(1)}ms`);
+});
+
 test('poolFor 中文永远落回 zh', () => {
   assert.equal(poolFor('这是一条中文帖子'), 'zh');
   assert.equal(poolFor('hello world'), 'zh');

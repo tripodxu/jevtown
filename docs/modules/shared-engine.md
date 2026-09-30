@@ -51,6 +51,9 @@ runCheck({ send, presetId, pool, text, versionId, prices, maxWaves, onWave, bloc
   实测 19.13ms → 0.98ms。**两条不变式**：分组号按首次出现分配（输出顺序与旧 Map
   插入顺序一致）；`people` 视为不可变——若将来有人就地改人群，这张表会过期，
   要连 `crowd()` 一起改。传进来的子集各自成表，随数组被 WeakMap 回收。
+- **`crowd()` 按 pool 备忘**（R13）：首算 ~130ms，二次同数组（0ms）。首页原本要算 3 次
+  （两张回放卡 + 切片热力图），现在一次。Worker 的 `crowdOf` 自动搭车；调用方必须把
+  返回数组视为不可变——就地改人会毒化备忘（与 `groupTable`/`crowdCache` 同一约定）。
 
 ## 空间读数：`spatial.js`（人群地形 + 两版之差）
 
