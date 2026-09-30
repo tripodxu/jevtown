@@ -49,7 +49,7 @@ export function renderCheck(el, result) {
     '<button type="button" data-map-mode="terrain" aria-pressed="false">聚集地形</button>' +
     '</div><button class="ghost" type="button" data-replay hidden>重播传播</button>' +
     '<span class="hint" data-map-hint></span></div>' +
-    '<div class="map-wrap"><canvas class="grid" role="img" aria-label="小镇地图：一万个格子，每格一个人格（悬停可看详情）"></canvas><div class="legend"></div></div>');
+    '<div class="map-wrap"><canvas class="grid" tabindex="0" role="img" aria-label="小镇地图：一万个格子，每格一个人格。聚焦后用方向键逐格移动，屏幕阅读器会逐格播报档案；鼠标悬停或触摸点按同样可看。"></canvas><div class="legend"></div></div>');
   html.push(jevReading(result));
   html.push(segmentsView(result));
   html.push(heatmapView(result, chartWidth));

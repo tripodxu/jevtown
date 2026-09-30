@@ -32,7 +32,7 @@ const TOKENS = { '--map-well': '#0a0d13', '--map-blue': '#6ea8fe', '--map-green'
 globalThis.getComputedStyle = () => ({ getPropertyValue: (name) => ` ${TOKENS[name] ?? '#000000'} ` });
 globalThis.document = { getElementById: () => null, createElement: () => ({}), body: { append() {} } };
 
-const { drawGrid, paintDelta, redrawMaps, drawDelta, clampTip, drawReach, reachInk } = await import('../public/grid.js');
+const { drawGrid, paintDelta, redrawMaps, drawDelta, clampTip, drawReach, reachInk, stepCell } = await import('../public/grid.js');
 
 /** preset 'post' 的反应顺序：scrolled_past / read / liked / disliked / reposted / followed / blocked。 */
 const PRESET = 'post';
@@ -315,4 +315,25 @@ test('paintDelta：对传播层画布不动手（那是实时反应地图专用�
   calls.length = 0;
   assert.equal(paintDelta(canvas, new Uint8Array(10000), PRESET), 0);
   assert.equal(calls.length, 0, '不许把传播层画布按反应路径重画');
+});
+
+// -- 键盘导航的方向步进（纯函数）
+
+test('stepCell：四向各走一格', () => {
+  assert.equal(stepCell(0, 'ArrowRight'), 1);
+  assert.equal(stepCell(1, 'ArrowLeft'), 0);
+  assert.equal(stepCell(5, 'ArrowDown'), 105);
+  assert.equal(stepCell(105, 'ArrowUp'), 5);
+  assert.equal(stepCell(0, 'ArrowDown'), 100);
+});
+
+test('stepCell：四边越界返回 -1（光标原地不动）', () => {
+  assert.equal(stepCell(0, 'ArrowUp'), -1, '第一行往上');
+  assert.equal(stepCell(9999, 'ArrowDown'), -1, '最后一行往下');
+  assert.equal(stepCell(100, 'ArrowUp'), 0, '第二行往上正常');
+  assert.equal(stepCell(0, 'ArrowLeft'), -1, '第一列往左');
+  assert.equal(stepCell(99, 'ArrowRight'), -1, '最后一列往右');
+  assert.equal(stepCell(100, 'ArrowLeft'), -1, '第二行行首往左也是出界（不许跨行回绕）');
+  assert.equal(stepCell(99, 'ArrowLeft'), 98, '同一行内左移不受行边界影响');
+  assert.equal(stepCell(5, 'ArrowLeft'), 4);
 });

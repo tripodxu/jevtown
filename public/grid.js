@@ -14,6 +14,8 @@ const GRID = 100;
 // 已画过的画布登记在案：主题切换时逐张重绘；painted = 上次真正画上去的字节快照，
 // 实时地图靠它做增量补画，不必每批判定就刷满一万格。
 const drawn = new Map();
+// 键盘光标格（canvas → 格 id）：paint() 末尾描出来，移动时直接补描，全量重画自动带回来。
+const cursorByCanvas = new WeakMap();
 // 差分画布另册登记：它没有悬停档案、不走 drawn 的字节快照与增量逻辑，
 // 但主题切换时 redrawMaps 必须也按新令牌重画它——否则差分图留着上个主题的墨水。
 const deltas = new Map();
@@ -115,6 +117,13 @@ function paint(canvas, entry) {
   }
   ringTerrain(ctx, entry.terrain);
   entry.painted = bytes.slice(); // 快照，供 paintDelta 做增量
+  const cursor = cursorByCanvas.get(canvas);
+  if (cursor >= 0) {
+    // 键盘光标是 UI 不是数据，用主题强调色；全量重画（换主题/换视图）后自动画回来
+    ctx.strokeStyle = cssVar('--accent', '#e0604a');
+    ctx.lineWidth = 2;
+    ctx.strokeRect((cursor % GRID) * CELL + 1, Math.floor(cursor / GRID) * CELL + 1, CELL - 2, CELL - 2);
+  }
 }
 
 // -- 传播层：一格 = 这个人在第几波看到（0 = 没看到）------------------------------
@@ -208,6 +217,57 @@ export function attachTooltip(canvas, bytes, presetId) {
     show(event);
   });
   canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+
+  // 键盘导航：tabindex 在画布上（render.js 给报告地图加了 tabindex="0"），方向键逐格移动、
+  // 每步揭示档案（tooltip 的 role="status" 让屏幕阅读器逐格播报）；光标格用 --accent 描边。
+  const drawCursor = (id, stroke) => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
+    ctx.strokeRect((id % GRID) * CELL + 1, Math.floor(id / GRID) * CELL + 1, CELL - 2, CELL - 2);
+  };
+  const revealCell = (id) => {
+    render(id);
+    // 光标可能落在视口外：clampTip 把 tooltip 钳回视口边（能看见，代价是不贴格）
+    const rect = canvas.getBoundingClientRect();
+    place({
+      clientX: rect.left + ((id % GRID) + 0.5) * (rect.width / GRID),
+      clientY: rect.top + (Math.floor(id / GRID) + 0.5) * (rect.height / GRID),
+    });
+  };
+  canvas.addEventListener('keydown', (event) => {
+    if (off()) return;
+    if (event.key === 'Escape') { tooltip.style.display = 'none'; return; }
+    const delta = { ArrowUp: -GRID, ArrowDown: GRID, ArrowLeft: -1, ArrowRight: 1 }[event.key];
+    if (delta === undefined) return;
+    event.preventDefault();
+    const start = cursorByCanvas.get(canvas) ?? -1;
+    if (start < 0) {
+      // 首次按键先把光标落在 0 格（任何方向），再按才是移动
+      cursorByCanvas.set(canvas, 0);
+      drawCursor(0, cssVar('--accent', '#e0604a'));
+      revealCell(0);
+      return;
+    }
+    const next = stepCell(start, event.key);
+    if (next < 0) return; // 出界不动
+    cursorByCanvas.set(canvas, next);
+    drawCursor(next, cssVar('--accent', '#e0604a'));
+    revealCell(next);
+  });
+  canvas.addEventListener('blur', () => { tooltip.style.display = 'none'; });
+}
+
+/** 方向键走一格：越界返回 -1（不动）。纯函数，边界有单测。 */
+export function stepCell(id, key) {
+  const delta = { ArrowUp: -GRID, ArrowDown: GRID, ArrowLeft: -1, ArrowRight: 1 }[key];
+  if (delta === undefined) return -1;
+  const next = id + delta;
+  // 左右越界 = 跨行（列号溢出）；上下越界 = 出地图
+  if (next < 0 || next >= GRID * GRID) return -1;
+  if ((key === 'ArrowLeft' && next % GRID === GRID - 1) || (key === 'ArrowRight' && next % GRID === 0)) return -1;
+  return next;
 }
 
 /**
