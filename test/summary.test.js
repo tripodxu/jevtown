@@ -3,8 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { crowd, CROWD } from '../public/shared/personas.js';
-import { segments, minSegment } from '../public/shared/summary.js';
+import { segments, minSegment, sliceHeatmap } from '../public/shared/summary.js';
 import { PRESETS, NOT_SHOWN } from '../public/shared/presets.js';
+import { INTEREST_ROW_ZH } from '../public/shared/vocab.js';
 
 const SEGMENTS = {
   interest: (who) => who.interests,
@@ -138,4 +139,50 @@ test('segments：换一个 people 数组（子集）也给出同样口径的结�
     segments('post', keys, bytes, subset),
     segmentsReference('post', keys, bytes, subset),
   );
+});
+
+// -- 人群切片热力图（sliceHeatmap）：反应场聚合到 40 个兴趣街区（5 个年龄段 × 8 列）
+
+const slicePeople = crowd('zh'); // ~155ms 算一次，切片用例共用
+
+test('sliceHeatmap：形状——5 行 × 8 格，行标签与词表同一口径', () => {
+  const keys = keysOf('post');
+  const data = sliceHeatmap('post', keys, new Uint8Array(CROWD), slicePeople);
+  assert.equal(data.rows.length, 5);
+  for (const row of data.rows) assert.equal(row.cells.length, 8);
+  assert.deepEqual(data.rows.map((row) => row.zh), INTEREST_ROW_ZH);
+  assert.equal(data.judged, 0, '没人判定时全城口径为 0');
+  assert.equal(data.cityShare, 0);
+});
+
+test('sliceHeatmap：聚合正确性——主兴趣归格，全城乐见手算一致', () => {
+  const keys = keysOf('post');
+  const liked = keys.indexOf('liked') + 1;
+  const bytes = new Uint8Array(CROWD);
+  bytes.fill(liked); // 全城都判成 liked
+  const data = sliceHeatmap('post', keys, bytes, slicePeople);
+  assert.equal(data.judged, CROWD);
+  const sumJudged = data.rows.reduce((sum, row) => sum + row.cells.reduce((s, c) => s + c.judged, 0), 0);
+  assert.equal(sumJudged, CROWD, 'Σ 格判定数 = 全城判定数（每人只归一个街区）');
+  assert.equal(data.cityShare, 1);
+  for (const row of data.rows) {
+    for (const cell of row.cells) {
+      assert.ok(cell.judged > 80, `街区 ${cell.zh} 判定 ${cell.judged}，兴趣家区域不该这么小`);
+      assert.equal(cell.share, 1);
+    }
+  }
+});
+
+test('sliceHeatmap：最小样本门——判定不足 25 人的格子不下结论', () => {
+  const keys = keysOf('post');
+  const liked = keys.indexOf('liked') + 1;
+  const bytes = new Uint8Array(CROWD);
+  const gamers = people.filter((who) => who.interests[0] === 'games');
+  for (const who of gamers.slice(0, 10)) bytes[who.id] = liked;
+  const data = sliceHeatmap('post', keys, bytes, slicePeople);
+  const games = data.rows[0].cells.find((cell) => cell.id === 'games');
+  assert.equal(games.judged, 10);
+  assert.equal(games.share, null, '不足 25 人不给占比');
+  assert.equal(data.rows[1].cells[0].share, null, '零判定的街区同样不下结论');
+  assert.equal(data.cityShare, 1, '全城口径按已判定算');
 });

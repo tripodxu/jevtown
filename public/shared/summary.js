@@ -3,6 +3,7 @@
 // the voices. The page, the terminal and whoever reads a check through runCheck read it the same way.
 import { PRESETS, REASONS, lookOf, answersFor, questionOfList, NOT_SHOWN, CANT_TELL } from './presets.js';
 import { MIN_ASKED } from './feed.js';
+import { INTERESTS, INTEREST_COLUMNS, INTEREST_ROW_ZH } from './vocab.js';
 import { unit } from './rng.js';
 
 /** Segments smaller than this are not reported: a handful of people is noise. */
@@ -178,6 +179,50 @@ export function topSegments(all, what, count = 5) {
     .filter((segment) => segment[what] >= 8 && segment[`${what}Lift`] >= 1.3)
     .sort((a, b) => b[`${what}Lift`] - a[`${what}Lift`])
     .slice(0, count);
+}
+
+/** 街区判定少于这个数就不给颜色：一格 ≈ 200 人，几十个判定撑不起一个占比结论。 */
+export const MIN_SLICE = 25;
+
+/**
+ * 人群切片热力图：把反应场聚合到人格网格固有的 40 个「兴趣街区」上。
+ * 兴趣在网格上按 5 个年龄段 × 8 列铺开（vocab.js 的 INTERESTS 布局），每个街区 ≈ 200 个
+ * 同兴趣同龄段的邻居——segments 的边际统计答不了"哪个年龄段 × 哪类兴趣一起叫好"的组合
+ * 效应，这个切面答得了。每人按**主兴趣**（interests[0] = 离它最近的兴趣家）归入唯一街区，
+ * 边界毛边人群按真实属性算，不按网格坐标硬切。
+ * → { rows: [{ zh, cells: [{ id, zh, judged, glad, share }] × 8 } × 5], cityShare, judged, minSample }
+ */
+export function sliceHeatmap(presetId, keys, reactions, people) {
+  const reactionsOf = PRESETS[presetId].reactions;
+  const slots = new Map(INTERESTS.map((interest, index) => [interest.id, index]));
+  const slices = INTERESTS.map((interest, index) => ({
+    id: interest.id,
+    zh: interest.zh,
+    row: Math.floor(index / INTEREST_COLUMNS),
+    col: index % INTEREST_COLUMNS,
+    judged: 0,
+    glad: 0,
+    share: null,
+  }));
+  let judged = 0;
+  let glad = 0;
+  for (const who of people) {
+    const byte = reactions[who.id];
+    if (!byte) continue;
+    judged += 1;
+    const slice = slices[slots.get(who.interests[0])];
+    slice.judged += 1;
+    if (reactionsOf[keys[byte - 1]]?.tone === 1) {
+      slice.glad += 1;
+      glad += 1;
+    }
+  }
+  for (const slice of slices) slice.share = slice.judged >= MIN_SLICE ? slice.glad / slice.judged : null;
+  const rows = INTEREST_ROW_ZH.map((zh, row) => ({
+    zh,
+    cells: slices.filter((slice) => slice.row === row).sort((a, b) => a.col - b.col),
+  }));
+  return { rows, cityShare: judged ? glad / judged : 0, judged, minSample: MIN_SLICE };
 }
 
 /**

@@ -207,3 +207,6 @@ export const TEMPER = byId(TEMPERS);
 export const BUDGET = byId(BUDGETS);
 export const SPEND = byId(SPENDING);
 export const SHOP = byId(SHOPPING);
+
+/** 兴趣网格 5 行的年龄段标签（与 INTERESTS 的行注释同一口径），报告的切片热力图用。 */
+export const INTEREST_ROW_ZH = ['18–27 岁', '24–36 岁', '33–46 岁', '43–58 岁', '52–80 岁'];

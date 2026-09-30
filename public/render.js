@@ -5,16 +5,21 @@ import { drawGrid, attachTooltip, drawDelta, drawReach, reachInk } from './grid.
 import {
   REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh,
 } from './shared/labels.js';
-import { moodLine, demandChart, funnel, reportBars, fmtMs } from './charts.js';
-import { rankedAnswers, demandCurve } from './shared/summary.js';
+import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart } from './charts.js';
+import { rankedAnswers, demandCurve, sliceHeatmap } from './shared/summary.js';
 import { decodeBytes } from './shared/bytes.js';
 import { crowdDelta } from './shared/spatial.js';
+import { crowd } from './shared/personas.js';
 
 export const PRESET_NOUN = presetNoun;
 export const readCheck = (p) => (p >= 0.7 ? 'yes' : p <= 0.3 ? 'no' : 'unclear');
 export const esc = (value) => String(value).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const stat = (value, label) => `<div class="stat"><b>${typeof value === 'number' ? value.toLocaleString() : value}</b><span>${label}</span></div>`;
 export { stat };
+
+// 切片热力图要拿全城人群（crowd() 约 155ms）：浏览器侧只算一次，页面存活期内复用。
+let townCache = null;
+const townOf = (pool) => (townCache ??= crowd(pool));
 
 /** 把一页结果渲染进容器 el（卡片本体）。 */
 export function renderCheck(el, result) {
@@ -46,6 +51,7 @@ export function renderCheck(el, result) {
     '<div class="map-wrap"><canvas class="grid" role="img" aria-label="小镇地图：一万个格子，每格一个人格（悬停可看详情）"></canvas><div class="legend"></div></div>');
   html.push(jevReading(result));
   html.push(segmentsView(result));
+  html.push(heatmapView(result, chartWidth));
   html.push(saidView(result));
   html.push(followUpView(result, chartWidth));
   html.push(voicesView(result));
@@ -174,6 +180,19 @@ function countsView(result) {
 function liftOf(seg, key) {
   const lift = key === 'stopped' ? seg.stoppedLift : key === 'glad' ? seg.gladLift : seg.sorryLift;
   return lift >= 1.05 ? (Math.round(lift * 10) / 10).toFixed(1) : '';
+}
+
+/**
+ * 人群切片热力图：40 个兴趣街区（年龄段 × 兴趣）的乐见占比。
+ * 边际统计（上面的分组段）答不了"哪个年龄段 × 哪类兴趣一起叫好"的组合效应，这个切面答得了。
+ * 数据全在浏览器里算（looks 字节本来就在内存里），不新增 Jev 调用。
+ */
+function heatmapView(result, width) {
+  if (!result.looks || !result.counters?.reach) return '';
+  const presetId = result.post.preset;
+  const data = sliceHeatmap(presetId, Object.keys(PRESETS[presetId].reactions), decodeBytes(result.looks), townOf('zh'));
+  if (!data.judged) return '';
+  return `<h3>谁在哪儿扎堆（兴趣街区 × 乐见占比）</h3>${sliceChart(data, { width })}`;
 }
 
 function jevReading(result) {

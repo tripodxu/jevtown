@@ -160,3 +160,57 @@ export function rollingChart(samples, { width = 420, height = 110, window: win =
     <text x="${width - pad.r + 8}" y="${pad.t + 28}" class="chart-axis">峰 ${format(Math.max(...data))}</text>
   </svg>`;
 }
+
+// 一页最多 4 张报告卡都会带切片图，渐变defs 的 id 必须逐图唯一，否则后来者引用到别人的渐变
+let sliceSeq = 0;
+
+/**
+ * 人群切片热力图（SVG）：40 个兴趣街区（5 个年龄段 × 8 列兴趣）的乐见占比。
+ * 占比是顺序量表：fill = color-mix(绿 N% → 底板)，吃 CSS 变量，四主题自动跟随、无需重绘；
+ * 样本不足的格子不给颜色（虚线框）；格下两行小字在窄屏（格子 < 56px）隐藏，细节交给
+ * <title> 悬停。data 来自 shared/summary.js 的 sliceHeatmap。
+ */
+export function sliceChart(data, { width = 940 } = {}) {
+  if (!data.judged) return '';
+  const cols = 8;
+  const pad = { l: 66, r: 4, t: 4, b: 36 };
+  const gap = 6;
+  const cellW = Math.floor((width - pad.l - pad.r - (cols - 1) * gap) / cols);
+  const fillH = 34;
+  const label = cellW >= 56;
+  const rowH = fillH + (label ? 34 : 12);
+  const height = data.rows.length * rowH + pad.b;
+  const x = (col) => pad.l + col * (cellW + gap);
+  const y = (row) => pad.t + row * rowH;
+  const ramp = `slice-ramp-${(sliceSeq += 1)}`;
+  const cells = data.rows
+    .map((row, r) =>
+      row.cells
+        .map((cell, c) => {
+          const empty = cell.share == null;
+          const fill = empty ? 'var(--map-well)' : `color-mix(in srgb, var(--map-green) ${Math.round(cell.share * 100)}%, var(--map-well))`;
+          const title = `${row.zh} · ${cell.zh}：判定 ${cell.judged.toLocaleString()} 人 · ` +
+            (empty ? '判定太少，不下结论' : `乐见 ${Math.round(cell.share * 100)}%（全城 ${Math.round(data.cityShare * 100)}%）`);
+          const text = label
+            ? `<text x="${x(c) + cellW / 2}" y="${y(r) + fillH + 13}" text-anchor="middle" class="chart-axis" style="fill:var(--text)">${esc(cell.zh)}</text>` +
+              `<text x="${x(c) + cellW / 2}" y="${y(r) + fillH + 27}" text-anchor="middle" class="chart-num">${empty ? '判定少' : `乐见 ${Math.round(cell.share * 100)}%`}</text>`
+            : '';
+          return `<g><title>${esc(title)}</title>` +
+            `<rect x="${x(c)}" y="${y(r)}" width="${cellW}" height="${fillH}" rx="5" style="fill:${fill};stroke:var(--hairline${empty ? '-strong' : ''});stroke-width:1;${empty ? 'stroke-dasharray:3 3;' : ''}" />` +
+            text + '</g>';
+        })
+        .join(''),
+    )
+    .join('');
+  const rowLabels = data.rows
+    .map((row, r) => `<text x="${pad.l - 8}" y="${y(r) + fillH / 2 + 4}" text-anchor="end" class="chart-axis">${esc(row.zh)}</text>`)
+    .join('');
+  const legendY = pad.t + data.rows.length * rowH + 14;
+  const legend = `<defs><linearGradient id="${ramp}" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="var(--map-well)" /><stop offset="1" stop-color="var(--map-green)" />
+    </linearGradient></defs>
+    <rect x="${pad.l}" y="${legendY}" width="120" height="8" rx="4" style="fill:url(#${ramp});stroke:var(--hairline);stroke-width:1" />
+    <text x="${pad.l + 128}" y="${legendY + 8}" class="chart-num">乐见占比 0 → 100%</text>
+    <text x="${width - pad.r}" y="${legendY + 8}" text-anchor="end" class="chart-num">虚线 = 判定不足 ${data.minSample} 人 · 全城乐见 ${Math.round(data.cityShare * 100)}%</text>`;
+  return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="人群切片热力图：40 个兴趣街区的乐见占比">${rowLabels}${cells}${legend}</svg>`;
+}

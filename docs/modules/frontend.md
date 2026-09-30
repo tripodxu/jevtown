@@ -11,7 +11,7 @@
 | `styles.css` | 四主题 CSS 变量令牌 + 全部样式 |
 | `app.js` | 编排：发起检查、驱动 batch/wave 轮询、BYOK 设置弹窗 |
 | `render.js` | 报告渲染 + 锚点目录 + 人群地形段落 + 地图的聚集地形开关 |
-| `charts.js` | 漏斗 / 折线 / 堆叠 / 需求曲线 / 报告条形图（canvas） |
+| `charts.js` | 漏斗 / 折线 / 堆叠 / 需求曲线 / 报告条形图 / 切片热力图（canvas→SVG 混合：折线面积用 SVG，漏斗条形用 DOM） |
 | `grid.js` | 100×100 响应式地图（canvas，悬停档案）：`drawGrid` 全量重画、`paintDelta` 按字节快照增量补画、`drawReach` 传播层 |
 | `tally.js` | 实时监控的「已判定」快照：每批增量折叠出 judged/glad/sorry（纯函数，Node 可单测） |
 | `theme.js` | 主题切换（localStorage 持久化） |
@@ -55,6 +55,18 @@ app.js  fetch /api/post/:id
   t 下限 0.58 是复算出来的：四主题深底板全部 ≥3:1（0.55 只有 2.99），别调回去。
 - 传播层**关悬停档案**（格子的语义是波次不是反应，档案里没有"第几波"可说）：
   `attachTooltip` 认 `canvas.dataset.tipOff === '1'`；`paintDelta` 碰传播层画布直接不动。
+
+## 报告里的「谁在哪儿扎堆」（R11 起 · 切片热力图）
+
+- 数据 = `summary.js` 的 `sliceHeatmap()`：把反应场按**主兴趣**（`interests[0]`）聚合到
+  人格网格固有的 40 个兴趣街区（5 个年龄段 × 8 列，vocab.js 的 INTERESTS 布局），
+  每格给乐见占比；判定不足 `MIN_SLICE`（25）人的格子 share 为 null（不下结论）。
+- 渲染 = `charts.js` 的 `sliceChart()`：占比是**顺序量表**，fill 用
+  `color-mix(var(--map-green) N%, var(--map-well))`——CSS 变量进 SVG，**四主题自动跟随、
+  无需重绘**（与地图 canvas 不同，别给它加 redrawMaps 登记）。一页多卡时渐变 defs 的 id
+  必须逐图唯一（`sliceSeq`）。窄屏格子 < 56px 时格下文字隐藏，细节交给 `<title>` 悬停。
+- `render.js` 的 `townOf()` 是 `crowd()`（~155ms）的浏览器侧备忘；Worker 侧本就有
+  `crowdOf` 缓存，两处别混。
 
 ## 报告里的「人群地形」
 
