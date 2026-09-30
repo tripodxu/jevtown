@@ -43,6 +43,9 @@
      空波 order 不可能（`firstWave` 恒 600 人）。
 5. **记账**：每个 Jev 调用落 `batches(stage,n,usd,tokens,ms,day)`；`versions.usd/tokens`
    累加。stage 取值：`opening` / `wave<n>` / `followup` / `ask`。
+   **usd 账面精度是 4 位小数（`round4`）**：真实单价 ~$0.0015/批，round2 会把每一批抹成
+   0——站点低报花费约 3 倍、`spentToday` 日预算闸失明（2026-09-30 实地测试抓到，mock
+   全 0 抓不到）。显示口径不受影响（toFixed(3/4)）。
    ⚠️ 历史坑：收尾提问花费曾漏记进 `versions.usd`（已修复，见 [MEMORY.md](../MEMORY.md)）。
 6. **BYOK**：`providerOf(env, request)` 按请求头 `x-je-*`（页面 key）优先于 env；
    key 只透传，不落库不打日志。**所有计费路由（含收波的 follow-up/收尾提问）都透传
