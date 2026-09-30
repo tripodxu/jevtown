@@ -54,6 +54,11 @@ runCheck({ send, presetId, pool, text, versionId, prices, maxWaves, onWave, bloc
 - **`crowd()` 按 pool 备忘**（R13）：首算 ~130ms，二次同数组（0ms）。首页原本要算 3 次
   （两张回放卡 + 切片热力图），现在一次。Worker 的 `crowdOf` 自动搭车；调用方必须把
   返回数组视为不可变——就地改人会毒化备忘（与 `groupTable`/`crowdCache` 同一约定）。
+- **人格打包管线**（R19）：`scripts/pack-personas.mjs` 把 personaCompute 的全城结果
+  预计算进 `personas-pack.js`（每人 12 个小整数槽，286KB 纯数据模块），`persona()`
+  优先解码（全城 ~14ms 含解析，单格 4µs）替代现场计算（~130ms——免费档 10ms CPU 装不下）。
+  **失效纪律：改词表或 personaCompute 必须重跑生成脚本**；`test/personas.test.js` 的
+  10,000 人对拍守护解码与计算逐字段一致（不重跑 = 红）。带 interests 覆盖参时走计算路径。
 
 ## 空间读数：`spatial.js`（人群地形 + 两版之差）
 

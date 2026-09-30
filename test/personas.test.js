@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { persona, personaLine, crowd, GRID, CROWD, poolFor } from '../public/shared/personas.js';
+import { persona, personaCompute, personaLine, crowd, GRID, CROWD, poolFor } from '../public/shared/personas.js';
 
 test('persona(pool, id) 确定性：同一个 id 永远是同一个人', () => {
   const a = persona('zh', 4321);
@@ -56,6 +56,14 @@ test('crowd 按 pool 备忘：二次调用同一数组（首页只算一次全�
   const ms = performance.now() - t0;
   assert.equal(second, first, '同一性：必须是同一个数组，不是重算的等价副本');
   assert.ok(ms < 20, `二次调用应近免费，实测 ${ms.toFixed(1)}ms`);
+});
+
+test('打包解码与现场计算全城对拍（词表变了没重跑打包脚本必红）', { timeout: 120_000 }, () => {
+  for (let id = 0; id < CROWD; id++) {
+    const decoded = persona('zh', id);
+    const computed = personaCompute('zh', id);
+    assert.deepEqual(decoded, computed, `id ${id} 解码与计算不一致——改词表/生成逻辑后要重跑 scripts/pack-personas.mjs`);
+  }
 });
 
 test('poolFor 中文永远落回 zh', () => {

@@ -6,6 +6,24 @@
 
 ---
 
+## 2026-09-30 · R19 优化：人格打包管线（111 → 112 用例全绿，路线图 Step 4 项落地）
+
+- **问题**：isolate 首个请求要现场算 1 万人格（Node 实测 130–142ms CPU），免费档单请求
+  10ms CPU 装不下——备忘（R13）只省"第二次"，省不了"第一次"。这是路线图 Step 4 的
+  上线阻塞项。
+- **做法**：`personaCompute`（原 persona() 计算体，改名导出）→ `scripts/pack-personas.mjs`
+  离线预计算成 `personas-pack.js`（每人 12 个小整数槽：名字/年龄/性别/城市/职业/兴趣×3/
+  性情/预算/消费/想买；286KB 纯数据模块）→ `persona()` 优先解码。派生字段（field/
+  ageGroup/x/y）按计算体同式推导；带 interests 覆盖参走计算路径（上游接口，本仓库无人用）。
+- **实测**：`crowd('zh')` 冷启动 **130–142ms → 13.7ms**（含包解析，~10×）；单格解码 4.4µs；
+  包 286KB（Worker 体积余量内）。
+- **一致性守卫（本 round 的灵魂）**：`test/personas.test.js` 对 0..9999 逐个
+  `assert.deepEqual(persona(id), personaCompute(id))`——改词表/生成逻辑后不重跑打包脚本
+  必红。TDD 顺序：对拍先写先红，实现后转绿。鸡生蛋坑：生成脚本 import personas.js 而
+  personas.js import 包文件——先放占位包再生成。
+- **验证**：lint ✓ 39 文件；112/112；README 路线图 Step 4 已划掉该项。
+- 计划文档：`docs/superpowers/plans/2026-09-30-r19-persona-pack.md`。
+
 ## 2026-09-30 · R18 前端：实时图表悬停读数（111 用例不变）
 
 - **缺口**：三张监控图只有当前值+峰值，回看"第 30 批时吞吐多少"没有入口——数据就在

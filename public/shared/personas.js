@@ -1,8 +1,11 @@
 // The crowd. A persona is computed from its pool and id alone: nothing is stored, nothing is asked
 // of an LLM. The id is the persona's place on the 100×100 grid, and the place decides the age and
 // the main interest, so neighbours on the grid are similar people.
+// 冷启动税的解法是打包（R19）：personaCompute 的结果离线预计算进 personas-pack.js，
+// persona() 优先解码（~20ms 全城）而不是现场计算（~130ms，免费档 10ms CPU 装不下）。
 import { unit, pickWeighted } from './rng.js';
 import { INTERESTS, INTEREST_COLUMNS, INTEREST, FIELDS, JOBS, JOB, AGE_GROUPS, TEMPERS, TEMPER, BUDGETS, BUDGET, SPENDING, SPEND, SHOPPING, SHOP, POOLS } from './vocab.js';
+import { PERSONAS_PACK } from './personas-pack.js';
 
 export const GRID = 100;
 export const CROWD = GRID * GRID;
@@ -32,8 +35,48 @@ function interestsAround(pool, id, x, y) {
  * persona(pool, id) → the same person every time. pool is 'uk' or 'en', id is 0..9999.
  * `interests` are the packed ones of the same id (pack.js:interestsAt); the person is the same, only
  * they are not drawn again, which is most of the cost.
+ * 打包路径优先（R19）：带 interests 覆盖参或无包的 pool 才走现场计算（personaCompute）。
  */
 export function persona(pool, id, interests = null) {
+  const pack = PERSONAS_PACK[pool];
+  if (pack && !interests) return personaFromPack(pool, id, pack);
+  return personaCompute(pool, id, interests);
+}
+
+/** 每人 12 个槽：名字下标 / 年龄 / 性别位 / 城市 / 职业 / 兴趣×3 / 性情 / 预算 / 消费 / 想买。 */
+const PACK_PITCH = 12;
+
+function personaFromPack(pool, id, pack) {
+  const flat = pack.flat;
+  const b = id * PACK_PITCH;
+  const gender = flat[b + 2] === 1 ? 'male' : 'female';
+  const [nameEn, nameZh] = POOLS[pool][gender][flat[b]];
+  const [cityEn, cityZh] = POOLS[pool].cities[flat[b + 3]];
+  const job = JOBS[flat[b + 4]].id;
+  const age = flat[b + 1];
+  const field = JOB[job].field;
+  return {
+    pool,
+    id,
+    x: id % GRID,
+    y: Math.floor(id / GRID),
+    name: { en: nameEn, zh: nameZh },
+    gender,
+    age,
+    ageGroup: AGE_GROUPS.findLast((group) => age >= group.from).id,
+    city: { en: cityEn, zh: cityZh },
+    job,
+    field,
+    interests: [INTERESTS[flat[b + 5]].id, INTERESTS[flat[b + 6]].id, INTERESTS[flat[b + 7]].id],
+    temper: TEMPERS[flat[b + 8]].id,
+    budget: BUDGETS[flat[b + 9]].id,
+    spending: SPENDING[flat[b + 10]].id,
+    shopping: SHOPPING[flat[b + 11]].id,
+  };
+}
+
+/** 现场计算的真身：打包脚本的输入、解码路径的对照基准（对拍测试钉住两者一致）。 */
+export function personaCompute(pool, id, interests = null) {
   const names = POOLS[pool];
   if (!names) throw new Error(`unknown pool: ${pool}`);
   const u = (salt) => unit(pool, id, salt);

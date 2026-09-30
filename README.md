@@ -89,7 +89,9 @@ npm test    # 93 个用例：引擎单测 + Worker 集成（unstable_dev）+ 图
 - [ ] 迭代轮 R6 起（轮换顺序：R1 优化 → R2 创意 → R3 前端 → R4 优化 → R5 创意 ⇒ **R6 前端**；
       优化轮候选已记在 MEMORY：Worker 侧按 `post.v` 缓存地形结果、人格打包管线省 CPU）
 - [ ] Step 3 · 真实模型联调扩展（measurements 风格成本报告、网关保真度复核）
-- [ ] Step 4 · 上线准备（人格打包管线省 CPU、`wrangler d1 create` + secret 部署；收波 CAS 锁、`/api/batch` 作者令牌、observability 开启已于 M2/M3 落地，见 [docs/MEMORY.md](./docs/MEMORY.md)）
+- [ ] Step 4 · 上线准备（`wrangler d1 create` + secret 部署；人格打包管线已于 R19 落地——
+      冷启动 ~130ms CPU 降到 ~14ms；收波 CAS 锁、`/api/batch` 作者令牌、observability
+      开启已于 M2/M3 落地，见 [docs/MEMORY.md](./docs/MEMORY.md)）
 - [ ] Step 5 · 生态（可选）：MCP 服务器（check_text / compare_texts）、居民系统 /me、分享卡片
 
 ## 许可
