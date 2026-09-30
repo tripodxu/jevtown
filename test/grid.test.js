@@ -28,11 +28,11 @@ const makeCanvas = () => {
 
 globalThis.window = { devicePixelRatio: 2 };
 // 令牌按名给值：真实页面里不同令牌是不同的颜色，桩件不能一律返回同一个。
-const TOKENS = { '--map-well': '#0a0d13', '--map-green': '#3ddc84', '--map-red': '#ff5c5c' };
+const TOKENS = { '--map-well': '#0a0d13', '--map-blue': '#6ea8fe', '--map-green': '#3ddc84', '--map-red': '#ff5c5c' };
 globalThis.getComputedStyle = () => ({ getPropertyValue: (name) => ` ${TOKENS[name] ?? '#000000'} ` });
 globalThis.document = { getElementById: () => null, createElement: () => ({}), body: { append() {} } };
 
-const { drawGrid, paintDelta, redrawMaps, drawDelta, clampTip } = await import('../public/grid.js');
+const { drawGrid, paintDelta, redrawMaps, drawDelta, clampTip, drawReach, reachInk } = await import('../public/grid.js');
 
 /** preset 'post' 的反应顺序：scrolled_past / read / liked / disliked / reposted / followed / blocked。 */
 const PRESET = 'post';
@@ -255,4 +255,64 @@ test('clampTip：翻到左侧仍越界时钳进视口边距（tooltip 比视口�
 test('clampTip：贴近视口原点时钳到 12px 边距', () => {
   const p = clampTip(0, 0, 200, 120, 1200, 800);
   assert.deepEqual(p, { left: 14, top: 14 });
+});
+
+// -- 传播层：一格 = 第几波看到（0 = 没看到），单色渐满的顺序量表
+
+test('drawReach：逐波上色，没到的格子铺底板', () => {
+  const canvas = newRun();
+  const waves = new Uint8Array(10000);
+  waves[1] = 1; waves[2] = 2; waves[3] = 3; waves[4] = 4;
+  assert.equal(drawReach(canvas, waves), 4);
+  assert.equal(calls.length, 5, '底板 1 次 + 4 格');
+  assert.equal(calls[0].fill, TOKENS['--map-well'], '先铺底板');
+  const inks = calls.slice(1).map((c) => c.fill);
+  assert.equal(new Set(inks).size, 4, '四波四色');
+  for (const ink of inks) assert.notEqual(ink, TOKENS['--map-well'], '传播墨水不是底板');
+  assert.equal(inks[3], TOKENS['--map-blue'], '最晚一波是纯墨水');
+});
+
+test('reachInk：波次越大墨水越满，第 4 波是纯墨水', () => {
+  const well = TOKENS['--map-well'];
+  const inks = [1, 2, 3, 4].map((wave) => reachInk(wave, well));
+  assert.equal(inks[3], TOKENS['--map-blue']);
+  assert.equal(new Set(inks).size, 4);
+  assert.equal(reachInk(9, well), TOKENS['--map-blue'], '超出四波按满档兜底');
+});
+
+test('drawReach：upto 只画到第 N 波（重播档位）', () => {
+  const canvas = newRun();
+  const waves = new Uint8Array(10000);
+  waves[1] = 1; waves[2] = 2; waves[3] = 3;
+  calls.length = 0;
+  assert.equal(drawReach(canvas, waves, 2), 2, '只画前两波');
+  const inks = calls.slice(1).map((c) => c.fill);
+  assert.deepEqual(inks, [reachInk(1, TOKENS['--map-well']), reachInk(2, TOKENS['--map-well'])]);
+});
+
+test('drawReach：登记进 drawn——主题切换重画后仍是传播层', () => {
+  const canvas = newRun();
+  const waves = new Uint8Array(10000);
+  waves[5] = 2;
+  drawReach(canvas, waves);
+  calls.length = 0;
+  TOKENS['--map-blue'] = '#123456'; // 换主题 = 换令牌
+  try {
+    redrawMaps();
+    assert.equal(calls.length, 2, '底板 1 次 + 1 个传播格');
+    assert.equal(calls[1].fill, reachInk(2, TOKENS['--map-well']), '按新主题墨水重画传播层');
+    assert.equal(calls[1].fill, reachInk(2, '#0a0d13'));
+  } finally {
+    TOKENS['--map-blue'] = '#6ea8fe'; // 还原，不影响后面的用例
+  }
+});
+
+test('paintDelta：对传播层画布不动手（那是实时反应地图专用路径）', () => {
+  const canvas = newRun();
+  const waves = new Uint8Array(10000);
+  waves[1] = 1;
+  drawReach(canvas, waves);
+  calls.length = 0;
+  assert.equal(paintDelta(canvas, new Uint8Array(10000), PRESET), 0);
+  assert.equal(calls.length, 0, '不许把传播层画布按反应路径重画');
 });

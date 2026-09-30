@@ -543,10 +543,13 @@ async function showPost(id, env, url, request = null) {
   const people = crowdOf(post.pool);
   const { results: rows } = await env.DB.prepare('SELECT id, wave, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, v).all();
   const bytes = new Uint8Array(CROWD);
+  // 传播层：reactions 表本来就有 wave 列，拼成"第几波看到"的字节（0 = 没看到）随报告带回。
+  const waveBytes = new Uint8Array(CROWD);
   const byWave = new Map();
   for (const row of rows) {
     const index = keys.indexOf(row.reaction);
     bytes[row.id] = index >= 0 ? index + 1 : 0;
+    waveBytes[row.id] = row.wave + 1;
     if (!byWave.has(row.wave)) byWave.set(row.wave, []);
     byWave.get(row.wave).push(row.reaction);
   }
@@ -570,6 +573,7 @@ async function showPost(id, env, url, request = null) {
     counters: counters(presetId, keys, bytes),
     waves,
     looks: encodeBytes(bytes),
+    reach: encodeBytes(waveBytes),
     said,
     segments: {
       stopped: topSegments(all, 'stopped'),

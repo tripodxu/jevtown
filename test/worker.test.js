@@ -265,6 +265,23 @@ test('批次认领：并发 /api/batch 不错位，第 0 波恰好问满 600 人
   assert.equal(detail.waves[0].asked, 600);
 });
 
+test('传播层：GET /api/post 带回逐人波次字节，逐波计数与 waves 一致', { timeout: 120_000 }, async () => {
+  const { decodeBytes } = await import('../public/shared/bytes.js');
+  const { CROWD } = await import('../public/shared/personas.js');
+  const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '传播层数据源验证：一条普通帖子' })).json();
+  await runToDone(worker, opening.post, opening.version, authorOf(opening));
+  const detail = await (await worker.fetch(`/api/post/${opening.post}?v=1`)).json();
+
+  const reach = decodeBytes(detail.reach);
+  assert.equal(reach.length, CROWD, '一万人一格');
+  assert.equal([...reach].filter(Boolean).length, detail.counters.reach, '非零格数 = 到达人数');
+  const perWave = new Map();
+  for (const wave of reach) if (wave) perWave.set(wave, (perWave.get(wave) ?? 0) + 1);
+  assert.deepEqual([...perWave.keys()].sort((a, b) => a - b), detail.waves.map((w) => w.index + 1), '出现过的波次号与 waves 一致');
+  for (const wave of detail.waves) assert.equal(perWave.get(wave.index + 1), wave.size, `第 ${wave.index + 1} 波计数不符`);
+  assert.ok([...reach].every((w) => w >= 0 && w <= 4), '波次字节在 0..4');
+});
+
 test('地形缓存：running 时逐批更新（不得喂旧缓存），冻结后重复读取一致', { timeout: 120_000 }, async () => {
   const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '地形缓存验证：一条普通帖子' })).json();
   const author = { 'x-jev-author': authorOf(opening) };

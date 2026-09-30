@@ -146,7 +146,7 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
   // As on the site: a text it would not post is read by nobody, and the one request is all it costs.
   if (blocking && opening.blocked.length) {
     const { checks, unlisted, blocked } = opening;
-    return { presetId, pool, keys, scores, reactions: new Uint8Array(people.length), waves: [], reach: 0, followUp: null, said: mergeSaid([]), checks, unlisted, blocked, decisions: [], audience: null, ...spent, seconds: (performance.now() - startedAt) / 1000 };
+    return { presetId, pool, keys, scores, reactions: new Uint8Array(people.length), waveOf: new Uint8Array(people.length), waves: [], reach: 0, followUp: null, said: mergeSaid([]), checks, unlisted, blocked, decisions: [], audience: null, ...spent, seconds: (performance.now() - startedAt) / 1000 };
   }
   let members = people;
   let reads = null;
@@ -161,6 +161,9 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
   }
 
   const reactions = new Uint8Array(people.length);
+  // 传播层数据源：每个人格在第几波看到（0 = 没看到）。Worker 侧的 reactions 表本来就有
+  // wave 列，这里把同一事实留给 CLI/存档——两端同构，报告的「传播」视图才有数据。
+  const waveOf = new Uint8Array(people.length);
   const reached = new Map();
   const reactionOf = (id) => reached.get(id);
   const waves = [];
@@ -174,6 +177,7 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
     await askAbout(wave, (batch) => reactionRequest(presetId, text, batch), (persona, probabilities) => {
       const reaction = drawReaction(probabilities, pool, persona.id, versionId);
       reactions[persona.id] = 1 + keys.indexOf(reaction);
+      waveOf[persona.id] = index + 1;
       reached.set(persona.id, reaction);
       drawn.push(reaction);
       expected += expectedTone(presetId, probabilities);
@@ -212,5 +216,5 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
   const said = mergeSaid(parts, missing);
 
   const { checks, unlisted, blocked } = opening;
-  return { presetId, pool, keys, scores, reactions, waves, reach: reached.size, followUp, said, checks, unlisted, blocked, decisions, audience: reads, ...spent, seconds: (performance.now() - startedAt) / 1000 };
+  return { presetId, pool, keys, scores, reactions, waveOf, waves, reach: reached.size, followUp, said, checks, unlisted, blocked, decisions, audience: reads, ...spent, seconds: (performance.now() - startedAt) / 1000 };
 }

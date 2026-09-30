@@ -280,8 +280,9 @@ dialog#settings input {
   font: inherit;
 }
 
-/* 主题切换（分段控件） */
-.themeswitch {
+/* 分段控件（主题切换与地图三视图共用一套规则） */
+.themeswitch,
+.mapswitch {
   display: flex;
   gap: 2px;
   padding: 3px;
@@ -290,7 +291,8 @@ dialog#settings input {
   border: 1px solid var(--hairline);
 }
 
-.theme-btn {
+.theme-btn,
+.mapswitch button {
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -301,9 +303,10 @@ dialog#settings input {
   transition: color 0.15s, background 0.15s;
 }
 
-.theme-btn:hover { color: var(--text); }
+.theme-btn:hover, .mapswitch button:hover { color: var(--text); }
 
-.theme-btn[aria-pressed="true"] {
+.theme-btn[aria-pressed="true"],
+.mapswitch button[aria-pressed="true"] {
   background: var(--btn-bg);
   color: var(--btn-ink);
 }

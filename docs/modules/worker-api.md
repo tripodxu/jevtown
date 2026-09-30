@@ -11,7 +11,7 @@
 | POST | `/api/version` | `runVersion` | 同帖新版本（版本对比）；受限额 + 作者校验 |
 | GET | `/api/batch` | `runBatch` | 每批 100 人一道 Choice 题；原子认领制，并发只有一个成功 |
 | POST | `/api/wave` | `closeWave` | 收波：CAS 占位 + 空波门 → `settleWave` 算情绪定去留 |
-| GET | `/api/post/:id` | `showPost` | 报告数据源（reactions + versions + 调用报告 + 决策样本）；**公开读，无身份** |
+| GET | `/api/post/:id` | `showPost` | 报告数据源（reactions + versions + 调用报告 + 决策样本）；**公开读，无身份**。R8 起 `looks` 旁多一个 `reach`（逐人"第几波看到"的字节 → base64，0 = 没看到），传播层视图的数据源 |
 | GET | `/api/feed` | `listFeed` | 公共流列表；**公开读，无身份** |
 
 非 `/api/*` 请求直接 `env.ASSETS.fetch`——页面/样式/脚本走边缘 assets，**不计 Worker 请求**。

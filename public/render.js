@@ -1,7 +1,7 @@
 // 视图渲染：app.js（实时检查）与 showcase.js（示例回放）共用。
 // 输入形状 = GET /api/post/:v 的 payload（replay.js 能从存档 JSON 拼出同一形状）。
 import { PRESETS, LOOKS, lookOf } from './shared/presets.js';
-import { drawGrid, attachTooltip, drawDelta } from './grid.js';
+import { drawGrid, attachTooltip, drawDelta, drawReach, reachInk } from './grid.js';
 import {
   REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh,
 } from './shared/labels.js';
@@ -35,7 +35,15 @@ export function renderCheck(el, result) {
   html.push(terrainView(result));
   html.push(wavesView(result, chartWidth));
   html.push(countsView(result));
-  html.push('<h3>小镇地图</h3><div class="map-bar"><button class="ghost" type="button" data-terrain aria-pressed="false">看聚集地形</button><span class="hint">成片 = 这一片人朝着同一个方向表态；零散 = 各看各的。</span></div><div class="map-wrap"><canvas class="grid" role="img" aria-label="小镇反应地图：一万个格子，每格一个人格的反应（悬停可看详情）"></canvas><div class="legend"></div></div>');
+  // 地图三视图：反应（恒有）/ 传播（逐人波次数据在时）/ 聚集地形（有成片格子时）。
+  // 数据不在就摘掉对应按钮——旧存档没有 waveOf，传播按钮优雅缺席。
+  html.push('<h3>小镇地图</h3><div class="map-bar"><div class="mapswitch" role="group" aria-label="地图视图">' +
+    '<button type="button" data-map-mode="reaction" aria-pressed="true">反应图</button>' +
+    (result.reach && result.waves?.length ? '<button type="button" data-map-mode="reach" aria-pressed="false">传播</button>' : '') +
+    '<button type="button" data-map-mode="terrain" aria-pressed="false">聚集地形</button>' +
+    '</div><button class="ghost" type="button" data-replay hidden>重播传播</button>' +
+    '<span class="hint" data-map-hint></span></div>' +
+    '<div class="map-wrap"><canvas class="grid" role="img" aria-label="小镇地图：一万个格子，每格一个人格（悬停可看详情）"></canvas><div class="legend"></div></div>');
   html.push(jevReading(result));
   html.push(segmentsView(result));
   html.push(saidView(result));
@@ -48,10 +56,8 @@ export function renderCheck(el, result) {
 
   const bytes = decodeBytes(result.looks);
   const canvas = el.querySelector('.grid');
-  drawGrid(canvas, bytes, presetId);
   attachTooltip(canvas, bytes, presetId);
-  el.querySelector('.legend').innerHTML = reactionLegend(presetId);
-  wireTerrain(el, result, canvas, bytes, presetId);
+  wireMapModes(el, result, canvas, bytes, presetId);
 }
 
 /** 报告目录：给每个 h3 发一组**本卡独有**的 id，顶部生成锚点 pill 行（长报告一跳直达）。
@@ -281,24 +287,70 @@ function terrainLegend(terrain) {
   return rows.join('');
 }
 
-/** 地图的「聚集地形」开关：叠上 spatial.js 标出的成片格子，图例同步换。 */
-function wireTerrain(el, result, canvas, bytes, presetId) {
-  const btn = el.querySelector('[data-terrain]');
+/** 传播层的图例：逐波一行（点色与 reachInk 同源）+ 没看到。 */
+function reachLegend(result) {
+  const rows = result.waves.map((wave) =>
+    `<span class="dot" style="background:${reachInk(wave.index + 1)}"></span>第 ${wave.index + 1} 波 · ${wave.size.toLocaleString()} 人`);
+  rows.push('<span class="dot" style="background:var(--map-well);box-shadow:inset 0 0 0 1px var(--hairline-strong)"></span>没看到');
+  return rows.join('');
+}
+
+/**
+ * 地图三视图：反应（恒有）/ 传播（有逐人波次数据时）/ 聚集地形（有成片格子时）。
+ * 数据不在就摘掉对应按钮（旧存档没有 waveOf → 传播优雅缺席）；首帧由 apply('reaction') 画。
+ * 传播层没有"这个人是谁"之外的悬停语义（它显示的是波次不是反应），悬停档案关闭。
+ */
+function wireMapModes(el, result, canvas, bytes, presetId) {
   const terrain = result.terrain;
-  if (!btn) return;
-  if (!terrain || (!terrain.hot?.length && !terrain.cold?.length)) {
-    btn.remove();
-    return;
-  }
+  const reach = result.reach ? decodeBytes(result.reach) : null;
+  const buttons = new Map([...el.querySelectorAll('[data-map-mode]')].map((b) => [b.dataset.mapMode, b]));
+  if (!reach || !result.waves?.length) buttons.get('reach')?.remove();
+  if (!terrain || (!terrain.hot?.length && !terrain.cold?.length)) buttons.get('terrain')?.remove();
   const legend = el.querySelector('.legend');
-  let on = false;
-  btn.addEventListener('click', () => {
-    on = !on;
-    btn.textContent = on ? '看反应图' : '看聚集地形';
-    btn.setAttribute('aria-pressed', String(on));
-    drawGrid(canvas, bytes, presetId, on ? terrain : null);
-    legend.innerHTML = on ? terrainLegend(terrain) : reactionLegend(presetId);
-  });
+  const hint = el.querySelector('[data-map-hint]');
+  const replayBtn = el.querySelector('[data-replay]');
+  if (!legend || !hint || !buttons.size) return;
+
+  const HINTS = {
+    reaction: '一格一人格，颜色 = 它的反应；悬停看档案。',
+    reach: '颜色越满 = 越晚看到；重播按波次逐步点亮。',
+    terrain: '成片 = 这一片人朝着同一个方向表态；零散 = 各看各的。',
+  };
+  const show = {
+    reaction: () => { canvas.style.cursor = ''; canvas.dataset.tipOff = ''; drawGrid(canvas, bytes, presetId); legend.innerHTML = reactionLegend(presetId); },
+    terrain: () => { canvas.style.cursor = ''; canvas.dataset.tipOff = ''; drawGrid(canvas, bytes, presetId, terrain); legend.innerHTML = terrainLegend(terrain); },
+    reach: () => { canvas.style.cursor = 'default'; canvas.dataset.tipOff = '1'; drawReach(canvas, reach); legend.innerHTML = reachLegend(result); },
+  };
+  let mode = 'reaction';
+  const apply = (next) => {
+    mode = next;
+    for (const [name, btn] of buttons) if (btn.isConnected) btn.setAttribute('aria-pressed', String(name === mode));
+    show[mode]();
+    hint.textContent = HINTS[mode] ?? '';
+    if (replayBtn) replayBtn.hidden = mode !== 'reach';
+  };
+  for (const [name, btn] of buttons) btn.addEventListener('click', () => apply(name));
+  apply('reaction');
+
+  // 重播：立即置空档再按波次逐档点亮（每档 650ms）；reduced-motion 用户跳过动画直接铺满。
+  // 重播途中的定时器要清掉——连点两次不该让上一轮的档位追着这一轮跑。
+  if (replayBtn && reach) {
+    const maxWave = reach.reduce((max, wave) => Math.max(max, wave), 0);
+    let timers = [];
+    replayBtn.addEventListener('click', () => {
+      if (mode !== 'reach') return;
+      for (const timer of timers) clearTimeout(timer);
+      timers = [];
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        drawReach(canvas, reach);
+        return;
+      }
+      drawReach(canvas, reach, 0);
+      for (let wave = 1; wave <= maxWave; wave++) {
+        timers.push(setTimeout(() => { if (mode === 'reach') drawReach(canvas, reach, wave); }, wave * 650));
+      }
+    });
+  }
 }
 
 /**

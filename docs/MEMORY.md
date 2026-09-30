@@ -6,6 +6,35 @@
 
 ---
 
+## 2026-09-30 · R8 创意：传播层与重播（94 → 100 用例全绿）
+
+- **点子**：报告地图只有"谁做了什么反应"，没有"文字是怎么传开的"——而传播过程恰恰是
+  这个产品的故事。新增地图第三视图「传播」：每格 = 这个人**在第几波看到**（0 = 没看到），
+  配「重播传播」按波次逐步点亮。零新增 Jev 调用：引擎循环里本来就懂波次，Worker 的
+  `reactions` 表本来就有 `wave` 列。
+- **数据两端同构**：引擎 `runCheck` 补 `waveOf` Uint8Array（约 4 行，随结果/存档走，
+  `scripts/check.js` 存档 +1 字段）；Worker `showPost` 从 `reactions.wave` 拼出 `reach`
+  （base64）随报告返回——**这是跨 agent 契约变更（API 响应 +存档格式），已记
+  worker-api.md / frontend.md**。旧存档示例是真实 API 生成的（usd≈$0.032），**不重生成**：
+  旧档无 `waveOf` → replay 得 null → 传播按钮优雅缺席（E2E 实测 showcase 无此按钮）。
+- **颜色决定**：传播是有序量表 → 单色渐满（`--map-blue` mixHex），刻意不用 LOOKS
+  （类别色）也不用多色（多色暗示类别）。**计划里的 t=0.45 被数值复算推翻**：
+  四主题最低只有 2.42:1；实测下限 t=0.58（3.17:1），量表定为 0.58/0.72/0.86/1。
+  教训：对比度门"执行时数值验证"不是形式——写计划时的估算错了 0.5 档。
+- **实现形态**：`grid.js` 登记项加 `mode`（reaction/reach），`paint` 分支，`redrawMaps`
+  按层重画（主题切换实测不丢层）；`paintDelta` 碰传播层画布直接不动（它是实时反应地图
+  专用路径）；传播层关悬停档案（`canvas.dataset.tipOff`，格子的语义是波次不是反应）。
+  `render.js` 的单按钮地形开关升级为 `wireMapModes` 三视图；重播先清旧定时器再逐档
+  （每档 650ms，reduced-motion 直接铺满）。
+- **验证**：`npm run lint` ✓ 36 文件；`npm test` 100/100（引擎 1 + Worker 1 + grid 5 新用例：
+  逐波异色/upto 截断/主题重绘/paintDelta 不越界/reachInk 满档）。E2E（本地 mock 全城检查）：
+  三视图控件就位、图例逐波计数与 waves 一致（600/1500/3000/4900）、重播 0 → 5400 → 90000
+  像素逐波点亮、公报主题切换后层保留、切回反应图悬停恢复、375px 零溢出、控制台零错误。
+- **E2E 前置坑（复用 R5 的方法）**：本地 D1 的每日 20 次限额会被 worker 测试用满
+  （unstable_dev 与 dev server 共用本地库，ip 都是 'local'）——清当天 posts
+  （含 versions/batches/reactions 依赖行）即可，只动本地开发库。
+- 计划文档：`docs/superpowers/plans/2026-09-30-r8-wave-replay.md`（writing-plans 规范）。
+
 ## 2026-09-30 · R7 优化：Worker 侧按 post.v 缓存地形（93 → 94 用例全绿）
 
 - **做的东西**：`worker/index.js` 加模块级 `terrainCache`（与 `crowdCache` 同家族）：

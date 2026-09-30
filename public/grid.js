@@ -2,7 +2,8 @@
 // 颜色分两层：反应六色是数据墨水（presets.js 的 LOOKS，全主题不变）；
 // 底板与网格取自主题的 CSS 变量（--map-well），所以切主题时整张地图要重绘。
 // 实时地图逐批判定走 paintDelta：只补画新点亮的格子，不刷满一万格；
-// 报告地图可再传一个 terrain（shared/spatial.js 的成片格子），给它们描环。
+// 报告地图可再传一个 terrain（shared/spatial.js 的成片格子），给它们描环；
+// 传播层（drawReach）把每格换成"第几波看到"的顺序量表，与反应层共用一张画布（mode 区分）。
 import { LOOKS, lookOf, PRESETS } from './shared/presets.js';
 import { persona } from './shared/personas.js';
 import { INTEREST, JOB, TEMPER, BUDGET } from './shared/vocab.js';
@@ -25,7 +26,7 @@ const cssVar = (name, fallback) => {
 export function drawGrid(canvas, bytes, presetId, terrain = null) {
   // 修剪掉已断连的旧画布（反复渲染结果区时防泄漏），再登记新的。
   for (const [old] of drawn) if (!old.isConnected) drawn.delete(old);
-  drawn.set(canvas, { bytes, presetId, terrain, painted: null, well: '' });
+  drawn.set(canvas, { mode: 'reaction', bytes, presetId, terrain, waveBytes: null, upto: 0, painted: null, well: '' });
   paint(canvas, drawn.get(canvas));
 }
 
@@ -42,9 +43,11 @@ export function redrawMaps() {
 /**
  * 增量重画：只补画与上次快照不同的格子，返回补画了几格。
  * 画布没登记、换了字节数组或换了预设时退回全量 drawGrid。
+ * 传播层画布没有增量路径，也不许被反应全量路径覆写——直接不动。
  */
 export function paintDelta(canvas, bytes, presetId, terrain = null) {
   const entry = drawn.get(canvas);
+  if (entry && entry.mode !== 'reaction') return 0;
   if (!entry || entry.bytes !== bytes || entry.presetId !== presetId || entry.terrain !== terrain || !entry.painted) {
     drawGrid(canvas, bytes, presetId, terrain);
     return bytes.length;
@@ -83,8 +86,6 @@ function ringTerrain(ctx, terrain) {
 }
 
 function paint(canvas, entry) {
-  const { bytes, presetId } = entry;
-  const keys = Object.keys(PRESETS[presetId].reactions);
   const dpr = window.devicePixelRatio || 1;
   canvas.width = GRID * CELL * dpr;
   canvas.height = GRID * CELL * dpr;
@@ -96,12 +97,50 @@ function paint(canvas, entry) {
   entry.well = cssVar('--map-well', '#0a0d13');
   ctx.fillStyle = entry.well;
   ctx.fillRect(0, 0, GRID * CELL, GRID * CELL);
+  if (entry.mode === 'reach') {
+    for (let id = 0; id < entry.waveBytes.length; id++) {
+      const wave = entry.waveBytes[id];
+      if (!wave || wave > entry.upto) continue;
+      ctx.fillStyle = reachInk(wave, entry.well);
+      ctx.fillRect((id % GRID) * CELL, Math.floor(id / GRID) * CELL, CELL - 1, CELL - 1);
+    }
+    entry.painted = null; // 传播层没有增量路径，painted 快照只属于反应层
+    return;
+  }
+  const { bytes, presetId } = entry;
+  const keys = Object.keys(PRESETS[presetId].reactions);
   for (let id = 0; id < bytes.length; id++) {
     if (!bytes[id]) continue;
     fillCell(ctx, presetId, entry.well, id, bytes[id], keys);
   }
   ringTerrain(ctx, entry.terrain);
   entry.painted = bytes.slice(); // 快照，供 paintDelta 做增量
+}
+
+// -- 传播层：一格 = 这个人在第几波看到（0 = 没看到）------------------------------
+// 顺序量表用单色渐满编码（--map-blue 对底板 mixHex），刻意不用反应色板——
+// 那是"做了什么反应"的类别色，这里是"多晚看到"的顺序色，多色反而暗示类别。
+// t 从 0.58 起：mix 后最淡一档对四主题深底板仍过非文字图形 3:1（实测最低 3.17，
+// 0.55 只有 2.99——这条是数值复算出来的下限，别凭感觉调回去）。
+const REACH_T = [0.58, 0.72, 0.86, 1];
+
+/** 第 wave 波的传播墨水（图例与地图同源；well 由调用方传入以免逐格重读令牌）。 */
+export function reachInk(wave, well = cssVar('--map-well', '#0a0d13')) {
+  const blue = cssVar('--map-blue', '#6ea8fe');
+  return mixHex(well, blue, REACH_T[wave - 1] ?? 1);
+}
+
+/**
+ * 传播层视图。upto 供重播用：只画到第 N 波；登记进 drawn（mode 'reach'），
+ * 主题切换时 redrawMaps 按层重画。返回画了几格。
+ */
+export function drawReach(canvas, waveBytes, upto = Infinity) {
+  for (const [old] of drawn) if (!old.isConnected) drawn.delete(old);
+  drawn.set(canvas, { mode: 'reach', bytes: null, presetId: null, terrain: null, waveBytes, upto, painted: null, well: '' });
+  paint(canvas, drawn.get(canvas));
+  let painted = 0;
+  for (const wave of waveBytes) if (wave && wave <= upto) painted += 1;
+  return painted;
 }
 
 /** 悬停提示：id → 人格档案 + 它的反应。 */
@@ -148,17 +187,20 @@ export function attachTooltip(canvas, bytes, presetId) {
 
   const show = (event) => { render(cellAt(event)); place(event); };
   const hide = () => { pinned = -1; tooltip.style.display = 'none'; };
+  // 画布可被别的图层借用（传播层显示波次不是反应），tipOff=1 时悬停档案整个关闭
+  const off = () => canvas.dataset.tipOff === '1';
 
   // 悬停走 pointermove（区分得了输入源）：手指拖动不算悬停，触摸档案走 pointerdown 的点按
   canvas.addEventListener('pointermove', (event) => {
     if (event.pointerType === 'touch') return;
     pinned = -1;
-    if (cellAt(event) < 0) { tooltip.style.display = 'none'; return; }
+    if (off() || cellAt(event) < 0) { tooltip.style.display = 'none'; return; }
     show(event);
   });
   // 触摸屏没有 hover：点一下出档案，同格再点收起
   canvas.addEventListener('pointerdown', (event) => {
     if (event.pointerType !== 'touch') return;
+    if (off()) { tooltip.style.display = 'none'; return; }
     const id = cellAt(event);
     if (id >= 0 && id === pinned) { hide(); return; }
     pinned = id;

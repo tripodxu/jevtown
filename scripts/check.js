@@ -115,6 +115,7 @@ fs.writeFileSync(
       text,
       keys,
       reactions: Array.from(result.reactions),
+      waveOf: Array.from(result.waveOf),
       waves: result.waves,
       checks: result.checks,
       unlisted: result.unlisted,

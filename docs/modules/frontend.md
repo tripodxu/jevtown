@@ -12,7 +12,7 @@
 | `app.js` | 编排：发起检查、驱动 batch/wave 轮询、BYOK 设置弹窗 |
 | `render.js` | 报告渲染 + 锚点目录 + 人群地形段落 + 地图的聚集地形开关 |
 | `charts.js` | 漏斗 / 折线 / 堆叠 / 需求曲线 / 报告条形图（canvas） |
-| `grid.js` | 100×100 响应式地图（canvas，悬停档案）：`drawGrid` 全量重画、`paintDelta` 按字节快照增量补画 |
+| `grid.js` | 100×100 响应式地图（canvas，悬停档案）：`drawGrid` 全量重画、`paintDelta` 按字节快照增量补画、`drawReach` 传播层 |
 | `tally.js` | 实时监控的「已判定」快照：每批增量折叠出 judged/glad/sorry（纯函数，Node 可单测） |
 | `theme.js` | 主题切换（localStorage 持久化） |
 | `showcase.js` | 首页示例回放（读 `public/examples/*.json`，经 `shared/replay.js`） |
@@ -41,6 +41,20 @@ app.js  fetch /api/post/:id
 - 地图随每批判定 progressively 点亮；监控表滚动追加（时刻/阶段/进度/耗时/tokens/累计花费）。
 - 实时地图走 `paintDelta` 增量补画，统计走 `tally.js` 增量折叠——**每批不要全量重扫一万格**。
   要全量重画（换一次检查、换主题）才调 `drawGrid` / `redrawMaps`。
+
+## 报告里的「传播层」（R8 起）
+
+- 地图是**三视图**分段控件（反应图 / 传播 / 聚集地形），`render.js` 的 `wireMapModes`
+  统一管理：切换 = 重画 + 换图例 + 换提示语；数据不在就摘按钮（旧存档无 `waveOf`
+  → 传播按钮缺席；无成片格子 → 地形按钮缺席）。
+- 传播层数据 = `result.reach`（逐人"第几波看到"，0 = 没看到），`grid.js` 的
+  `drawReach(canvas, waveBytes, upto)` 绘制，`upto` 供重播逐档点亮（每档 650ms，
+  reduced-motion 直接铺满；重播先清旧定时器，连点不叠）。
+- **颜色是单色渐满的顺序量表**（`reachInk`：`--map-blue` 对底板 mixHex，t = 0.58/0.72/0.86/1），
+  刻意不用 LOOKS——那是"做了什么反应"的类别色，这里是"多晚看到"的顺序色。
+  t 下限 0.58 是复算出来的：四主题深底板全部 ≥3:1（0.55 只有 2.99），别调回去。
+- 传播层**关悬停档案**（格子的语义是波次不是反应，档案里没有"第几波"可说）：
+  `attachTooltip` 认 `canvas.dataset.tipOff === '1'`；`paintDelta` 碰传播层画布直接不动。
 
 ## 报告里的「人群地形」
 

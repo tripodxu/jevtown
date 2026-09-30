@@ -18,6 +18,8 @@ export function replayToView(saved) {
     counters: counters(presetId, keys, bytes),
     waves: saved.waves,
     looks: encodeBytes(bytes),
+    // 传播层：只有带 waveOf 的新存档才有；旧档得 null → 前端隐藏传播按钮（优雅降级）
+    reach: saved.waveOf ? encodeBytes(Uint8Array.from(saved.waveOf)) : null,
     said: saved.said ?? null,
     followUp: saved.followUp ?? null,
     prices: saved.prices ?? null,

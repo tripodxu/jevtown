@@ -47,6 +47,14 @@ test('runCheck(mock, post)：全流程跑通，反应数合法，收尾有回答
   // 反应字节都在合法范围
   const keys = Object.keys(PRESETS.post.reactions);
   for (const byte of result.reactions) assert.ok(byte >= 0 && byte <= keys.length);
+  // 传播层的数据源：每个人格记着自己在第几波看到（0 = 没看到）
+  assert.ok(result.waveOf, 'waveOf 缺失');
+  assert.equal(result.waveOf.length, CROWD);
+  for (let i = 0; i < CROWD; i++) {
+    if (result.reactions[i]) assert.ok(result.waveOf[i] >= 1 && result.waveOf[i] <= result.waves.length, `格子 ${i} 判定了却没记波次`);
+    else assert.equal(result.waveOf[i], 0, `格子 ${i} 没判定却有波次`);
+  }
+  assert.equal([...result.waveOf].filter((w) => w === 1).length, 600, '第 1 波恒 600 人');
   // 收尾提问有真实回答
   assert.ok(result.said.lists.scrolled, 'scrolled 列表缺失');
   assert.ok(result.said.lists.hook, 'hook 列表缺失');
