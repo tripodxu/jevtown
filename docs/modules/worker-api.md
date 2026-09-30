@@ -48,6 +48,10 @@
    key 只透传，不落库不打日志。**所有计费路由（含收波的 follow-up/收尾提问）都透传
    request**——曾出现 settleWave 丢头导致收波段静默落 mock 的计费口径事故，已修复。
 7. **人群缓存**：`crowdOf(pool)` isolate 级缓存 10,000 人格，避免每次检查重建。
+8. **地形缓存**（R7）：`terrainFor(..., frozen)` 按 `post.v` 缓存 `crowdTerrain` 结果——
+   反应只在 running 期间增长，**只对非 running（closing/done）的版本写缓存**；running 中的
+   报告每请求照算（把旧地形喂给进行中的检查是正确性事故，有集成用例兜住）。版本号只增
+   不复用 ⇒ 无失效路径，容量上限 200 条、超出淘汰最早一条。
 
 ## D1 schema（migrations 只增不改）
 

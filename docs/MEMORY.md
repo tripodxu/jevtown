@@ -6,6 +6,23 @@
 
 ---
 
+## 2026-09-30 · R7 优化：Worker 侧按 post.v 缓存地形（93 → 94 用例全绿）
+
+- **做的东西**：`worker/index.js` 加模块级 `terrainCache`（与 `crowdCache` 同家族）：
+  `terrainFor(presetId, keys, bytes, versionId, frozen)`——`frozen = post.state !== 'running'`
+  时算一次就按 `post.v` 缓存，`showPost` 只改一行接线。R4 剖析的最大热点
+  （`crowdTerrain` 8.01ms/请求，占纯计算 73%）从此在重复查看时为 0。
+- **关键口径（唯一可能造出的正确性事故）**：反应只在 running 期间增长。把旧地形喂给
+  进行中的检查是最坏结局——所以 running 一律直算不写缓存，closing/done 才可缓存
+  （closing 期间 batch 被 running 门拦住，反应已冻结，语义正确）。
+  集成用例先验：running 中判 100 人读一次、再判 200 人读一次，`judged` 必须从 100 涨到
+  300（若将来有人把写缓存的时机改错，这条必红）。
+- **收益口径=结构论证，不是实测**：命中路径不进 `crowdTerrain`（R4 已实测 8.01ms），
+  此轮不另测墙钟——D1 IO 噪声大，墙钟测了也不可信。与 R1 对 fillRect 的处理同一诚实标准。
+- **不需要失效路径**：版本号只增不复用（runVersion 恒开新号），旧版本的 reactions
+  永不变化；容量上限 200 条、超出淘汰最早一条，防长驻 isolate 泄漏。
+- 计划文档：`docs/superpowers/plans/2026-09-30-r7-terrain-cache.md`（writing-plans 规范）。
+
 ## 2026-09-30 · R6 前端：交互可达性细节（87 → 93 用例全绿）
 
 - **方向判定**：`impeccable context` = `SCOPED_EXISTING_ALLOWED`，refinement——四主题、

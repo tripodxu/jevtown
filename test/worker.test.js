@@ -264,3 +264,27 @@ test('批次认领：并发 /api/batch 不错位，第 0 波恰好问满 600 人
   assert.equal(detail.waves[0].size, 600, `wave0=${detail.waves[0].size}`);
   assert.equal(detail.waves[0].asked, 600);
 });
+
+test('地形缓存：running 时逐批更新（不得喂旧缓存），冻结后重复读取一致', { timeout: 120_000 }, async () => {
+  const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '地形缓存验证：一条普通帖子' })).json();
+  const author = { 'x-jev-author': authorOf(opening) };
+  const getTerrain = async () => (await (await worker.fetch(`/api/post/${opening.post}?v=1`)).json()).terrain;
+
+  // running 中：先判 100 人读一次，再判 200 人读一次——地形必须跟着涨（stale 缓存会露馅）
+  await worker.fetch(`/api/batch?post=${opening.post}&v=1`, { headers: author });
+  const t1 = await getTerrain();
+  await worker.fetch(`/api/batch?post=${opening.post}&v=1`, { headers: author });
+  await worker.fetch(`/api/batch?post=${opening.post}&v=1`, { headers: author });
+  const t2 = await getTerrain();
+  assert.ok(t2.judged > t1.judged, `running 中地形没更新：${t1.judged} → ${t2.judged}`);
+  assert.equal(t2.judged, 300);
+
+  // 冻结后：重复读取逐字段一致（缓存命中不得改变结果形状）
+  await runToDone(worker, opening.post, opening.version, authorOf(opening));
+  const t3 = await getTerrain();
+  const t4 = await getTerrain();
+  assert.deepEqual(t4, t3);
+  assert.ok(t3.judged >= 600, `冻结后判定数应 ≥ 600，得 ${t3.judged}`);
+  assert.deepEqual(t3.hot, t4.hot);
+  assert.deepEqual(t3.cold, t4.cold);
+});

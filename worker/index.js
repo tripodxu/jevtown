@@ -34,6 +34,26 @@ function crowdOf(pool) {
   return people;
 }
 
+/**
+ * 地形结果按 post.v 缓存（isolate 内存）：crowdTerrain 每请求约 8ms，是 showPost 纯计算的
+ * 大头（R4 剖析）。反应只在 running 期间增长，closing/done 后冻结——只对非 running 的版本
+ * 写缓存，同一份报告重复查看（刷新/多人看/对比区回拉 v1）不再重算置换检验。
+ * 版本号只增不复用 ⇒ 无失效路径，仅限容量防长驻 isolate 泄漏。
+ */
+const terrainCache = new Map();
+const TERRAIN_CACHE_MAX = 200;
+
+function terrainFor(presetId, keys, bytes, versionId, frozen) {
+  if (!frozen) return crowdTerrain(presetId, keys, bytes, { versionId });
+  let terrain = terrainCache.get(versionId);
+  if (!terrain) {
+    terrain = crowdTerrain(presetId, keys, bytes, { versionId });
+    if (terrainCache.size >= TERRAIN_CACHE_MAX) terrainCache.delete(terrainCache.keys().next().value);
+    terrainCache.set(versionId, terrain);
+  }
+  return terrain;
+}
+
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8' } });
 const fail = (message, status = 400) => json({ error: message }, status);
@@ -556,7 +576,7 @@ async function showPost(id, env, url, request = null) {
       glad: topSegments(all, 'glad'),
       sorry: topSegments(all, 'sorry'),
     },
-    terrain: crowdTerrain(presetId, keys, bytes, { versionId: `${id}.${v}` }),
+    terrain: terrainFor(presetId, keys, bytes, `${id}.${v}`, post.state !== 'running'),
     voices,
     decisions: version.decisions ? JSON.parse(version.decisions) : null,
     followUp: version.follow_up ? JSON.parse(version.follow_up) : null,
