@@ -545,7 +545,13 @@ async function showPost(id, env, url, request = null) {
   if (post.state === 'blocked') return json(base);
 
   const people = crowdOf(post.pool);
-  const { results: rows } = await env.DB.prepare('SELECT id, wave, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, v).all();
+  const plan = JSON.parse(version.plan ?? '{}');
+  // 反应流水、版本列表、调用报告互相独立：并行取，省两个 D1 往返（showPost 是最热的读路径）。
+  const [{ results: rows }, versions, report] = await Promise.all([
+    env.DB.prepare('SELECT id, wave, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, v).all(),
+    versionsOf(env.DB, id),
+    callReport(env.DB, id, v, version),
+  ]);
   const bytes = new Uint8Array(CROWD);
   // 传播层：reactions 表本来就有 wave 列，拼成"第几波看到"的字节（0 = 没看到）随报告带回。
   const waveBytes = new Uint8Array(CROWD);
@@ -557,7 +563,6 @@ async function showPost(id, env, url, request = null) {
     if (!byWave.has(row.wave)) byWave.set(row.wave, []);
     byWave.get(row.wave).push(row.reaction);
   }
-  const plan = JSON.parse(version.plan ?? '{}');
   const waves = Object.keys(plan.history ?? {})
     .sort((a, b) => a - b)
     .map((wave) => {
@@ -589,8 +594,8 @@ async function showPost(id, env, url, request = null) {
     decisions: version.decisions ? JSON.parse(version.decisions) : null,
     followUp: version.follow_up ? JSON.parse(version.follow_up) : null,
     prices: version.prices ? JSON.parse(version.prices) : null,
-    versions: await versionsOf(env.DB, id),
-    report: await callReport(env.DB, id, v, version),
+    versions,
+    report,
     spent: { usd: round4(version.usd ?? 0), tokens: version.tokens ?? 0 },
   });
 }

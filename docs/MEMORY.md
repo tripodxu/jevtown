@@ -6,6 +6,20 @@
 
 ---
 
+## 2026-09-30 · R16 优化：feed 索引 + showPost 查询并行化（108 用例不变）
+
+- **feed 全表扫描（EXPLAIN 实证）**：`ORDER BY created_at DESC LIMIT 20` 此前是
+  `SCAN posts` + 临时 B 树排序——本地小事，线上 posts 增长后首页每次都付。迁移 0006 加
+  `idx_posts_created`（SQLite 反向扫描升序索引即可，无需 DESC 索引），计划变为
+  `SCAN posts USING INDEX idx_posts_created`。
+- **showPost 查询并行化**：反应流水 / `versionsOf` / `callReport` 互相独立，原来串行
+  三个 await（6 次 D1 往返的读路径），改 `Promise.all` 省 2 个往返。重构时把原串行查询
+  留在了原地导致 `rows` 重复声明，lint 语法门抓住—— lint 先跑的又一次价值。
+- **验证**：lint ✓；108/108；EXPLAIN 计划已换；dev server feed 实测 20 条正常。
+- 「人格打包管线省 CPU」（路线图 Step 4）是独立的大活——离线预计算 + decode/consistency
+  守卫，值得单独一轮，候选已记。
+- 计划文档：本条目即计划（小轮）；执行同日完成。
+
 ## 2026-09-30 · R15 前端：地图键盘可达（106 → 108 用例全绿）
 
 - **缺口**：地图是报告的核心读数，但 canvas 对键盘用户完全不可达（无 tabindex、无键位、

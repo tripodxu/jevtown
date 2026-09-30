@@ -66,7 +66,9 @@
 | `batches` | `(post, number, stage, n)` | 花费流水；`ms` 为模型耗时（报告分阶段耗时条） |
 
 迁移序列：0001 建表 → 0002 follow_up/prices → 0003 batches.ms + versions.provider →
-0004 versions.decisions（决策样本）→ 0005 posts.author（作者令牌）。
+0004 versions.decisions（决策样本）→ 0005 posts.author（作者令牌）→
+0006 idx_posts_created（feed 列表索引：此前 ORDER BY created_at 是全表扫描 + 临时 B 树，
+EXPLAIN QUERY PLAN 实证）。
 
 ## 契约边界（多 agent 场景）
 
