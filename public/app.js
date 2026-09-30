@@ -53,6 +53,13 @@ const status = (line, ratio) => {
   $('statusBar').style.transform = `scaleX(${Math.min(1, Math.max(0, ratio ?? 0))})`;
 };
 
+// 里程碑播报（开局/收波/完成/错误）：statusLine 逐批更新是视觉行，
+// 屏幕阅读器只听这里——逐批播报会把一次检查刷成约 100 条公告。
+const announce = (text) => {
+  const live = $('statusLive');
+  if (live) live.textContent = text;
+};
+
 // -- 实时监控（检查进行中的动态地图与调用流水） ----------------------------------
 
 let live = null;
@@ -86,7 +93,7 @@ function updateLiveStats() {
   $('liveStats').innerHTML =
     stat(`${live.tally.judged.toLocaleString()} / ${CROWD.toLocaleString()}`, 'Jev 已判定') +
     stat(live.requests, 'Jev 请求') +
-    stat(live.tokens.toLocaleString(), 'tokens') +
+    stat(live.tokens.toLocaleString(), '输入 tokens') +
     stat(fmtMs(live.ms), '模型耗时') +
     stat(`$${live.usd.toFixed(4)}`, '累计花费');
 }
@@ -155,12 +162,15 @@ $('form').addEventListener('submit', async (event) => {
       localStorage.setItem(`jevtown.author.${opening.post}`, opening.author);
     }
     if (opening.state === 'blocked') {
-      status(`Jev 拒绝发布：${opening.blocked.map((id) => BLOCKED_ZH[id] ?? id).join('、')}`, 1);
+      const reason = `Jev 拒绝发布：${opening.blocked.map((id) => BLOCKED_ZH[id] ?? id).join('、')}`;
+      status(reason, 1);
+      announce(reason);
       return;
     }
     current.post = opening.post;
     current.version = opening.version;
     showLive(preset);
+    announce(`检查开始，第 1 波 ${opening.wave?.total ?? ''} 人`);
     if (opening.unlisted?.length) {
       status(`注意：${opening.unlisted.map((id) => BLOCKED_ZH[id] ?? id).join('、')}（仍会照常检查，但不进公共流）`, 0.04);
     }
@@ -180,9 +190,12 @@ $('form').addEventListener('submit', async (event) => {
         done = true;
         monitorRow(['收尾', `到达 ${wave.reach}`, '', '', ''], 'wave-row');
         status('收尾完成。', 0.98);
+        announce(`检查收尾，共到达 ${wave.reach} 人`);
       } else {
+        const line = `第 ${wave.wave.index + 1} 波完成，情绪 ${wave.wave.mood >= 0 ? '+' : ''}${wave.wave.mood}，文字继续传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`;
         monitorRow([`第 ${wave.wave.index + 1} 波收束`, `情绪 ${wave.wave.mood >= 0 ? '+' : ''}${wave.wave.mood}`, `${wave.wave.size} 人`, '', ''], 'wave-row');
-        status(`第 ${wave.wave.index + 1} 波完成，情绪 ${wave.wave.mood >= 0 ? '+' : ''}${wave.wave.mood}，文字继续传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`, 0.5);
+        status(line, 0.5);
+        announce(line);
       }
     }
 
@@ -190,10 +203,12 @@ $('form').addEventListener('submit', async (event) => {
     $('live').hidden = true;
     showResult(view);
     status('完成。', 1);
+    announce('检查完成，报告已生成');
     await loadFeed();
   } catch (error) {
     $('statusLine').innerHTML = `<span class="error">${esc(error.message)}</span>`;
     $('statusBar').style.transform = 'scaleX(0)';
+    announce(`检查失败：${error.message}`);
   } finally {
     $('go').disabled = false;
   }
@@ -284,6 +299,8 @@ window.addEventListener('popstate', () => {
 });
 
 async function openPost(id) {
+  status('正在打开报告……', 0.15);
+  announce('正在打开报告');
   try {
     const view = await getJSON(`/api/post/${id}`);
     current.post = id;
@@ -292,6 +309,7 @@ async function openPost(id) {
     showResult(view);
   } catch (error) {
     status(error.message, 0);
+    announce(`打开失败：${error.message}`);
   }
 }
 window.openPost = openPost;

@@ -106,8 +106,11 @@ app.js  fetch /api/post/:id
   画布在折叠线下时 tooltip 会被视口裁掉（R6 取证实测 tipBottom 3487 / vh 805）。
 - **报告深链**：feed 链接是真 URL（`/?post=<id>`），点击在 `app.js` 委托拦截 +
   `pushState`，回退键收起报告；页面载入读 `?post=` 直开。**不要再写 `javascript:` URL**。
-- 检查进度的 `#statusLine` 带 `role="status"`（屏幕阅读器播报）；voices「看全部」展开后
-  焦点交给第一张新露出的卡。
+- 检查进度的播报**分两层**（R9）：`#statusLine` 是纯视觉行（逐批更新，**不许挂
+  `role="status"`**——一次全城检查会刷出约 100 条播报）；`#statusLive`（sr-only）
+  才是屏幕阅读器听的，只在里程碑更新（开局/收波/完成/拒发/失败），`app.js` 的
+  `announce()` 是唯一入口。
+- voices「看全部」展开后焦点交给第一张新露出的卡。
 
 ## 窄屏约定（≤560px）
 

@@ -64,7 +64,10 @@
         </div>
       </form>
       <div id="status" hidden>
-        <div class="status-line" id="statusLine" role="status"></div>
+        <div class="status-line" id="statusLine"></div>
+        <!-- 屏幕阅读器专用播报：只在里程碑更新（开局/收波/完成/错误）。
+             逐批更新的 statusLine 绝不能挂 role=status——一次全城检查会刷出约 100 条播报。 -->
+        <div class="sr-only" id="statusLive" role="status"></div>
         <div class="bar"><div class="bar-fill" id="statusBar"></div></div>
       </div>
     </section>
