@@ -1,43 +1,47 @@
 # DEPLOYMENT · 部署指南
 
-> 当前状态：**本地开发，未上线**。本文是上线清单，按顺序执行。
+> 当前状态：**已上线（2026-09-30）** → https://jevtown-cn.xd04040212.workers.dev
+> （预览域；自定义域未配）。本文记录已执行的步骤与后续运维清单。
 
-## 前置
-
-- Node.js 22+，`npm install` 完成。
-- Cloudflare 账号已登录 wrangler（`npx wrangler login`）。
-
-## 上线步骤
+## 已执行（2026-09-30）
 
 ```bash
-# 1. 建 D1（会打印 database_id，填回 wrangler.jsonc 的 d1_databases[0].database_id）
-npx wrangler d1 create jevtown
-
-# 2. 应用迁移到远程
-npm run deploy    # = wrangler d1 migrations apply jevtown --remote && wrangler deploy
+npx wrangler d1 create jevtown        # database_id adccbaa8-… 已写入 wrangler.jsonc
+npx wrangler d1 migrations apply jevtown --remote   # 0001–0007 全部应用
+npx wrangler secret put TYPESAFE_API_KEY            # 站方兜底 key（正常流量不走它）
+npx wrangler deploy                   # → https://jevtown-cn.xd04040212.workers.dev
 ```
 
-## 密钥（三选一，按场景）
+- **计费模型（R28 决策）**：站点不提供站方 key、无站内额度。真实检查一律走访客
+  自填的 BYOK key（花自己的钱）；无 key 即 mock。曾经的每 IP 每日限额与全站日预算
+  闸已整体退役——线上没有全局 429。
+- `TYPESAFE_API_KEY` secret 仅作兜底（`JEV_PROVIDER=mock` 时实际不消费）；撤销它
+  不影响 BYOK 用户。
 
-| 方式 | 命令 | 适用 |
+## 后续待办（按优先级）
+
+- [ ] **线上冒烟测试**：首页 200、`/api/feed` 200、一次 BYOK 真实检查跑通全流程
+      （部署当日 curl 到 workers.dev 超时，未区分网络/部署问题，先 `curl -v` 复核）。
+- [ ] **闸退役后的 `npm test` 全量绿**（部署当日集成测试起停缓慢被中断；已验证
+      lint ✓ 与 `node --check`，被删的只有三个闸用例）。
+- [ ] 自定义域（workers.dev 预览域够用但不易分享）。
+- [ ] 定期 `npx wrangler d1 export`（D1 无自动备份）。
+
+## 密钥（按场景）
+
+| 方式 | 位置 | 适用 |
 |---|---|---|
-| 本地开发 | `.env.local` 放 `TYPESAFE_API_KEY`（已 gitignore） | `npm run check` |
-| 本地站点 | `.dev.vars` 放 key 并设 `JEV_PROVIDER` | `npm run dev` |
-| 生产 | `npx wrangler secret put TYPESAFE_API_KEY` | 部署后全站可用，用户无需填 key |
+| 访客 BYOK | 浏览器 localStorage（页面 Key… 弹窗） | **线上真实检查的唯一路径** |
+| 本地 CLI | `.env.local` 放 `TYPESAFE_API_KEY`（gitignored） | `npm run check` |
+| 站方兜底 secret | `npx wrangler secret put TYPESAFE_API_KEY` | 已设置；`JEV_PROVIDER=mock` 下不消费 |
 
-- 不配任何 key ⇒ 自动 mock，全流程可玩、零花费。
-- BYOK（用户自带 key）只存浏览器 localStorage，随请求头发给本 Worker，不落库不打日志。
+- BYOK key 只存浏览器 localStorage，随请求头发给本 Worker，不落库不打日志。
 
-## 上线前检查清单
+## 上线后检查清单（每次重大变更后）
 
-- [ ] `wrangler.jsonc`：`database_id` 已替换真实值（当前是占位 `00000000-…`）——**上线阻塞项**。
-- [ ] 限额三变量按运营预期调整：`CROWD_DAILY_LIMIT` / `CROWD_DAILY_BUDGET_USD` /
-      `CROWD_MAX_WAVES`（现值 20 / $5 / 4）。
-- [ ] `npm test` 全绿。
-- [ ] 用真实 key 跑一次 `npm run check` 抽查成本口径（预期单波 600 人 $0.01–0.02）。
-- [ ] 已知待办（README 路线图 Step 4 剩余项）：人格打包管线省 CPU、`wrangler d1 create` +
-      secret 部署。（`/api/batch` 作者令牌与收波 CAS 已于 M2 落地，见 MEMORY.md）
-- [ ] observability 已开启（`wrangler.jsonc`，M3 已改 true，部署前确认未被回改）。
+- [ ] `npm run lint` ✓ 且 `npm test` 全绿（mock 通道，不花钱）。
+- [ ] 线上首页与 `/api/feed` 200。
+- [ ] 用真实 BYOK key 跑一次检查抽查成本口径（预期单波 600 人 $0.01–0.02）。
 
 ## 成本口径（实测，2026-09-28）
 
@@ -48,7 +52,7 @@ npm run deploy    # = wrangler d1 migrations apply jevtown --remote && wrangler 
 | 全城 10,000 人（估） | ≈ $0.10–0.15 | — |
 
 明细与观察见 [research/real-api-report.md](research/real-api-report.md)。
-限额变量是全站熔断的第一道闸；`batches` 表按 day 汇总即当日真实花费。
+`batches` 表按 day 汇总即当日真实花费（R10 起账面精度 4 位小数）。
 
 ## 回滚
 

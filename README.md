@@ -6,7 +6,9 @@
 
 > 🤖 **给 agent**：先读 [AGENTS.md](./AGENTS.md)（入口 + 分层阅读协议），文档全集索引在 [docs/README.md](./docs/README.md)，项目记忆在 [docs/MEMORY.md](./docs/MEMORY.md)（最新在上）。不需要全量阅读仓库。
 
-> **当前状态：本地开发，未上线。** 不填 key 全流程可玩（mock 模式，零花费）；填自己的 key 即刻切真实模型。
+> **当前状态：已上线（预览域）→ https://jevtown-cn.xd04040212.workers.dev 。**
+> 站点不提供站方 key：不填 key 全流程可玩（mock 模式，零花费）；填自己的 TypeSafe /
+> OpenRouter key（BYOK，只存本浏览器）即刻切真实模型，花自己的钱，不受任何额度限制。
 
 ---
 

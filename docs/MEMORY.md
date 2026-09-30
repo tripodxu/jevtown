@@ -6,6 +6,21 @@
 
 ---
 
+## 2026-09-30 · 上线：workers.dev 部署完成（R28 同日）
+
+- **已做**：`npx wrangler d1 create jevtown`（database_id `adccbaa8-…` 已写入
+  wrangler.jsonc）→ 远程迁移 0001–0007 全部应用 → `wrangler secret put TYPESAFE_API_KEY`
+  → `npx wrangler deploy` → **https://jevtown-cn.xd04040212.workers.dev**（版本
+  `76dca941`）。R28 的闸退役（5430d3c）已随部署生效：线上没有全局 429。
+- **待办（下一次会话第一件事）**：
+  1. **线上冒烟测试未跑完**（首页/`/api/feed`/一次 BYOK 真实检查）——本机 curl 到
+     workers.dev 超时，不区分是网络还是部署问题；下次先 `curl -v` 复核。
+  2. R28 退役闸后的 `npm test` 全量绿**未跑完**（集成测试起停缓慢被中断）——已验证
+     lint ✓ 与 `node --check`；下次先补全量。
+  3. 自定义域、`JEV_PROVIDER` 保持 mock（真实检查走 BYOK）。
+- 提交：`5430d3c`（闸退役 + wrangler.jsonc database_id 的前半在 103156c…5430d3c 之间；
+  database_id 与本次上线说明随后续 docs 提交入库）。
+
 ## 2026-09-30 · R28 决策变更：退役限额/预算闸（BYOK-only），并为上线铺路
 
 - **用户决策**：站点不提供站方 key，也不提供站内 API 额度——**所有真实检查一律走
