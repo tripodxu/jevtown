@@ -291,7 +291,7 @@ function voicesView(result) {
   const cards = result.voices.map((voice) =>
     `<div class="voice">${avatarSvg(pool, voice.id, { size: 36 })}` +
     `<div class="v-body"><div class="who">${esc(voice.who.name)}，${voice.who.age}岁 · ${esc(voice.who.job ?? '')} · ${esc(voice.who.city)}</div>` +
-    `<div class="what">${esc(REACTIONS_ZH[voice.reaction] ?? voice.reaction)}${voice.who.temper ? ` · ${esc(voice.who.temper)}` : ''}</div></div></div>`,
+    `<div class="what"><i class="rdot" style="background:${LOOKS[voice.look]}"></i>${esc(REACTIONS_ZH[voice.reaction] ?? voice.reaction)}${voice.who.temper ? ` · ${esc(voice.who.temper)}` : ''}</div></div></div>`,
   );
   const collapsed = cards.length > 24 ? ' collapsed' : '';
   const more = cards.length > 24

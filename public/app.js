@@ -379,6 +379,10 @@ window.addEventListener('popstate', () => {
 async function openPost(id) {
   status('正在打开报告……', 0.15);
   announce('正在打开报告');
+  // 骨架过渡：匹配报告的布局形状（标题行 + 两行文字 + 一大块），比空白和转圈都诚实
+  const result = $('result');
+  result.hidden = false;
+  result.innerHTML = '<div class="skeleton" aria-hidden="true"><div class="sk sk-line" style="width:34%"></div><div class="sk sk-line" style="width:88%"></div><div class="sk sk-line" style="width:72%"></div><div class="sk sk-block"></div><div class="sk sk-line" style="width:60%"></div></div>';
   try {
     const view = await getJSON(`/api/post/${id}`);
     current.post = id;
@@ -386,6 +390,7 @@ async function openPost(id) {
     current.version = view.versions?.at(-1)?.number ?? 1;
     showResult(view);
   } catch (error) {
+    result.hidden = true; // 骨架不留在原地装样子
     status(error.message, 0);
     announce(`打开失败：${error.message}`);
   }
