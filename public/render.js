@@ -27,7 +27,7 @@ export function renderCheck(el, result) {
   // 图表的 viewBox 宽度跟着容器走：固定宽度在窄屏会把 11px 的标注缩到 4px。
   const chartWidth = Math.min(940, Math.max(300, el.clientWidth - 56));
   const presetId = result.post.preset;
-  const html = [`<h2>${esc(PRESET_NOUN(presetId))} · 检查结果</h2>`];
+  const html = [`<h2 tabindex="-1">${esc(PRESET_NOUN(presetId))} · 检查结果</h2>`];
 
   html.push('<div class="source-text">');
   html.push(`<div>文本：${esc(result.post.text.slice(0, 80))}${result.post.text.length > 80 ? '…' : ''}</div>`);

@@ -217,6 +217,8 @@ $('form').addEventListener('submit', async (event) => {
 function showResult(view) {
   renderCheck($('result'), view);
   $('resultActions').hidden = false;
+  // 焦点随视线走：键盘/屏幕阅读器从报告标题继续，而不是留在触发处
+  $('result').querySelector('h2')?.focus({ preventScroll: true });
   // 版本 ≥2 时提供对比入口：对比卡懒加载（点按钮才拉第 1 版全量视图，不自动翻倍负载）。
   const aside = $('compare');
   if (current.version > 1) {

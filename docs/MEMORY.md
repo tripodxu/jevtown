@@ -6,6 +6,20 @@
 
 ---
 
+## 2026-09-30 · R12 前端：浏览器界面细节（103 用例不变）
+
+- **方向判定**（taste-skill §0.B/§13）：jevtown 是 Operate 型产品界面，taste-skill 不覆盖
+  dashboard 类——取其 Redesign-Preserve 纪律，技术依据是 impeccable craft-floor 的
+  「Browser surfaces」：滚动条、插入光标这些"没被画出来的部件"也要跟主题令牌走。
+- **改动三件**：① 滚动条主题化——`scrollbar-color` 是继承属性（:root 一次全页生效），
+  **`scrollbar-width` 不是**，要逐容器声明（html + `.monitor-wrap`；窄屏 `.toc` 已有自己的
+  thin）——第一版注释写错了继承性，CDP 复验抓出来补上的；② `textarea/input` 的
+  `caret-color: var(--accent)`；③ 焦点落点——`showResult` 渲染后 `h2.focus({preventScroll:true})`
+  （h2 加 tabindex="-1"），键盘与屏幕阅读器随视线进报告。
+- **验证**：lint ✓ 103/103；CDP——root thin+主题色、`.monitor-wrap` thin（复验）、
+  caret = 主题 accent、深链打开后 `activeElement` 是报告 h2、375px 零溢出、控制台零错误。
+- 计划文档：`docs/superpowers/plans/2026-09-30-r12-browser-surfaces.md`。
+
 ## 2026-09-30 · R11 创意：人群切片热力图（100 → 103 用例全绿）
 
 - **点子**：segments 是边际统计，答不了"哪个年龄段 × 哪类兴趣**一起**叫好"。而小镇网格

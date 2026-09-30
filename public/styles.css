@@ -186,6 +186,18 @@ body {
 
 ::selection { background: var(--accent-soft); }
 
+/* 浏览器面也带设计（R12）：滚动条与插入光标跟主题令牌走。
+   scrollbar-color 是继承属性，:root 设一次全页面生效；scrollbar-width 不继承，
+   要逐个滚动容器声明（html 主滚动 + 监控表；窄屏 .toc 已有自己的 thin 规则）。 */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-strong) transparent;
+}
+
+.monitor-wrap { scrollbar-width: thin; }
+
+textarea, input { caret-color: var(--accent); }
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
