@@ -17,7 +17,7 @@
 | `avatar.js` | 人格头像：hash32 驱动的 5×5 镜像 identicon，颜色只取主题令牌（R17，纯函数） |
 | `sharecard.js` | 分享卡片：报告读数 + 地图快照合成 1200×630 PNG，命令式 canvas（R20） |
 | `theme.js` | 主题切换（localStorage 持久化） |
-| `showcase.js` | 首页示例回放（读 `public/examples/*.json`，经 `shared/replay.js`） |
+| `showcase.js` | 首页示例回放（读 `public/examples/*.json`，经 `shared/replay.js`）；IntersectionObserver 懒渲染，滚到附近才建卡（R22） |
 
 ## 渲染管线
 

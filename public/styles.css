@@ -864,6 +864,9 @@ canvas.grid.diff { cursor: default; }
   box-shadow: none;
 }
 
+/* 懒渲染占位（R22）：未渲染的示例卡不塌陷，滚到附近（rootMargin 300px）即填充 */
+.examples .card:empty { min-height: 420px; }
+
 #compare .source-text, #result .source-text { margin-bottom: 10px; }
 #resultActions { margin: -6px 2px 20px; }
 

@@ -6,6 +6,21 @@
 
 ---
 
+## 2026-09-30 · R22 优化：示例卡懒渲染（115 用例不变）
+
+- **取证（Node 实测）**：`replayToView × 2 = 122.8ms` 纯 CPU——两张示例回放卡各付一份
+  segments/crowdTerrain/voicesOf/切片热力/波次构成，再加 renderCheck 的 DOM/canvas/SVG
+  成本，全部发生在首页加载时（showcase.js 是 module 顶层 await，同步占主线程），而卡片
+  沉在折叠线下。
+- **修法**：`showcase.js` 改 IntersectionObserver 懒渲染——卡片进入视口前 300px 才
+  renderCheck，渲染一次即 disconnect；rootMargin 预渲染保证无可见跳变；无 IO 的环境
+  直接渲染（不降级）；`.examples .card:empty { min-height: 420px }` 占位不塌陷。
+- **环境插曲**：Edge 无头连续起不来（僵尸进程 + 端口失联），杀进程 + 换端口 + 加长启动
+  等待后恢复——一次性 CDP 脚本的脆弱性记在案。
+- **验证**：lint ✓；115/115；E2E——未滚动两卡皆空（占位 420px 生效）、滚动后两卡完整
+  （热力图/头像都在）、控制台零错误。
+- 计划文档：`docs/superpowers/plans/2026-09-30-r22-lazy-showcase.md`。
+
 ## 2026-09-30 · R21 前端：voices 反应色点 + 报告骨架屏（115 用例不变）
 
 - **两处状态反馈收尾**：① 人格声音卡的反应词补 `rdot` 色点——LOOKS 数据墨水与地图图例
