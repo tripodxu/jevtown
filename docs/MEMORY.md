@@ -6,6 +6,65 @@
 
 ---
 
+## 2026-10-01 · R29 审查：Jev 调用层 7 条加固 + 修回 R28 遗留的 `ip is not defined`
+
+- **为什么做**：一次只读的代码审查问「使用 jev 的部分有没有问题」，对 `public/shared/jev.js`
+  → `requests.js` → `check.js` → `worker/index.js` 全链路逐条比契约，得到 7 条问题，
+  全部改掉；顺带发现测试从来没成功过的真正原因。
+- **契约核实**（对照 `_research_raw/demo_server_model_jev.ts` 官方客户端与上游 `gj_public_jev.js`）：
+  `POST https://api.typesafe.ai/v1/systemone`、模型 `jev-1.13.0`、请求体 `{ state, questions, model }`、
+  响应 `{ answers, model, usage }`、计费按 `usage.input_tokens`（官方注释
+  "input is billed at $42 per billion tokens" ⇒ `0.042 / 1e6`，**与本地一致**）；
+  题型 choice/score/noul 与读回 probabilities/score/noul、`UNLISTED_FROM = 0.5` / `BLOCKED_FROM = 0.85`
+  与上游 `gj_requests.js`/`gj_check.js` 一致。**传输层 `public/shared/jev.js` 与上游逐行相同，
+  本地零偏差——7 条问题全在本地新写的编排层。** OpenRouter 走 `usage.cost` 实报。
+- **7 条（全部已改）**：
+  1. **200 但没有 answers 不能算成功**（中高）：`ask()` 现在把「响应里没有 answers 对象」记为
+     `no answers in the result`、`把 problems 里一条都没答上` 记为 `none of the questions was
+     answered`，两者都按服务端错误那样重试/换路；返回前按 `questions` 过滤出真答上的。
+     **取舍**：只把「一条都没答上」当故障，**部分缺失仍算成功**——那是 Jev 自己的「说不清 /
+     跳过」，不是网关坏了。原行为会把批次记成已问 100 人而概率为空：钱照花，人永远判不出来。
+  2. **`runFollowUp` 一批失败不回滚已花的钱**（中）：逐批 try/catch，失败
+     `console.error` 后 `break` 就地收尾，不重来整段（重来=付两次）。答到的照常交出去。
+  3. **收尾 catch 与 `shared/check.js` 同一分流**（中低）：`fatal` / `no_key` 先 rethrow，
+     否则只把这一题标 `missing = 'failed'`。原来 fatal（key 失效/鉴权错）被吞成
+     「收尾问题全 failed，帖子照常 done」——页面看着完整，其实一个答案都没有。
+  4. **BYOK 花销算进全站日预算**（低）：**无需改代码**——R28（5430d3c）已把 `overBudget` /
+     `spentToday` 整体退役，预算闸已不存在。
+  5. **BYOK key 随 GET 一起发**（低）：`public/app.js` 新增 `readJSON(url)`（只带 `x-jev-author`，
+     不带 `x-jev-key`），把 5 个纯读调用点（`/api/post/:id?v=` ×4、`/api/feed`）换过去；
+     `/api/batch` 是花钱路由，**仍留在 `getJSON`**。
+  6. **`runFollowUp` 外呼数无上限**（低）：新增 `FOLLOW_UP_MAX_BATCHES = 24`，
+     `target = Math.min(stopped.length, 24 * PER_REQUEST)`。免费档一次 Worker 调用最多 50 外呼，
+     一次收波要在同一次调用里把追问 + 收尾问句全问完，追问是 stopped 的全部人（实测两三千 →
+     十几批），撞墙会让 post 卡在 closing 等人重试、重试再付一次钱。另把 `retries = { left: 40 }`
+     提成 `RETRIES_PER_INVOCATION = 40` 并注释它 ≠ `MAX_ATTEMPTS = 5`：前者是一次 Worker 调用的
+     共享外呼预算（几十个批次各带 5 次重试会先撞 Cloudflare 50 上限），后者是单批自己的。
+  7. **`text.slice(0, MAX_TEXT_CHARS)` 按 UTF-16 code unit 切**（很低）：`requests.js` 加模块内
+     `clip(text, limit)`（`[...text]` 按 code point），`stateOf` 与 `audienceRequest` 改用它，
+     不会切半 emoji。
+- **致命 bug（R28 遗留，非本次编辑引入）**：`npm test` 从来没成功过，用户报「测试时间极长、
+  从未成功」。真因：`POST /api/check` 抛 `ReferenceError: ip is not defined` → post 从未创建 →
+  `test/helper.js` 的 `runToDone`/`runBatches` 里 `for(;;)` 无限打 `/api/batch?post=&v=1` 得 404，
+  测试**死循环**而不是变慢（日志刷满 `GET /api/batch 404`）。根因是 R28（5430d3c）删掉了两处
+  `const ip = request.headers.get('CF-Connecting-IP') ?? 'local';`（runCheck 与 runVersion 各一）
+  连同限额查询，但 `worker/index.js` 两处 posts INSERT 仍 `.bind(..., day, ip, author)` 留下悬空
+  引用。`migrations/0001_init.sql:11` 的 `ip TEXT` 列仍在（`:52` 还有 `idx_posts_day_ip`），只是
+  没闸用它。**修法**：`runCheck` 恢复这一行并注释「posts.ip 只剩观测用途（每 IP 限额已随 R28
+  退役），但列还在迁移里，写 NULL 等于把这份观测数据扔掉」——`runVersion` 只 INSERT `versions`，
+  从不需要 `ip`，一处恢复覆盖两个 posts INSERT。
+- **测试基建加固**：`test/helper.js` 的 `runToDone`/`runBatches` 加
+  `if (!res.ok) throw new Error(\`/api/batch → ${res.status} ${await res.text()}\`);`——
+  不 ok 就摊开状态与 body 立即失败，避免再出现「跑不完而不是失败」。
+- **验证**：`npm test` **117/117 全绿**（worker 集成 13 项 + 其余 104）——这是 R28 记下的
+  「全量绿未跑完」第一次补上；`npm run lint` ✓ 41 文件；`node --check` 五个改动文件全过。
+- **坑**：pwsh 管道 `| Select-Object -Last N` 会缓冲到命令结束才输出，长命令看起来「没有输出」——
+  应改用 `Tee-Object -FilePath` 让输出落盘。排查时用 `| Select-String -Pattern '^(✔|✖|ℹ|Error)'`
+  只看结论行。web_search 无 key（`Error: DeepSeek search has no API key for "DEEPSEEK_API_KEY"`），
+  契约只能靠 `_research_raw/` 官方材料核对。
+- Open objectives：用户长期迭代目标（优化/创意/前端轮换，每轮一个中文 commit，真实用 jev +
+  随机对照实验 + 回答「为什么停在第一波」）——本条为第 1 轮（优化轮）的收尾。
+
 ## 2026-09-30 · 上线：workers.dev 部署完成（R28 同日）
 
 - **已做**：`npx wrangler d1 create jevtown`（database_id `adccbaa8-…` 已写入

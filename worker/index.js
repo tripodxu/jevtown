@@ -22,6 +22,13 @@ import { rng, hash32 } from '../public/shared/rng.js';
 
 const PER_REQUEST = 100;
 const WAVES_MAX = 4;
+/**
+ * 免费档一次 Worker 调用最多 50 个外呼，而一次收波要在同一次调用里把追问与收尾问句问完。
+ * 追问是 stopped 的全部人（实测两三千 → 十几批），无上限就会撞墙，撞墙的表现是整次收波被
+ * Cloudflare 中断、post 卡在 closing 等人重试——重试还要再付一次钱。留出门来：批数封顶，
+ * 超出的批次不问了，页面上追问少问几个人，比整次收尾失败便宜。
+ */
+const FOLLOW_UP_MAX_BATCHES = 24;
 
 /**
  * 全城人群的模块级缓存：crowd() 算 1 万人格约 155ms，而 runCheck/closeWave/showPost 每个请求都要用。
@@ -70,14 +77,21 @@ const round4 = (value) => Math.round(value * 10000) / 10000;
  * 这台 Worker 用哪条路到 Jev，优先级：请求头 BYOK（x-jev-provider + x-jev-key，访客在页面设置里填的）
  * → env 配置（JEV_PROVIDER + secret）→ mock（本地开发零门槛）。
  * BYOK 的 key 只在本请求内存里用一次，不落库不打日志。
+ *
+ * retries 是「一次 Worker 调用」的共享重试预算，40 不是 MAX_ATTEMPTS：单个请求失败重试 5 次是
+ * 单批自己的事，而一次收波要在同一次调用里连发几十个批次，每个批次都带 5 次重试会先撞 Cloudflare
+ * 的 50 外呼上限。所以这里发一份总配额给本次调用的所有批次——重试优先给前面的批次用完，
+ * 后面的批次失败就直接失败（批次认领制会把它们留在 answered 之外，下一批次还会问它们）。
  */
+const RETRIES_PER_INVOCATION = 40;
+
 function providerOf(env, request = null) {
   if (request) {
     const headerName = String(request.headers.get('x-jev-provider') ?? '').trim().toLowerCase();
     const headerKey = String(request.headers.get('x-jev-key') ?? '').trim();
     if (headerKey && PROVIDERS[headerName]) {
       const picked = { ...PROVIDERS[headerName], apiKey: headerKey };
-      const retries = { left: 40 };
+      const retries = { left: RETRIES_PER_INVOCATION };
       return { name: headerName, ask: (req) => askJev(picked, req, retries) };
     }
   }
@@ -85,7 +99,7 @@ function providerOf(env, request = null) {
   if (wanted !== 'mock') {
     const picked = pickProvider(env);
     if (picked) {
-      const retries = { left: 40 };
+      const retries = { left: RETRIES_PER_INVOCATION };
       return { name: picked.name, ask: (req) => askJev(picked, req, retries) };
     }
   }
@@ -158,6 +172,9 @@ async function runCheck(request, env) {
     : null;
   if (presetId === 'product' && !prices) return fail('product 需要 prices：至少两个正数的数组，如 [9,19,39,79]');
 
+  // posts.ip 只剩观测用途（每 IP 限额已随 R28 退役），但列还在迁移里，写 NULL 等于把这份
+  // 观测数据扔掉——同一个头仍读一次，两个 INSERT 共用。
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'local';
   const day = today();
   const provider = providerOf(env, request);
   const pool = 'zh';
@@ -443,6 +460,9 @@ async function settleWave(env, post, id, v, request) {
       askMs += ms;
       await addSpend(env.DB, { post: id, number: v, stage: 'ask', n: parts.length - 1, usd, tokens, ms, day: today() }).run();
     } catch (error) {
+      // 跟 shared/check.js 同一分流：fatal / no_key 不是"这题没答上"，是"这条通道废了"。
+      // 吞下去只会把收尾问题全标成 failed，而帖子照常 done——页面看着完整，其实一个答案都没有。
+      if (error.fatal || error.code === 'no_key') throw error;
       console.error('ask', question, error?.message);
       for (const list of listsOf(question, presetId, ids, reactionOf)) missing[list] = 'failed';
     }
@@ -480,13 +500,28 @@ async function runFollowUp(env, post, version, provider, reached, people, number
   const answers = preset.followUp.answers ?? priceLadder(prices ?? [9, 19, 39, 79], '¥');
   const stopped = [...reached.entries()].filter(([, reaction]) => preset.reactions[reaction]?.stopped).map(([id]) => id);
   const totals = Object.fromEntries(Object.keys(answers).map((id) => [id, 0]));
+  // 外呼门：见 FOLLOW_UP_MAX_BATCHES。比例取样本——问过的那些人就是被抽到的那些人，
+  // 报告里的占比仍按 asked 算，不会因为只问了一半而虚高。
+  const target = Math.min(stopped.length, FOLLOW_UP_MAX_BATCHES * PER_REQUEST);
   let asked = 0;
   let usd = 0;
   let tokens = 0;
-  for (let i = 0; i < stopped.length; i += PER_REQUEST) {
+  for (let i = 0; i < target; i += PER_REQUEST) {
     const batchPeople = stopped.slice(i, i + PER_REQUEST).map((pid) => people[pid]);
-    const { answers: batchAnswers, usd: batchUsd, tokens: batchTokens, ms: batchMs } =
-      await provider.ask(followUpRequest(post.preset, version.text, batchPeople, answers));
+    let batchAnswers;
+    let batchUsd;
+    let batchTokens;
+    let batchMs;
+    try {
+      ({ answers: batchAnswers, usd: batchUsd, tokens: batchTokens, ms: batchMs } =
+        await provider.ask(followUpRequest(post.preset, version.text, batchPeople, answers)));
+    } catch (error) {
+      // 一批失败不重来整段：前面几批的钱已经记进 batches，再跑一遍就是付两次。
+      // 就地收尾——答到的照常交出去（少了最后几批），帖子照常置 done。
+      // fatal / no_key 也吞在这里：本次检查该拿的都拿到了，硬抛只会把 post 卡回 running 等人重试。
+      console.error('followup', post.id, number, i / PER_REQUEST, error?.message);
+      break;
+    }
     usd += batchUsd;
     tokens += batchTokens;
     await addSpend(env.DB, { post: post.id, number, stage: 'followup', n: i / PER_REQUEST, usd: batchUsd, tokens: batchTokens, ms: batchMs, day: today() }).run();

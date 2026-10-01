@@ -31,6 +31,18 @@ const authHeaders = () => {
   };
 };
 
+/**
+ * BYOK 的 key 只跟"Worker 会拿它去问 Jev 的路由"有关：/api/check、/api/version、/api/batch、
+ * /api/wave。纯读路由（/api/post、/api/feed）Worker 一个 Jev 调用也不发，key 没有理由跟过去——
+ * 少一条路，key 就少一次出现在别处的机会。
+ */
+const readJSON = async (url) => {
+  const res = await fetch(url, { headers: currentAuthor ? { 'x-jev-author': currentAuthor } : {} });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? res.statusText);
+  return data;
+};
+
 const getJSON = async (url) => {
   const res = await fetch(url, { headers: authHeaders() });
   const data = await res.json().catch(() => ({}));
@@ -261,7 +273,7 @@ $('form').addEventListener('submit', async (event) => {
       }
     }
 
-    const view = await getJSON(`/api/post/${current.post}?v=${current.version}`);
+    const view = await readJSON(`/api/post/${current.post}?v=${current.version}`);
     $('live').hidden = true;
     showResult(view);
     status('完成。', 1);
@@ -292,7 +304,7 @@ function showResult(view) {
     slot.querySelector('#loadCompare').addEventListener('click', async () => {
       slot.textContent = '载入中……';
       try {
-        const v1 = await getJSON(`/api/post/${current.post}?v=1`);
+        const v1 = await readJSON(`/api/post/${current.post}?v=1`);
         // renderCheck 会清空容器，所以第 1 版渲染进子节点，差分卡才不会被一起清掉
         const diff = document.createElement('div');
         const v1card = document.createElement('div');
@@ -332,7 +344,7 @@ $('saveCard').addEventListener('click', async () => {
 
 $('revise').addEventListener('click', async () => {
   if (!current.post) return;
-  const view = await getJSON(`/api/post/${current.post}?v=${current.version}`);
+  const view = await readJSON(`/api/post/${current.post}?v=${current.version}`);
   $('text').value = view.post.text;
   $('preset').value = view.post.preset;
   $('text').focus();
@@ -343,7 +355,7 @@ $('revise').addEventListener('click', async () => {
 
 async function loadFeed() {
   try {
-    const data = await getJSON('/api/feed');
+    const data = await readJSON('/api/feed');
     $('feed').innerHTML = data.posts.length
       ? data.posts
           .map(
@@ -391,7 +403,7 @@ async function openPost(id, versionHint = null) {
   result.hidden = false;
   result.innerHTML = '<div class="skeleton" aria-hidden="true"><div class="sk sk-line" style="width:34%"></div><div class="sk sk-line" style="width:88%"></div><div class="sk sk-line" style="width:72%"></div><div class="sk sk-block"></div><div class="sk sk-line" style="width:60%"></div></div>';
   try {
-    const view = await getJSON(`/api/post/${id}${versionHint ? `?v=${versionHint}` : ''}`);
+    const view = await readJSON(`/api/post/${id}${versionHint ? `?v=${versionHint}` : ''}`);
     current.post = id;
     currentAuthor = localStorage.getItem(`jevtown.author.${id}`);
     current.version = versionHint ?? view.versions?.at(-1)?.number ?? 1;

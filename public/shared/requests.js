@@ -8,7 +8,10 @@ export const MAX_TEXT_CHARS = 2000;
 /** How long an audience description may be: a line, not a brief. */
 export const MAX_AUDIENCE_CHARS = 200;
 
-const stateOf = (preset, text) => ({ seen_in: preset.seenIn, [preset.noun]: text.slice(0, MAX_TEXT_CHARS) });
+/** `slice` cuts by UTF-16 code unit, so a char limit can land in the middle of a surrogate pair. */
+const clip = (text, limit) => (text.length > limit ? [...text].slice(0, limit).join('') : text);
+
+const stateOf = (preset, text) => ({ seen_in: preset.seenIn, [preset.noun]: clip(text, MAX_TEXT_CHARS) });
 const criteriaOf = (reactions) => Object.fromEntries(Object.entries(reactions).map(([id, reaction]) => [id, reaction.criteria]));
 
 /** Persona ids are question ids: `p` + id. */
@@ -212,7 +215,7 @@ export function audienceRequest(description) {
   for (const [id, instructions] of Object.entries(UNLISTED)) {
     questions[`unlisted:${id}`] = { type: 'noul', instructions: instructions.replace(/\btext\b/g, 'description'), criteria: NOUL };
   }
-  return { state: { seen_in: 'an author describing, in their own words, the readers a text is written for', audience: description.slice(0, MAX_AUDIENCE_CHARS) }, questions };
+  return { state: { seen_in: 'an author describing, in their own words, the readers a text is written for', audience: clip(description, MAX_AUDIENCE_CHARS) }, questions };
 }
 
 /** Answers of an audience request → { scores, named: ['field', …], unlisted, blocked }. */

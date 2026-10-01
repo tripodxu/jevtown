@@ -37,10 +37,18 @@ export function pickProvider(env) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** An answer that is not a plain object, or a question Jev never answered, is not a result to keep. */
+const usable = (answer) => Boolean(answer) && typeof answer === 'object' && !Array.isArray(answer);
+
 /**
  * One request → { answers, tokens, usd, ms, throttled }; ms is the answering attempt alone, throttled
  * counts the 429s met on the way. `retries` is a shared allowance, { left }: a Worker invocation may
  * make only so many outgoing requests, so all requests of a batch draw their retries from one pot.
+ *
+ * A 200 that answers none of the questions is not a result but a broken answer, and is retried like a
+ * server error: a gateway that swallows the body, or an API that drops a batch, would otherwise be
+ * read as "Jev had no opinion" — the batch would be recorded as asked, its people as can't tell, and
+ * the call would be paid for twice over once the batch is never asked again.
  */
 export async function ask(provider, { state, questions }, retries = { left: Infinity }) {
   if (!provider?.apiKey) throw Object.assign(new Error('no Jev API key is set'), { code: 'no_key' });
@@ -69,8 +77,22 @@ export async function ask(provider, { state, questions }, retries = { left: Infi
         continue;
       }
       if (!response.ok) throw Object.assign(new Error(`${provider.label} ${response.status}: ${problem(body) ?? 'request failed'}`), { fatal: true });
+      const answers = body.answers;
+      if (!usable(answers)) {
+        lastError = Object.assign(new Error(`${provider.label} ${response.status}: no answers in the result`), { empty: true });
+        continue;
+      }
+      const answered = Object.fromEntries(
+        Object.entries(questions).filter(([id]) => usable(answers[id])).map(([id]) => [id, answers[id]]),
+      );
+      // A few missing answers are Jev's own ("can't tell", or a question it skipped). None at all is a
+      // broken answer, not an opinion: retry it, so the batch is not recorded as asked with nothing in it.
+      if (!Object.keys(answered).length) {
+        lastError = Object.assign(new Error(`${provider.label} ${response.status}: none of the questions was answered`), { empty: true });
+        continue;
+      }
       return {
-        answers: body.answers ?? {},
+        answers: answered,
         tokens: body.usage?.input_tokens ?? 0,
         usd: provider.usd(body.usage),
         ms: Math.round(performance.now() - sentAt),

@@ -18,6 +18,11 @@ export async function runToDone(worker, post, version = 1, author = '') {
   for (;;) {
     for (;;) {
       const res = await worker.fetch(`/api/batch?post=${post}&v=${version}`, { headers });
+      if (!res.ok) {
+        // 不 ok 说明 post 不存在、版本越界或状态不对——继续打下去只是无限 404，
+        // 测试会一直"跑不完"而不是失败。把状态和 body 摊开，一眼看到断在哪。
+        throw new Error(`/api/batch → ${res.status} ${await res.text()}`);
+      }
       const batch = await res.json();
       if (batch.done) break;
     }
@@ -32,6 +37,7 @@ export async function runBatches(worker, post, version = 1, author = '') {
   const headers = author ? { 'x-jev-author': author } : {};
   for (;;) {
     const res = await worker.fetch(`/api/batch?post=${post}&v=${version}`, { headers });
+    if (!res.ok) throw new Error(`/api/batch → ${res.status} ${await res.text()}`);
     const batch = await res.json();
     if (batch.done) return batch;
   }
