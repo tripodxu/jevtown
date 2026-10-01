@@ -15,8 +15,36 @@ export const WAVES = [
 /**
  * A wave sends the text further when the glad reactions outweigh the sorry ones by this share of
  * the wave. Measured on first waves: strong texts give 0.12 to 0.33, weak ones -0.39 to 0.02.
+ *
+ * The bar sits *below* what a coin flip scores (see `randomBaseline`): a wave near it carries no
+ * information, so passing on it is luck rather than judgement. Measured on three real texts
+ * (docs/research/wave-baseline-report.md). It stays where it is — moving it needs recalibrating
+ * against the baselines that report puts on screen.
  */
 export const GLAD_ENOUGH = 0.1;
+
+/**
+ * What a wave looks like if nobody read it: every reaction equally likely, so the mood is the
+ * table's mean tone and the spread is the standard error of the mean. Anything within about two
+ * standard errors of it is a wave a die roll could have produced.
+ */
+export function randomBaseline(presetId, n) {
+  const tones = Object.values(PRESETS[presetId].reactions).map((reaction) => reaction.tone ?? 0);
+  const mean = tones.reduce((sum, tone) => sum + tone, 0) / Math.max(1, tones.length);
+  const variance = tones.reduce((sum, tone) => sum + (tone - mean) ** 2, 0) / Math.max(1, tones.length);
+  const sd = Math.sqrt(variance);
+  return { mean, sd, error: sd / Math.sqrt(Math.max(1, n)) };
+}
+
+/**
+ * How far a wave is from what chance alone would produce, in standard errors: 0 is a coin flip, 2 is
+ * clearly something else. Negative means the wave was worse than random, which is not a failure —
+ * a text nobody wants is a real answer, and it is worth reading as one.
+ */
+export function moodZ(presetId, waveMood, n) {
+  const { mean, error } = randomBaseline(presetId, n);
+  return error ? (waveMood - mean) / error : 0;
+}
 
 /** A persona's attributes as the feed algorithm names them, with how much each one counts. */
 const namesOf = (who, market) => [

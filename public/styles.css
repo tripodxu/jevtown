@@ -722,6 +722,10 @@ canvas.grid {
 .frow .fbar i.fgo { background: var(--map-green); }
 .frow .fbar i.fhold { background: var(--map-blue); }
 .frow .fbar i.fdrop { background: var(--map-red); }
+/* 随机对照条（R29）：离基线远=绿（明显强于随机）、读不出=蓝（与随机无异）、比随机还冷=红 */
+.frow .fbar i.ffar { background: var(--map-green); }
+.frow .fbar i.fnear { background: var(--map-blue); }
+.frow .fbar i.fbelow { background: var(--map-red); }
 
 .frow .fnum { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
 

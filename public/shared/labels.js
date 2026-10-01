@@ -207,3 +207,14 @@ export const directionZh = (at, grid = 100) => {
   const row = Math.min(2, Math.max(0, Math.floor((at.y / grid) * 3)));
   return DIRECTION_ZH[row * 3 + col];
 };
+
+/**
+ * 这一波离「纯随机」有多远（shared/feed.js 的 moodZ）。z=0 就是一个骰子能掷出来的读数。
+ * 说的是与随机之差，不是否定——「比随机差」也是 Jev 给出的真答案，只是它说的是「没人要」。
+ */
+export const Z_SAY_ZH = {
+  far: '这一波明显不是碰运气——同一段文字换个人群，结果不会只是掷骰子。',
+  near: '这一波和纯随机分不出高下：读到的情绪，一个不看内容只乱选的镇子也能读出来。',
+  below: '这一波比纯随机还冷——没人要它。这是个真答案，不是没读出来。',
+};
+export const zSayZh = (z) => (z >= 2 ? Z_SAY_ZH.far : z <= -2 ? Z_SAY_ZH.below : Z_SAY_ZH.near);

@@ -4,9 +4,10 @@ import { PRESETS, LOOKS, lookOf } from './shared/presets.js';
 import { drawGrid, attachTooltip, drawDelta, drawReach, reachInk } from './grid.js';
 import { avatarSvg } from './avatar.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart, waveMixChart } from './charts.js';
+import { randomBaseline, moodZ } from './shared/feed.js';
 import { rankedAnswers, demandCurve, sliceHeatmap, waveMix, reportBrief } from './shared/summary.js';
 import { decodeBytes } from './shared/bytes.js';
 import { crowdDelta } from './shared/spatial.js';
@@ -186,7 +187,37 @@ function terrainView(result) {
 function wavesView(result, width) {
   if (!result.waves?.length) return '';
   const line = moodLine(result.waves.map((w) => w.mood), { width });
-  return `<h3>传播波次与情绪轨迹</h3>${funnel(result.waves)}${line}`;
+  return `<h3>传播波次与情绪轨迹</h3>${funnel(result.waves)}${line}${baselineView(result)}`;
+}
+
+/**
+ * 随机对照（R29）：把这一波放到「没人读它」的基线上看。
+ * mood 这个数本身没有好坏之分——它必须有个对照系才知道说什么。均匀抽反应时一波的情绪
+ * 期望就是反应表的平均 tone，标准误给出「差多少才算不是碰运气」。z 就是这个差。
+ * 实测见 docs/research/wave-baseline-report.md。
+ */
+function baselineView(result) {
+  const waves = result.waves ?? [];
+  const presetId = result.post.preset;
+  const first = waves[0];
+  if (!first) return '';
+  const base = randomBaseline(presetId, first.size);
+  const z = moodZ(presetId, first.mood, first.size);
+  const bars = waves
+    .map((wave) => {
+      const waveZ = moodZ(presetId, wave.mood, wave.size);
+      const tone = waveZ >= 2 ? 'far' : waveZ <= -2 ? 'below' : 'near';
+      const shown = Math.max(4, Math.min(100, Math.round((Math.abs(waveZ) / 6) * 100)));
+      return `<div class="frow">
+      <span class="flabel">第 ${wave.index + 1} 波</span>
+      <span class="fbar"><i class="f${tone}" style="width:${shown}%"></i></span>
+      <span class="fnum">z ${waveZ >= 0 ? '+' : ''}${waveZ.toFixed(1)} · ${wave.size.toLocaleString()} 人</span>
+    </div>`;
+    })
+    .join('');
+  return `<h3>和纯随机比，谁更想要它</h3>
+    <div class="funnel">${bars}</div>
+    <div class="hint">基线：如果谁都没读它、只是乱选，一波 ${first.size.toLocaleString()} 人给出的情绪约 ${base.mean >= 0 ? '+' : ''}${base.mean.toFixed(2)}，随机波动 ±${base.error.toFixed(2)}。z 是这一波离它几个标准误——2 以上才算不是碰运气。第 1 波 z ${z >= 0 ? '+' : ''}${z.toFixed(1)}：${esc(zSayZh(z))}</div>`;
 }
 
 /**

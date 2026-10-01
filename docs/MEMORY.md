@@ -6,6 +6,53 @@
 
 ---
 
+## 2026-10-02 · R29 创意轮：随机基线实验——续传阈值画在随机线之下（判据本轮不改，只交证据）
+
+- **用户问题已答**：为什么"几次实验都早停在第一轮很少的人数"——不是人数上限（`WAVES[0].size = 600`），
+  也不是抽样噪声。**根因：`GLAD_ENOUGH = 0.1` 低于随机基线。** 均匀抽反应时 listing 反应表
+  （`scrolled_past 0 / opened 0 / saved +1 / wrote +1 / scam −1 / cant_tell 0`）的 tone 均值
+  **+0.167**、标准差 0.687、600 人一波标准误 0.028。真实 Jev 的 iPhone 帖第 1 波 mood
+  **+0.102 = z −2.32**（比掷骰子还差）竟过了闸续传；咖啡馆帖第 1 波 +0.005 / z −5.76 直接停。
+  随机臂四波 mood 恒在 +0.13~+0.19，**四波全过、传遍 10,000 人**。
+- **三臂探针**：`scripts/probe-waves.js`（CLI，不参与 `npm test`；key 从 `.env.local` 读，gitignored；
+  `--real --only A|B|C`，`--preset`、`--max-waves`）。A 真实 Jev 原样 / B 纯随机
+  （`rng(hash32('rand',versionId,who.id))()` 均匀抽反应，不花钱）/ C 洗掉形状
+  （`waveMean = averageOf(wave)` 每波内更新，每人拿全波平均分布，仍问 Jev）。
+  **Jev 答案用 `answerOf` Map 三臂共用，钱只花一遍**——漏查缓存会让三条臂各问一遍，成本 ×3
+  （第一版踩过：128 次请求 → 修后 101 次）。每臂用同一颗种子 `rng(hash32('waves','zh',versionId))`
+  保证同一批波与同样抽样。
+- **"与随机相比的优势"该怎么表述**（写进报告，也是给作者看的说法）：Jev 的价值**不是"让它传"**
+  （随机更彻底），而是**把没人要的文本判死在第一波**。三段文本随机都给 10,000 人 / 4 波；
+  Jev 给出 600（咖啡馆）/ 600（二手电动车）/ 2,100（iPhone，2 波）——**有区分的答案**。
+  转传率单独不可用：iPhone 三臂转传率 17%/16%/17%，随机臂一样 17%。
+- **关键取舍（用户决定）**：m00674 选「保留 mood 加第二信号」→ 看到数据后 m00711 改选
+  **「本轮不改判据，只把随机基线交给作者和来访者看」**。理由：改阈值需更多真实样本来标定。
+  已落地：`feed.js` 加 `randomBaseline(presetId, n)`（→`{mean, sd, error}`）与
+  `moodZ(presetId, waveMood, n)`，`GLAD_ENOUGH` 注释补"这条线在随机基线之下"；
+  `labels.js` 加 `Z_SAY_ZH` + `zSayZh(z)`（≥2 far / ≤−2 below / 其余 near，三档措辞互异，
+  below 档必须说"这是真答案，不是没读出来"）；`render.js` 的 `wavesView` 末尾接
+  **`baselineView(result)`**（报告新增一节「和纯随机比，谁更想要它」：逐波 z 条 + 基线说明 +
+  第 1 波人话结论）；`styles.css` 加 `.ffar/.fnear/.fbelow` 三色。报告全文在
+  **`docs/research/wave-baseline-report.md`**（含 z / gladAmongStopped / 转传率三个待决候选）。
+- **成本**：三臂完整跑一条 $0.0894 / 2,128,807 tokens / 102 请求（单臂 `--only A` ≈ $0.019）。
+  单波 600 人 ≈ $0.0158，与 `real-api-report.md:15` 一致。
+- **测试**：`test/feed.test.js` 加 2 组断言（随机基线为正且 `GLAD_ENOUGH < base.mean`；`moodZ`
+  符号与 0/±1σ 对齐、且 `moodZ('listing', 0.102, 600) < -2` 钉住实测事实；另断言
+  `randomBaseline('product', 600).mean > 0.3` 说明这条线对题材含义不同）；新建
+  `test/labels.test.js`（3 组：`zSayZh` 边界 2/−2、三档互异且措辞、`directionZh` 九宫格）。
+  **`npm test` 首次真跑全绿：122/122 pass / 0 fail / 39.1s**（R28 时代的老 bug 已修，见下一条）。
+  `npm run lint` ✓ **42 个文件**（新增 `test/labels.test.js`）；`node --check scripts/probe-waves.js` ✓。
+  worker 集成测试这次是真跑通了（日志见 `POST /api/check 200 OK` + `GET /api/batch 200 OK` 连发），
+  所以 MEMORY 里「R28 退役闸后全量绿未跑完」那条待办**已销账**。
+- **复跑全量的正确姿势**：`npm test *> full-test.log`（**必须落盘**）。`2>&1 | Select-Object -Last N`
+  会缓冲到命令结束才输出，管道中途看不到任何进度，很容易误判成「卡住」——本轮前两次
+  `node --test`（不带文件参数、直接跑全量）就是这样被误判成死循环并 kill 掉的。
+- **坑**：`renderCheck` 需要 DOM 桩才能在 Node 里跑，`node -e` 内联桩连续失败
+  （`document is not defined` → `getElementById is not a function` → `Cannot read properties of
+  undefined (reading 'append')` → `Cannot read properties of null (reading 'addEventListener')`），
+  最后写成临时文件（验完即删）才验成新节输出。`directionZh({x:99,y:0})` 是「右上」不是「左上」——
+  写断言前先跑一遍看实际值，别凭直觉写期望。
+
 ## 2026-10-01 · R29 审查：Jev 调用层 7 条加固 + 修回 R28 遗留的 `ip is not defined`
 
 - **为什么做**：一次只读的代码审查问「使用 jev 的部分有没有问题」，对 `public/shared/jev.js`
@@ -74,8 +121,7 @@
 - **待办（下一次会话第一件事）**：
   1. **线上冒烟测试未跑完**（首页/`/api/feed`/一次 BYOK 真实检查）——本机 curl 到
      workers.dev 超时，不区分是网络还是部署问题；下次先 `curl -v` 复核。
-  2. R28 退役闸后的 `npm test` 全量绿**未跑完**（集成测试起停缓慢被中断）——已验证
-     lint ✓ 与 `node --check`；下次先补全量。
+  2. R28 退役闸后的 `npm test` 全量绿**已补跑**（2026-10-02，122/122 pass / 39.1s，集成测试真跑通）——本条销账。
   3. 自定义域、`JEV_PROVIDER` 保持 mock（真实检查走 BYOK）。
 - 提交：`5430d3c`（闸退役 + wrangler.jsonc database_id 的前半在 103156c…5430d3c 之间；
   database_id 与本次上线说明随后续 docs 提交入库）。
