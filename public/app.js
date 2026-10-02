@@ -2,13 +2,14 @@
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
 import { renderCheck, renderDelta, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
-import { BLOCKED_ZH, AWAY_ZH, presetNoun as PRESET_NOUN_OF, signed } from './shared/labels.js';
+import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed } from './shared/labels.js';
 import { PRESETS } from './shared/presets.js';
 import { drawGrid, paintDelta } from './grid.js';
 import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
 import { newTally, foldBatch } from './tally.js';
 import { renderShareCard } from './sharecard.js';
-import { CROWD } from './shared/personas.js';
+import { crowd, CROWD } from './shared/personas.js';
+import { pickableGroups, filterGroups, pickLabelZh } from './shared/summary.js';
 
 const $ = (id) => document.getElementById(id);
 // 当前正在做的检查：哪个 post 的哪个版本。
@@ -217,19 +218,90 @@ function paintBatch(batch) {
 
 const pace = () => new Promise((resolve) => setTimeout(resolve, 180)); // 节奏化：让点亮过程可见
 
+// -- 「这段话是给谁的」（R35）：一句自述 + 从清单里挑几组 --------------------------
+
+/**
+ * 挑的是段 id（`attribute:value`），不是作者的原话。实测 12 句中文自述只有 6 句能被朴素
+ * 匹配撞上（probe-mention.js），撞不上的正是「年轻人」「做创意的人」这类最普通的说法——让
+ * Jev 去猜（rho 0.264，probe-audience.js）更糟。所以这里不猜：作者从 115 项清单里点，
+ * 点中的就是报告里对账的那一项。零花费、零延迟、不会错。
+ */
+const pickedGroups = new Set();
+/** 清单按镇子人群算出，进程内只算一次（pickableGroups 内部按 people 身份还有一层 WeakMap）。 */
+const pickable = () => pickableGroups(crowd('zh'));
+
+function renderAudienceTags() {
+  const byId = new Map(pickable().map((one) => [one.id, one]));
+  $('audienceTags').innerHTML = [...pickedGroups]
+    .map((id) => `<button type="button" class="aud-tag" data-pick="${esc(id)}">${esc(pickLabelZh(byId.get(id) ?? { attribute: '', zh: id }))}</button>`)
+    .join('');
+  $('audienceCount').textContent = pickedGroups.size ? AUDIENCE_ZH.pickedCount.replace('%1', String(pickedGroups.size)) : '';
+}
+
+/** 作者填的受众：一句自述 + 挑中的段 id。两样都空时返回 null——不填就不占存档一列。 */
+const audienceInput = () => {
+  const said = $('audienceSaid').value.trim();
+  return said || pickedGroups.size ? { said, picked: [...pickedGroups] } : null;
+};
+
+/** 过滤框回车/点候选：把那一项收进已选。词表里没有就是没有，UI 直说，不去猜作者想说什么。 */
+function pickGroup(id) {
+  if (pickedGroups.has(id)) return;
+  pickedGroups.add(id);
+  $('audienceFilter').value = '';
+  renderAudienceTags();
+  renderAudienceList();
+}
+
+function renderAudienceList() {
+  const box = $('audienceList');
+  const query = $('audienceFilter').value.trim();
+  if (!query) {
+    box.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+  const { list, total } = filterGroups(pickable(), query);
+  const rows = list.map((one) => `<button type="button" data-pick="${esc(one.id)}"${pickedGroups.has(one.id) ? ' disabled' : ''}>${esc(pickLabelZh(one))} <span class="aud-n">${one.size}</span></button>`);
+  if (!rows.length) rows.push(`<span class="hint">${esc(AUDIENCE_ZH.notFound)}</span>`);
+  if (total > list.length) rows.push(`<span class="hint">${esc(AUDIENCE_ZH.more.replace('%1', String(total - list.length)))}</span>`);
+  box.innerHTML = rows.join('');
+  box.hidden = false;
+}
+
+$('audienceFilter').addEventListener('input', renderAudienceList);
+$('audienceFilter').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  const first = $('audienceList').querySelector('button[data-pick]');
+  if (first) pickGroup(first.dataset.pick);
+});
+$('audienceList').addEventListener('click', (event) => {
+  const id = event.target.closest('button[data-pick]')?.dataset.pick;
+  if (id) pickGroup(id);
+});
+$('audienceTags').addEventListener('click', (event) => {
+  const id = event.target.closest('button[data-pick]')?.dataset.pick;
+  if (!id) return;
+  pickedGroups.delete(id);
+  renderAudienceTags();
+  renderAudienceList();
+});
+
 // -- 提交与分步驱动 -------------------------------------------------------------
 
 $('form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const text = $('text').value.trim();
   const preset = $('preset').value;
+  const audience = audienceInput();
   if (!text) return;
   $('go').disabled = true;
   try {
     status(current.post ? '再发一版：Jev 重新掂量……' : '开局：Jev 正在掂量这段文字是写给谁的……', 0.02);
     const opening = current.post
-      ? await postJSON('/api/version', { post: current.post, text })
-      : await postJSON('/api/check', { preset, text, prices: preset === 'product' ? [9, 19, 39, 79] : undefined });
+      ? await postJSON('/api/version', { post: current.post, text, audience })
+      : await postJSON('/api/check', { preset, text, prices: preset === 'product' ? [9, 19, 39, 79] : undefined, audience });
 
     if (opening.author) {
       currentAuthor = opening.author;

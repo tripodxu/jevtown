@@ -10,6 +10,89 @@
 
 ---
 
+## 2026-10-03 · R35 创意轮：「这段话是给谁的」对账表——作者挑的组 vs 实际停下的组，新增花费 $0
+
+**本轮的任务**：轮换到创意。`docs/ARCHITECTURE.md` 记着两处「上游有、这里没接」的能力
+（`check.js` 的 `audience`、`feed.js` 的 `partsOf`）。方向定为把它接通，但**先量了一遍，
+量完把原设计推翻重做**。
+
+**四个探针（都在 `scripts/`，已提交；放仓库根会因 `../public` 深度不对报 `ERR_MODULE_NOT_FOUND`）**：
+
+| 探针 | 量什么 | 结论 |
+|---|---|---|
+| `probe-audience.js` | 12 条中文受众描述 × 真实 Jev（83 组 FIT 题，每条 $0.0003） | 秩相关 **rho = 0.264**；噪声底平均绝对差 0.007–0.013、最大 0.040。现闸门 `partsOf(0.5, 0.7)` 的实测后果：「给刚生孩子的年轻父母」→ **`null` 描述作废**；「给正在攒钱买第一台笔记本电脑的上班族」→ 只剩 **21 人（0.2%）** |
+| `probe-match.js` | 真实存档跑 `segments()` + `topSegments` | 115 个段里停下 ≥8 人的有 **97** 个，lift ≥1.3 的只有 **8** 个（`shopping:phone` 249/287 **16.81×**、`shopping:gift` 5.45×、`interest:photography` 4.15×、`field:creative` 1.96×、`interest:pop_music` 1.93×、`age:a25` 1.76×、`city:昆明` 1.56×、`interest:design` 1.54×） |
+| `probe-mention.js` | 作者话术撞词表 | 12 句只撞上 **6 句（50%）**；撞不上的正是「年轻人」「二十多岁」「做创意的人」这类最普通的中文写法 → **不能猜作者的话** |
+| `probe-pickable.js` / `probe-table.js` | 作者能挑的清单 / 真实示例表 | 第一版按「Jev 被问的 60/83 组」算成 84 项，**漏了性格与城市**（persona 字段名也不同：是 `interests`/`ageGroup`/`field`/`temper`/`budget`/`shopping`，而 `city` 是 `{en, zh}` **对象**）。按 `summary.js` 的 `SEGMENTS` 七维重算 = **115 项**（兴趣 40 / 职业 15 / 年龄 5 / 性格 8 / 城市 24 / 预算 4 / 想买 19；≥400 人 81 项）。真实存档 8 个显著组里 7 个在可选维度内，**唯一在外的正是昆明那个城市组** |
+
+**为什么推翻原设计**：原设计是「作者写一句描述 → 随开局多问一次 `audienceRequest`（$0.002–0.003）
+→ Jev 读出是哪几组人」。rho 0.264 意味着这份钱花出去，拿到的是一个基本与真实无关的读数；
+而 `PARTS` 五道 noul 在最普通的中文描述上全部低于 `NAMED_FROM = 0.5`，直接把描述判成作废。
+**三个从未量过的阈值（`PART_FROM` / `PASS_SHARE` / `MIN_AUDIENCE`）不能当产品闸门**——
+它们的注释里写着「Not measured yet (scripts/probe.js audience)」，而那个 `scripts/probe.js`
+从来不存在。改为：**不再让 Jev 解析描述**，全部读数来自报告已有的 `segments()` 真实停下分布，
+作者从 115 项清单里**挑段 id**（永不猜错），**新增花费 $0**。`partsOf` / `audienceOf` /
+`rateAudience` / `MIN_AUDIENCE` 全部保留（上游同构），只是站点不走这条路。
+
+**三个实施时才发现的设计漏洞**（计划写错了，实现时纠正，都写进了 spec）：
+
+1. **判定集合不能用展示上限。** 原计划拿 `topSegments(all, 'stopped', 8)` 当「显著」的判定集合，
+   那样第 9 名会掉进「两边都冷」，而那一栏说的是「既没被你挑，也没人特别停下来」——真实存档
+   第 9 名（投资理财 1.49×）明显停下来了。**用一个展示上限去撒谎。** 改成判定用全量显著组
+   （`topSegments(all, 'stopped', Number.MAX_SAFE_INTEGER)`），`AUDIENCE_UNSAID_MAX = 8`
+   只截断**展示行**，多出来的用「还有 N 组也显著停下来」一句交代。
+2. **状态键不能用中文。** 原计划让 `reconcileAudience` 直接返回 `state: '对上了'`；
+   改成英文键 `hit/miss/unsaid/cold`，中文全在 `labels.js` 的 `AUDIENCE_STATE_ZH`
+   （AGENTS.md：界面文案单点）。
+3. **`picked` 一名两义。** 既是作者的 id 数组又是「有效组数」。统计量改名
+   **`pickedCount` / `hitCount`**；`say` 字段整个删掉——结论句属于文案，`summary.js` 只判不措辞。
+
+**落地的形状**：
+- `migrations/0009_audience.sql`：`ALTER TABLE versions ADD COLUMN audience TEXT;`（与 R32 的
+  `away` 同形；放 `versions` 不放 `posts`——改一版时「给谁看」跟文本同生共死）。
+- `public/shared/summary.js`：`SEGMENT_DIMS` + `pickableGroups(people)`（**从 `SEGMENTS` 直接导出，
+  不另写维度表**——差一个维度，报告就要为一个作者挑不到的组背「没说的」；`city` 段 id 用 `zh`，
+  因为 `segments()` 取的就是 `city.zh`）+ `filterGroups` + `reconcileAudience`。
+- `public/shared/labels.js`（现 306 行）：`AUDIENCE_ZH`（13 条）+ `AUDIENCE_STATE_ZH`（4 条）+
+  `audienceSayZh(summary)`。
+- `public/render.js`：`audienceView(result)`（纯字符串、无 DOM），插在 `segmentsView` 之前；
+  `result.audience` 为 null 时整节不渲染，旧存档一字不变。
+- `worker/index.js`：`MAX_AUDIENCE_SAID = 200` + `cleanAudience(input)`（陌生 id 丢、重复去重、
+  两样都空返回 null；blocked 分支不动）+ 两个 INSERT 加列 + `showPost` 的 `base.audience` +
+  return 里 `reconcileAudience(all, base.audience.picked, {presetId})`。
+- `public/index.html` / `styles.css` / `app.js`：提交按钮下面加一行「这段话是给谁的（可不填）」
+  + 一个即时过滤的输入框 + 已选标签（`.aud-pick` / `.aud-list` / `.aud-tag` / `.aud-state`）。
+- `scripts/check.js`：`--audience "自述" --picked age:a25,shopping:kids`，终端用**同一个**
+  `reconcileAudience` 算对账（不另写一份口径），存档写 `audience`。
+- `public/shared/replay.js`：回放存档时也算一次；存档里没这个字段 → null → 整节不渲染。
+
+**坑**：
+- **`test/` 里不能新开一个起 Worker 的文件。** 本来把受众的 Worker 测试放进了新的
+  `test/audience-worker.test.js`，全量 `npm test` 时 `test/worker.test.js` **整个文件起不来**：
+  `startWorker()` 每次先 `execSync('npx wrangler d1 migrations apply jevtown --local')`
+  （`test/helper.js:8`），两个 `unstable_dev` 各带一个 workerd 时第二个 apply 撞上第一个占着的
+  本地 SQLite，报 `database is locked: SQLITE_BUSY_RECOVERY`
+  （原文：`*** Fatal uncaught kj::Exception: workerd/util/sqlite.c++:890: failed: SQLite failed;
+  dbErrorMessage(prepareResult, db) = database is locked: SQLITE_BUSY (extended: SQLITE_BUSY_RECOVERY)`）。
+  → 把测试并进已有的 `test/worker.test.js`（它已经起了一个 Worker）。**测试文件多不是问题，
+  起两个 Worker 才是。**
+- **测试里的查询词不能凭中文直觉。** 断言「输入『年轻』只给年龄段」是我凭直觉写的，实测失败：
+  真实 `AGE_GROUP` 的 `zh` 是 `18–24 岁`…`60 岁以上`，**没有「年轻」二字**；`INTERESTS` 的
+  摄影 id 写 `interest:photography` 而中文是「摄影」。断言改成查「摄影」「岁」「phone」。
+  这跟 probe-mention 的 50% 撞词率是同一件事——写断言时用的词必须是词表里真有的词。
+- spec 里那张示例表第一版是按形状编的（写成「18 个停下的组」，真数是 97 个停下 ≥8 人、
+  8 个 lift ≥1.3），已被 `probe-table.js` 从真实存档算出并逐行替换。
+
+**验证**：`npm test` **179/179 pass / 0 fail**（R34 是 170，+9；其中 `test/audience.test.js`
+28 条纯函数/渲染断言 + `test/worker.test.js` 里 1 条端到端）；`npm run lint` ✓ **47 个文件**。
+`test/theme.test.js` 加了一条：`.aud-tag` 边框用的 `--face-glad` 与 `.aud-state` 的 `--muted`
+在 `--card-2` 上要过**文字级 4.5:1**（不能借用上一组 3:1 的图形豁免）。
+
+**轮换位置**：优化 R31(2c017d8) → 创意 R32(a34de8e) → 前端 R33(655a220) → 优化 R34(f54cb52) →
+创意 R35（当前）。
+
+---
+
 ## 2026-10-02 · R34 优化轮：属性名换成列号——nextWave 3.72ms → 1.20ms，波次名单一字不变
 
 **本轮的任务**：轮换到优化。R31 记下的那笔债：`nextWave` 是热点（6.2–6.6ms），

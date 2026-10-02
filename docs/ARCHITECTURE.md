@@ -106,7 +106,14 @@ mock。曾经的每 IP 每日限额与全站日预算闸（R28 前）已整体�
 地图的「聚集地形」层）。
 上游的居民系统、自定义受众、MCP、OG 图未引入（路线图见 README）。
 
-> 引擎里还留着两处**上游有、这里没接**的能力：`check.js` 的 `audience`（"只给某类人看"，
+> 引擎里还留着两处**上游有、这里量过、结论是不接**的能力：`check.js` 的 `audience`（只给某类人看，
   含 `rateAudience` / `partsOf` / `audienceOf`）与 `feed.js` 的 `partsOf` / `audienceMask`。
-  Worker 与前端都没走这条路；`summary.js` 的 `inAudience` 同理是备而不用。
-  计划文档 `2026-09-29-r5-version-delta.md` 的两版之差会用到同一类"子集人群"思路。
+  R35 用真实 Jev 量过这条路（`scripts/probe-audience.js`，12 条中文受众描述 × 83 组）：
+  「哪组人真在乎这段话」的读数与真实比例**秩相关只有 rho = 0.264**，同请求复读的噪声底是平均绝对差
+  0.007–0.013；而闸门本身那三个从没量过的阈值（`PART_FROM = 0.5` / `PASS_SHARE = 0.7` /
+  `MIN_AUDIENCE = 50`）实测后果是「给刚生孩子的年轻父母」→ `partsOf` 返回 `null`（描述作废），
+  「给正在攒钱买第一台笔记本电脑的上班族」→ 只剩 21 人（0.2%）。代码保留（CLI 与存档端同构、便于
+  上游合并），但站点与 Worker 不走这条路；`summary.js` 的 `inAudience` 同理。本项目改为让作者从
+  `summary.js` 的 `SEGMENTS` 七维导出的 115 项清单里**挑段 id**，报告拿它与真实停下分布对账
+  （见 `2026-10-03-audience-reconciliation-design.md`），新增花费 $0。
+  计划文档 `2026-09-29-r5-version-delta.md` 的两版之差会用到同一类「子集人群」思路。

@@ -62,6 +62,25 @@
           <span class="hint" id="hint">mock 模式答案确定、不花钱；接真实 key 后按次计费。</span>
           <button id="go" type="submit">让小镇来读</button>
         </div>
+
+        <!-- 「这段话是给谁的」（R35）：不填也能发，填了报告里多一张对账表。
+             这一行是可选的，所以不做成必填控件，也不拦提交。 -->
+        <div class="aud-pick" id="audienceRow">
+          <div class="row between">
+            <label for="audienceSaid">这段话是给谁的<small>（可不填）</small></label>
+          </div>
+          <input id="audienceSaid" type="text" maxlength="200" autocomplete="off"
+            placeholder="写一句你想找的人，不用准，报告会拿它跟你挑的组对账。">
+          <label class="sr-only" for="audienceFilter">加一组人群</label>
+          <input id="audienceFilter" type="text" maxlength="40" autocomplete="off"
+            placeholder="加一组人群：输入「摄影」「昆明」「岁」……" aria-describedby="audienceHint">
+          <div class="aud-list" id="audienceList" hidden></div>
+          <div class="aud-tags" id="audienceTags"></div>
+          <div class="row between">
+            <span class="hint" id="audienceHint">从小镇的人群里挑几组。</span>
+            <span class="hint" id="audienceCount"></span>
+          </div>
+        </div>
       </form>
       <div id="status" hidden>
         <div class="status-line" id="statusLine"></div>

@@ -116,6 +116,19 @@ test('面版信号墨水在四种表面上全部 ≥ 3:1（非文字图形）', 
   }
 });
 
+// R35 的对账节新增了一处文字用色：`.aud-tag` 边框直接用了 `--face-glad`，而 `.aud-state`
+// 的四个状态小标题是 12.5px 的文字——它们都在 --card-2 上，都得按文字 4.5:1 判，不能借用
+// 上一组 3:1 的图形豁免。
+test('对账节的两处新墨水在 --card-2 上过文字级 4.5:1（R35 的 .aud-tag / .aud-state）', () => {
+  for (const theme of THEMES) {
+    const t = tokensOf(theme);
+    for (const ink of ['--face-glad', '--muted']) {
+      const r = contrast(t[ink], t['--card-2']);
+      assert.ok(r >= 4.5, `${theme} ${ink}(${t[ink]}) 在 --card-2(${t['--card-2']}) 上只有 ${r.toFixed(2)}:1`);
+    }
+  }
+});
+
 test('面版墨水七色齐备，且地图底板墨水在地图上仍过 3:1（地图那条路径没被面版改坏）', () => {
   for (const theme of THEMES) {
     const t = tokensOf(theme);

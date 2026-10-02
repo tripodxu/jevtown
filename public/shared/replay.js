@@ -2,7 +2,7 @@
 // 这也是"纯静态部署"的可行证明：回放全部发生在浏览器。
 import { PRESETS } from './presets.js';
 import { crowd, GRID } from './personas.js';
-import { counters, segments, topSegments, voicesOf } from './summary.js';
+import { counters, segments, topSegments, voicesOf, reconcileAudience } from './summary.js';
 import { crowdTerrain } from './spatial.js';
 import { encodeBytes } from './bytes.js';
 import { personView } from './labels.js';
@@ -26,6 +26,9 @@ export function replayToView(saved) {
     checks: saved.checks ?? {},
     unlisted: saved.unlisted ?? [],
     segments: { stopped: topSegments(all, 'stopped'), glad: topSegments(all, 'glad'), sorry: topSegments(all, 'sorry') },
+    // 作者说给谁的 vs 实际停在哪（R35）。存档里没有 audience 字段（早于本轮的存档）→ null，
+    // 整节不渲染——回放旧存档不该凭空长出一节。
+    audience: saved.audience ? { ...saved.audience, ...reconcileAudience(all, saved.audience.picked, { presetId }) } : null,
     terrain: crowdTerrain(presetId, keys, bytes, { versionId: saved.versionId, grid: GRID }),
     voices: voicesOf(saved.versionId, presetId, bytes).map((voice) => ({ ...voice, who: personView(people[voice.id]) })),
     spent: { usd: saved.usd ?? 0, tokens: 0 },

@@ -331,4 +331,58 @@ test('逐句承重：非作者 403、检查未完 409、算过不重算、GET �
   assert.ok(anon.away, '匿名也读得到已算好的结果');
 });
 
+// R35 的存储与对账都放在 worker.test.js 里而不是新开一个文件：本文件已经起了一个
+// unstable_dev Worker，而 startWorker 会先跑 `wrangler d1 migrations apply --local`
+// （helper.js:8）——两个文件各起一个 Worker 时，第二个 apply 会撞上第一个占着的本地
+// SQLite，报 "database is locked: SQLITE_BUSY_RECOVERY"（2026-10-03 实测，worker.test.js
+// 整个文件起不来）。测试文件多不是问题，起两个 Worker 才是。
+test('受众：作者挑的组存进版本、报告里对账，陌生 id 丢掉，没填不存', { timeout: 120_000 }, async () => {
+  const text = '受众验证：出 iPhone 13，128G，电池 86%，无维修，1400 元，可小刀，包邮。';
+  const opening = await (await postJSON(worker, '/api/check', {
+    preset: 'listing',
+    text,
+    audience: { said: '想找一个还想换手机的人', picked: ['shopping:phone', 'age:a25'] },
+  })).json();
+  assert.equal(opening.state, 'running');
+  const author = authorOf(opening);
+  await runToDone(worker, opening.post, opening.version, author);
+
+  const view = await (await worker.fetch(`/api/post/${opening.post}?v=1`)).json();
+  assert.equal(view.audience.said, '想找一个还想换手机的人', '原话要原样存下');
+  assert.deepEqual(view.audience.picked, ['shopping:phone', 'age:a25']);
+  // 对账：挑的两组都列出来（不论显不显著），没挑却显著的进「没说的」
+  const mine = view.audience.rows.filter((row) => view.audience.picked.includes(row.id));
+  assert.equal(mine.length, 2, `挑的 2 组应都在表里，得 ${mine.length}`);
+  assert.ok(mine.every((row) => ['hit', 'miss'].includes(row.state)), '挑的组只可能是对上了/没等到');
+  assert.ok(view.audience.rows.some((row) => row.state === 'unsaid'), '显著组里应有没挑的');
+  assert.ok(view.audience.readable, '跑完全程读得出人群分布');
+
+  // 清洗：陌生 id 丢、重复去重、said 截到 200 字——存档是外部输入，不给它写胖的余地
+  const dirty = await (await postJSON(worker, '/api/check', {
+    preset: 'listing',
+    text: `${text}（清洗验证）`,
+    audience: { said: '长'.repeat(500), picked: ['age:a25', 'nope:zzz', 'age:a25', 7] },
+  })).json();
+  const cleaned = await (await worker.fetch(`/api/post/${dirty.post}?v=1`)).json();
+  assert.deepEqual(cleaned.audience.picked, ['age:a25'], `陌生 id/重复没清干净：${JSON.stringify(cleaned.audience.picked)}`);
+  assert.equal(cleaned.audience.said.length, 200, 'said 应截到上限');
+
+  // 没填：不存这一列 → 报告整节不渲染（老存档回放一字不变）
+  const plain = await (await postJSON(worker, '/api/check', { preset: 'listing', text: `${text}（没填受众）` })).json();
+  assert.equal((await (await worker.fetch(`/api/post/${plain.post}?v=1`)).json()).audience, null);
+
+  // 改一版：受众跟文本一起换版本，不沿用上一版
+  const next = await (await postJSON(worker, '/api/version', {
+    post: opening.post,
+    text: `${text}，改成 1300。`,
+    audience: { said: '给摄影的人', picked: ['interest:photography'] },
+  }, { 'x-jev-author': author })).json();
+  assert.equal(next.state, 'running');
+  const v1 = await (await worker.fetch(`/api/post/${opening.post}?v=1`)).json();
+  const v2 = await (await worker.fetch(`/api/post/${opening.post}?v=2`)).json();
+  assert.equal(v1.audience.said, '想找一个还想换手机的人', '上一版的自述不许被改掉');
+  assert.equal(v2.audience.said, '给摄影的人');
+  assert.deepEqual(v2.audience.picked, ['interest:photography']);
+});
+
 

@@ -101,7 +101,8 @@ floor = `minSegment(2100)` = **15**，段总数 115，显著停下组 **8 个**�
 不猜。一句自述下面挂一个即时过滤的输入框，滤那 115 项（`summary.js` 的 `SEGMENTS` 七维全部取值），作者挑中。
 
 - 挑的是段 id（`attribute:value`），**永不猜错** —— 直接消掉 probe-mention 量到的 50% 误判。
-- 过滤是本地字符串匹配（输入「年轻」→ 5 个年龄段 + 若干相关兴趣；输入「昆明」→ 那个城市），**零花费、零延迟**。
+- 过滤是本地字符串匹配（输入「岁」→ 5 个年龄段；输入「摄影」→ 摄影相关几项；输入「昆明」→ 那个城市；输入 `phone` 这样的 id 片段也认），**零花费、零延迟**。
+- **作者的口语和词表对不上是常态，不是 bug**：实测 12 句中文自述里只有 6 句能被朴素匹配撞上，撞不上的正是「年轻人」「二十多岁」「做创意的人」这类最普通的说法（词表写的是「设计文案传媒」「25–34 岁」）。所以输入框不承诺猜作者的话，只承诺**把他挑中的那几组原样带进报告**；猜不中时列表是空的，UI 直说「没找到这一组，换个人群的叫法试试」——这比猜错然后拿他做不到的事问责要好。
 - 作者写的那句话**仍然存下**，作为这一节的头。他原话是「我想找刚生孩子的年轻父母」，他挑的是 `age:a25` + `shopping:kids` —— 两者的落差本身就是信息，报告里要显出来。
 - 允许一项不挑（= 想写给所有人看）。那也是一个合法答案：对账表全落在「没说的」栏，这本身是结论。
 
@@ -169,8 +170,10 @@ CLI（`scripts/check.js`）同步：`--audience "自述" --picked age:a25,shoppi
 三种口径每行都要标，因为 probe-match 量到的：**115 个段里停下 ≥8 人的有 97 个，而 lift ≥1.3 的只有 8 个**；作者挑的 2 组在这条存档里都显著，但换个文本就未必。三种口径：
 
 1. **你挑的组**，不论显著与否，**永远列全**，标「未显著」或「未显著（太少人）」。
-2. **实际停下的组**取 `topSegments(all,'stopped',8)`，超出你挑的也列，标「没说的」。
+2. **实际停下的组**取全量显著集合（`topSegments(all, 'stopped', ALL)`，即 lift ≥1.3 且停下 ≥8 人的**全部**，不止前 8），超出你挑的也列，标「没说的」；**展示只留前 8**，多出来的用「还有 N 组也显著停下来」一句交代。
 3. **两边都没碰**的归「两边都冷」，只列 `size ≥ 400` 的，按 lift 降序取前 8（70 个全列太长）。
+
+> **为什么第 2 条要分「判定」与「展示」两层**：如果拿 `topSegments(all,'stopped',8)` 直接当判定集合，第 9 名会掉进「两边都冷」——那一栏的话是「既没被你挑，也没人特别停下来」，而真实存档第 9 名（投资理财 1.49×）明显停下来了。让一个**只因为排第 9** 就被说成「没人要」的组出现在「没人要」栏，是用一个展示上限去撒谎。
 
 **一句话结论**在表头，规则写死在代码里而不是让前端拼：
 
@@ -209,7 +212,7 @@ CLI（`scripts/check.js`）同步：`--audience "自述" --picked age:a25,shoppi
 |---|---|---|
 | 1 | `migrations/0009_audience.sql` | `ALTER TABLE versions ADD COLUMN audience TEXT;` |
 | 2 | `public/shared/labels.js` | `AUDIENCE_ZH` 文案表 + `audienceSayZh` |
-| 3 | `public/shared/summary.js` | `reconcileAudience(all, picked, presetId)` → 四状态数组 + 结论句 |
+| 3 | `public/shared/summary.js` | `SEGMENT_DIMS` + `pickableGroups(people)`（清单由 `SEGMENTS` 导出）+ `filterGroups` + `reconcileAudience(all, picked, {presetId})` → 四状态行 + 计数；**中文不在这里**（结论句由 `labels.js` 的 `audienceSayZh` 给） |
 | 4 | `worker/index.js` | `runCheck`/`runVersion` 收 `body.audience` 清洗入库；`showPost` 回读 |
 | 5 | `public/index.html` | 表单加一行：自述输入 + 段 id 过滤输入 + 已选标签容器 |
 | 6 | `public/styles.css` | 该行的样式 |

@@ -5,7 +5,7 @@ import { faceInk } from './inks.js';
 import { drawGrid, attachTooltip, drawDelta, drawReach, reachLegendInk } from './grid.js';
 import { avatarSvg } from './avatar.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount, AUDIENCE_ZH, AUDIENCE_STATE_ZH, audienceSayZh,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart, waveMixChart } from './charts.js';
 import { randomBaseline, moodZ } from './shared/feed.js';
@@ -56,6 +56,7 @@ export function renderCheck(el, result) {
     '<span class="hint" data-map-hint></span></div>' +
     '<div class="map-wrap"><canvas class="grid" tabindex="0" role="img" aria-label="小镇地图：一万个格子，每格一个人格。聚焦后用方向键逐格移动，屏幕阅读器会逐格播报档案；鼠标悬停或触摸点按同样可看。"></canvas><div class="legend"></div></div>');
   html.push(jevReading(result));
+  html.push(audienceView(result));
   html.push(segmentsView(result));
   html.push(heatmapView(result, chartWidth));
   html.push(saidView(result));
@@ -346,6 +347,37 @@ function jevReading(result) {
     return `<span class="chip ${verdict}">${esc(CHECKS_ZH[id] ?? id)}：${verdict === 'yes' ? '是' : verdict === 'no' ? '否' : '说不准'}（${result.checks[id]}）</span>`;
   });
   return `<h3>Jev 对文本本身的解读</h3><div class="checks">${chips.join('')}</div>`;
+}
+
+/**
+ * 「这段话是给谁的」的对账表：作者挑的组 vs 实际停下的组。
+ * 数据是 Worker（或 replay.js）已经算好的 `result.audience` —— reconcileAudience 吃的是
+ * segments() 的输出，那是全城 10 000 人的一遍账；在渲染层重算就得再要一次 reactions。
+ * 没填这一项时整节不渲染，旧存档与旧截图一字不变。
+ */
+export function audienceView(result) {
+  const said = result.audience;
+  if (!said) return '';
+  const summary = { pickedCount: said.pickedCount ?? 0, hitCount: said.hitCount ?? 0, rows: said.rows ?? [], readable: said.readable !== false };
+  const html = [`<h3>${AUDIENCE_ZH.title}</h3>`];
+  if (said.said) html.push(`<div class="source-text">${AUDIENCE_ZH.saidLabel}：${esc(said.said)}</div>`);
+  html.push(`<p class="hint">${esc(audienceSayZh(summary))}</p>`);
+  let state = null;
+  for (const row of summary.rows) {
+    if (row.state !== state) {
+      state = row.state;
+      html.push(`<div class="aud-state" data-state="${state}">${esc(AUDIENCE_STATE_ZH[state] ?? state)}</div>`);
+    }
+    const share = row.size ? row.stopped / row.size : 0;
+    html.push(
+      `<div class="seg"><span class="label">${esc(SEGMENT_ZH[row.attribute] ?? row.attribute)}：${esc(segmentValueZh(row.attribute, row.value))}</span>` +
+      `<span class="bar2"><i style="width:${Math.round(share * 100)}%;background:var(--face-stopped)"></i></span>` +
+      `<span class="num">${row.stopped} / ${row.size}（${Math.round(share * 100)}% · ${row.lift.toFixed(2)}×）</span></div>`,
+    );
+  }
+  if (said.unsaidMore) html.push(`<p class="hint">${esc(AUDIENCE_ZH.unsaidMore.replace('%1', String(said.unsaidMore)))}</p>`);
+  if (summary.rows.some((row) => row.state === 'cold')) html.push(`<p class="hint">${esc(AUDIENCE_ZH.coldNote)}</p>`);
+  return html.join('');
 }
 
 function segmentsView(result) {

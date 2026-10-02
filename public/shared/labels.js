@@ -266,3 +266,41 @@ export function awaySayZh(sentence) {
   if (sentence.mean >= 0) return AWAY_ZH.holding;
   return AWAY_ZH.blocking;
 }
+
+/**
+ * 「这段话是给谁的」（summary.js 的 reconcileAudience）的中文，渲染层只从这里取。
+ * 三个结论：hit（挑的组里有显著的）、miss（挑的零显著）、none（一个都没挑）。
+ * 表头一句话说清结论，规则写死在 reconcileAudience 里，这里只负责说成人话。
+ */
+export const AUDIENCE_ZH = {
+  title: '这段话是给谁的',
+  saidLabel: '你说的是',
+  pickLabel: '你挑的',
+  filterLabel: '加一组人群',
+  hint: '从小镇的人群里挑几组。挑不挑都行——挑了才有一张对账表。',
+  coldNote: '以下组既没被你挑，也没人特别停下来',
+  hit: '你说的 %1 组里有 %2 组真停下来了',
+  miss: '你挑的 %1 组一个都没显著停下来，实际停下来的是你没挑的',
+  none: '你没挑组：这一节在说你写的话引来了谁',
+  nothing: '这次一个组都没读出来，还对不了账',
+  notFound: '没找到这一组——换个人群的叫法试试（词表里是「设计文案传媒」不是「做创意的」）。',
+  more: '还有 %1 项没显示，输入得更具体一点。',
+  unsaidMore: '还有 %1 组也显著停下来，这次没列。',
+  pickedCount: '已选 %1 组',
+};
+
+export const AUDIENCE_STATE_ZH = {
+  hit: '对上了',
+  miss: '没等到',
+  unsaid: '没说的',
+  cold: '两边都冷',
+};
+
+/** 一句表头结论：summary.js 给的口径（几个里几个）由标签表说成话。
+ * `readable` = segments() 读出了人群分布。读不出分布时说什么都对不上账，先说清这一点。 */
+export function audienceSayZh(summary) {
+  if (!summary.readable) return AUDIENCE_ZH.nothing;
+  if (!summary.pickedCount) return AUDIENCE_ZH.none;
+  if (!summary.hitCount) return AUDIENCE_ZH.miss.replace('%1', String(summary.pickedCount));
+  return AUDIENCE_ZH.hit.replace('%1', String(summary.pickedCount)).replace('%2', String(summary.hitCount));
+}

@@ -9,8 +9,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCheck } from '../public/shared/check.js';
 import { PRESETS } from '../public/shared/presets.js';
+import { crowd } from '../public/shared/personas.js';
+import { pickableGroups, reconcileAudience, pickLabelZh, segments } from '../public/shared/summary.js';
 import { pickProvider, ask as askJev } from '../public/shared/jev.js';
 import { createMockAsk } from '../public/shared/mock.js';
+import { AUDIENCE_STATE_ZH, segmentValueZh } from '../public/shared/labels.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,7 +33,7 @@ const option = (name) => {
   const at = args.indexOf(`--${name}`);
   return at >= 0 ? args[at + 1] : undefined;
 };
-const positional = args.filter((arg, index) => !arg.startsWith('--') && !/^--(preset|prices|max-waves)$/.test(args[index - 1] ?? ''));
+const positional = args.filter((arg, index) => !arg.startsWith('--') && !/^--(preset|prices|max-waves|audience|picked)$/.test(args[index - 1] ?? ''));
 const presetId = option('preset') ?? 'post';
 const prices = (option('prices') ?? '9,19,39,79').split(',').map(Number);
 const maxWaves = Number(option('max-waves') ?? 4);
@@ -44,6 +47,20 @@ if (!text) {
   console.error('用法：npm run check -- --preset post "要检查的文本"');
   process.exit(1);
 }
+
+// -- 作者自述的受众（R35）----------------------------------------------------------
+// 和站点同构：一句话 + 挑中的段 id（`attribute:value`，逗号分隔）。挑不到的 id 会被丢掉并
+// 在这里报出来——CLI 没有清单可点，作者手打错一个 id，报告里就少一行而他不知道少在哪。
+// 不传这两个参数时存档里不写 audience 字段，旧流程一字不变。
+
+const saidInput = (option('audience') ?? '').trim();
+const pickedInput = (option('picked') ?? '').split(',').map((id) => id.trim()).filter(Boolean);
+const pickableIds = new Set(pickableGroups(crowd('zh')).map((one) => one.id));
+const pickedGroups = [...new Set(pickedInput)];
+const unknownPicked = pickedGroups.filter((id) => !pickableIds.has(id));
+if (unknownPicked.length) console.error(`  忽略 ${unknownPicked.length} 个不存在的段 id：${unknownPicked.join(', ')}（段 id 见 npm run check -- --audience x --picked interest:photography）`);
+const knownPicked = pickedGroups.filter((id) => pickableIds.has(id));
+const audience = saidInput || knownPicked.length ? { said: saidInput.slice(0, 200), picked: knownPicked } : null;
 
 // -- 发送通道 ---------------------------------------------------------------------
 
@@ -101,6 +118,21 @@ if (Object.keys(result.checks).length) {
   console.log(`  Jev 的解读：${Object.entries(result.checks).map(([id, p]) => `${id}=${p}`).join(', ')}`);
 }
 
+// -- 对账：作者说给谁的 vs 实际停在哪 -----------------------------------------------
+// 只做对账，不改分发。这里算出来的数与报告里那一节同源（reconcileAudience 是同一个函数），
+// 所以终端与页面上不会出现两个口径。
+
+if (audience) {
+  const byId = new Map(pickableGroups(crowd('zh')).map((one) => [one.id, one]));
+  const said = reconcileAudience(segments(presetId, keys, Uint8Array.from(result.reactions), crowd('zh')), knownPicked, { presetId });
+  console.log(`  「这段话是给谁的」：${audience.said || '（没写自述）'}`);
+  if (knownPicked.length) console.log(`    你挑的 ${knownPicked.length} 组：${knownPicked.map((id) => pickLabelZh(byId.get(id))).join(' · ')}`);
+  for (const row of said.rows) {
+    console.log(`    [${AUDIENCE_STATE_ZH[row.state]}] ${pickLabelZh({ attribute: row.attribute, zh: segmentValueZh(row.attribute, row.value) })}：${row.stopped}/${row.size}（${Math.round((row.stopped / (row.size || 1)) * 100)}% · ${row.lift.toFixed(2)}×）`);
+  }
+  if (said.unsaidMore) console.log(`    还有 ${said.unsaidMore} 组也显著停下来，这次没列。`);
+}
+
 // -- 存档 -------------------------------------------------------------------------
 
 const outDir = path.join(here, '..', 'output', 'checks');
@@ -123,6 +155,8 @@ fs.writeFileSync(
       decisions: result.decisions,
       followUp: result.followUp,
       prices: result.prices ?? null,
+      // 终端与站点同构：{said, picked}。null 时不写这个字段，旧存档的回放一字不变。
+      audience: audience ?? undefined,
       usd: result.usd,
     },
     null,

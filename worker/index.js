@@ -12,7 +12,7 @@ import { openingRequest, openingAnswers, reactionRequest, questionId, MAX_TEXT_C
 import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered } from '../public/shared/feed.js';
 import { drawReaction } from '../public/shared/draw.js';
 import { askQuestion, mergeSaid, listsOf } from '../public/shared/check.js';
-import { counters, segments, topSegments, voicesOf } from '../public/shared/summary.js';
+import { counters, segments, topSegments, voicesOf, reconcileAudience, pickableGroups } from '../public/shared/summary.js';
 import { crowdTerrain } from '../public/shared/spatial.js';
 import { encodeBytes, decodeBytes } from '../public/shared/bytes.js';
 import { personView } from '../public/shared/labels.js';
@@ -30,6 +30,39 @@ const WAVES_MAX = 4;
  * 超出的批次不问了，页面上追问少问几个人，比整次收尾失败便宜。
  */
 const FOLLOW_UP_MAX_BATCHES = 24;
+
+/**
+ * 作者自述的一句「这段话是给谁的」（R35）。上限比 MAX_TEXT_CHARS 小：这句话是清单的标题，
+ * 不是正文，写到 200 字还没挑出组的人，多写的 500 字只是在给存档增重。
+ */
+const MAX_AUDIENCE_SAID = 200;
+
+/**
+ * 清洗 body.audience。挑的必须是 `summary.js` 的 pickableGroups 里真有的段 id——作者端已经
+ * 只让他从清单里挑，这里再挡一道：存档是外部输入，一个陌生的 id 进到对账表里只会变成一行
+ * 「查不到这个组」，比直接丢更让人以为自己填错了。said 为空又没挑组就当没填（null）。
+ */
+function cleanAudience(input) {
+  if (!input || typeof input !== 'object') return null;
+  const picked = Array.isArray(input.picked)
+    ? [...new Set(input.picked.filter((id) => typeof id === 'string' && pickableIds().has(id)))].slice(0, AUDIENCE_PICK_MAX)
+    : [];
+  const said = typeof input.said === 'string' ? input.said.trim().slice(0, MAX_AUDIENCE_SAID) : '';
+  if (!said && !picked.length) return null;
+  return { said, picked };
+}
+
+const PICKABLE = new Set();
+let pickableBuilt = false;
+function pickableIds() {
+  if (!pickableBuilt) {
+    pickableBuilt = true;
+    for (const one of pickableGroups(crowdOf('zh'))) PICKABLE.add(one.id);
+  }
+  return PICKABLE;
+}
+/** 挑的组没有上限的意义（清单只有 115 项），但也不许一个请求塞十万个 id 进来。 */
+const AUDIENCE_PICK_MAX = 115;
 
 /**
  * 全城人群的模块级缓存：crowd() 算 1 万人格约 155ms，而 runCheck/closeWave/showPost 每个请求都要用。
@@ -180,6 +213,7 @@ async function runCheck(request, env) {
   const day = today();
   const provider = providerOf(env, request);
   const pool = 'zh';
+  const audience = cleanAudience(body.audience);
   const { answers, usd, tokens, ms } = await provider.ask(openingRequest(presetId, text));
   const opening = openingAnswers(answers);
   const id = newId();
@@ -213,8 +247,8 @@ async function runCheck(request, env) {
     env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip, author) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, presetId, pool, text, 'running', now, day, ip, author),
     env.DB.prepare(
-      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, prices, provider, usd, tokens) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, JSON.stringify(plan), prices ? JSON.stringify(prices) : null, provider.name, round4(usd), tokens),
+      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, prices, provider, usd, tokens, audience) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, text, stored.scores, stored.checks, stored.unlisted, stored.blocked, JSON.stringify(plan), prices ? JSON.stringify(prices) : null, provider.name, round4(usd), tokens, audience ? JSON.stringify(audience) : null),
     addSpend(env.DB, { post: id, stage: 'opening', usd, tokens, ms, day }),
   ]);
   return json({
@@ -250,6 +284,7 @@ async function runVersion(request, env) {
   const number = row.number;
   const provider = providerOf(env, request);
   const pool = post.pool;
+  const audience = cleanAudience(body.audience);
   const { answers, usd, tokens, ms } = await provider.ask(openingRequest(post.preset, text));
   const opening = openingAnswers(answers);
 
@@ -270,8 +305,8 @@ async function runVersion(request, env) {
   await env.DB.batch([
     env.DB.prepare('UPDATE posts SET state = ? WHERE id = ?').bind('running', id),
     env.DB.prepare(
-      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, provider, usd, tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), JSON.stringify(plan), provider.name, round4(usd), tokens),
+      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, provider, usd, tokens, audience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), JSON.stringify(plan), provider.name, round4(usd), tokens, audience ? JSON.stringify(audience) : null),
     addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, ms, day: today() }),
   ]);
   return json({ post: id, version: number, state: 'running', wave: { index: 0, total: wave0.length } });
@@ -602,6 +637,9 @@ async function showPost(id, env, url, request = null) {
     unlisted: JSON.parse(version.unlisted ?? '[]'),
     blocked: JSON.parse(version.blocked ?? '[]'),
     away: JSON.parse(version.away ?? 'null'),
+    // 作者自述的受众（{said, picked}）。原话与挑中的组原样带回：判定留在 reconcileAudience，
+    // 那里要 segments() 的读数才算得出来。存 null = 没填，整节不渲染。
+    audience: JSON.parse(version.audience ?? 'null'),
     // 只是「这台机器拿着作者令牌」这一件事的布尔量：逐句承重要花钱、只有作者能点，
     // 但令牌本身绝不能随报告发给任何人——所以这里给的是能不能，不是是什么。
     awayCallable: authorOk(request, post),
@@ -672,6 +710,8 @@ async function showPost(id, env, url, request = null) {
       glad: topSegments(all, 'glad'),
       sorry: topSegments(all, 'sorry'),
     },
+    // 作者说给谁的 vs 实际停在哪（只做对账，不改分发）。没填就 null，前端整节不渲染。
+    audience: base.audience ? { ...base.audience, ...reconcileAudience(all, base.audience.picked, { presetId }) } : null,
     terrain: terrainFor(presetId, keys, bytes, `${id}.${v}`, post.state !== 'running'),
     voices,
     decisions: version.decisions ? JSON.parse(version.decisions) : null,

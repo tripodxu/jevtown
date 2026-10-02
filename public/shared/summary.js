@@ -4,7 +4,7 @@
 import { PRESETS, REASONS, lookOf, answersFor, questionOfList, NOT_SHOWN, CANT_TELL } from './presets.js';
 import { MIN_ASKED } from './feed.js';
 import { INTERESTS, INTEREST_COLUMNS, INTEREST_ROW_ZH } from './vocab.js';
-import { REACTIONS_ZH } from './labels.js';
+import { REACTIONS_ZH, SEGMENT_ZH, segmentValueZh } from './labels.js';
 import { unit } from './rng.js';
 
 /** Segments smaller than this are not reported: a handful of people is noise. */
@@ -184,6 +184,122 @@ export function topSegments(all, what, count = 5) {
 
 /** 街区判定少于这个数就不给颜色：一格 ≈ 200 人，几十个判定撑不起一个占比结论。 */
 export const MIN_SLICE = 25;
+
+// -- 「这段话是给谁的」：作者挑的组 vs 实际停下的组 --------------------------------
+
+/** 可挑人群的维度集合：与 SEGMENTS 一一对应，作者能挑的和报告里出现的是同一批维度。
+ * 另写一份就会漏——真实存档里「城市：昆明」就是显著停下组（lift 1.56×），漏掉城市就要为一个
+ * 作者压根挑不到的组背「没说的」（scripts/probe-pickable.js）。 */
+export const SEGMENT_DIMS = Object.keys(SEGMENTS);
+
+const GROUP_LABELS = new WeakMap();
+
+/**
+ * 作者能挑的全量人群清单（zh 池 115 项）：`[{ id: 'interest:games', attribute, value, zh, size }]`。
+ * 从 SEGMENTS 直接导出，不另写维度表（SEGMENT_DIMS 已经是那条约束）。`zh` 是中文名，
+ * 筛选框按它过滤；`size` 是镇子里这一组多少人，作者据此知道挑中的是 300 人还是 3 000 人。
+ * 按 people 数组身份缓存，与 groupTable 同一个口径。people 视为不可变。
+ */
+export function pickableGroups(people) {
+  const cached = GROUP_LABELS.get(people);
+  if (cached) return cached;
+  const counts = new Map();
+  for (const [attribute, valuesOf] of Object.entries(SEGMENTS)) {
+    for (const who of people) {
+      for (const value of valuesOf(who)) {
+        const id = `${attribute}:${value}`;
+        const row = counts.get(id);
+        if (row) row.size += 1;
+        else counts.set(id, { id, attribute, value, zh: segmentValueZh(attribute, value), size: 1 });
+      }
+    }
+  }
+  const list = [...counts.values()];
+  GROUP_LABELS.set(people, list);
+  return list;
+}
+
+/** 对账表里「两边都冷」最多列几行：镇子里有 70 个够大的组没人特别停下来，全列没人往下看。 */
+const AUDIENCE_COLD_MAX = 8;
+/** 「两边都冷」只收够大到能等得到反应的组：400 人以下停了也是那个比例。 */
+const AUDIENCE_COLD_FLOOR = 400;
+/** 「没说的」最多列几行。报告里「谁停下了」只给 5 个，这里给到 8，再多就把这一节挤成一堵墙。 */
+const AUDIENCE_UNSAID_MAX = 8;
+
+/**
+ * 作者说的（picked）与实际停下的（all 里 lift ≥ 1.3 的组）对账。
+ * 四个状态用英文键（中文在 labels.js 的 AUDIENCE_STATE_ZH）：hit = 挑的 ∧ 显著、
+ * miss = 挑的 ∧ 不显著、unsaid = 没挑 ∧ 显著、cold = 没挑 ∧ 不显著 ∧ size ≥ 400。
+ * → { pickedCount: 有效组数, hitCount: 显著命中数, unsaid: 没挑却显著的组数,
+ *     unsaidMore: 截断掉的显著组数, readable: segments() 有没有读出人群分布,
+ *     rows: [{ id, attribute, value, size, stopped, lift, state }] }
+ *
+ * 显著门槛与 topSegments 同一个 1.3、口径与 segmentsView 一样：停下的占比要明显高于全城。
+ * **判定用全部显著组，截断只发生在展示层**：拿 top-8 当判定集合会让第 9 名（真实存档里的
+ * 「投资理财」1.49×）掉进「两边都冷」，而那一栏说的是「没人特别停下来」——它在 1.49×。
+ * 「unsaid」也包括不在 pickableGroups 里的显著组：作者挑不到不等于这篇话没引来他们，
+ * 这一条恰恰是作者最需要看到的。
+ *
+ * 这里只判不措辞：状态给英文键、中文与结论句都在 labels.js（AGENTS.md：界面文案单点）。
+ */
+export function reconcileAudience(all, picked, { presetId } = {}) {
+  const wanted = new Set((Array.isArray(picked) ? picked : []).filter((id) => typeof id === 'string'));
+  const byId = new Map(all.map((segment) => [`${segment.attribute}:${segment.value}`, segment]));
+  const known = [...wanted].filter((id) => byId.has(id));
+  // topSegments 的 count 只是展示上限；这里要的是「显著」的整个集合，所以传一个上限外的数。
+  const significant = topSegments(all, 'stopped', Number.MAX_SAFE_INTEGER);
+  const significantIds = new Set(significant.map((segment) => `${segment.attribute}:${segment.value}`));
+  const hit = known.filter((id) => significantIds.has(id));
+
+  const line = (segment, state) => ({
+    id: `${segment.attribute}:${segment.value}`,
+    attribute: segment.attribute,
+    value: segment.value,
+    size: segment.size,
+    stopped: segment.stopped,
+    lift: segment.stoppedLift,
+    state,
+  });
+  const rows = [];
+  // 先按作者挑的顺序排他说的（他挑的第一组就该是第一行），再补没人挑过的。
+  for (const id of known) rows.push(line(byId.get(id), significantIds.has(id) ? 'hit' : 'miss'));
+  const unsaid = significant.filter((segment) => !wanted.has(`${segment.attribute}:${segment.value}`));
+  for (const segment of unsaid.slice(0, AUDIENCE_UNSAID_MAX)) rows.push(line(segment, 'unsaid'));
+  const cold = all
+    .filter((segment) => !wanted.has(`${segment.attribute}:${segment.value}`) && segment.size >= AUDIENCE_COLD_FLOOR && !significantIds.has(`${segment.attribute}:${segment.value}`))
+    .sort((a, b) => b.stoppedLift - a.stoppedLift)
+    .slice(0, AUDIENCE_COLD_MAX);
+  for (const segment of cold) rows.push(line(segment, 'cold'));
+
+  return {
+    pickedCount: known.length,
+    hitCount: hit.length,
+    unsaid: unsaid.length,
+    unsaidMore: Math.max(0, unsaid.length - AUDIENCE_UNSAID_MAX),
+    rows,
+    readable: all.length > 0,
+    presetId,
+  };
+}
+
+/** 搜索一次最多给多少项：115 项一次全展出来没人勾得完。 */
+const GROUP_SEARCH_MAX = 40;
+
+/**
+ * 清单的本地过滤：输入框打几个字，只给对得上的组。匹配中文名（'年轻' → 5 个年龄段）、
+ * 段 id（'shopping:phone'）与英文 id（'games'）。零花费、零延迟——作者挑的是段 id，
+ * 所以这里怎么猜都不会错，只有「找不找得到」的问题。
+ * → { list: 截断后的项, total: 命中总数 }
+ */
+export function filterGroups(list, query) {
+  const q = String(query ?? '').trim().toLowerCase();
+  if (!q) return { list: [], total: 0 };
+  const hits = list.filter((one) => `${one.zh} ${one.id} ${one.value}`.toLowerCase().includes(q));
+  return { list: hits.slice(0, GROUP_SEARCH_MAX), total: hits.length };
+}
+
+/** 清单项的中文标签，例如「年龄：25–34 岁」。渲染层与表单共用，避免两处各拼一次。 */
+export const pickLabelZh = (one) => `${SEGMENT_ZH[one.attribute] ?? one.attribute}：${one.zh}`;
 
 /**
  * 人群切片热力图：把反应场聚合到人格网格固有的 40 个「兴趣街区」上。
