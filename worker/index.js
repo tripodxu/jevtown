@@ -99,6 +99,15 @@ const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8' } });
 const fail = (message, status = 400) => json({ error: message }, status);
 
+/**
+ * 读 versions 里的 JSON 文本列。空串和 NULL 一样当「没有」：?? 只挡得住 null/undefined，
+ * 挡不住 ''，而 JSON.parse('') 抛 SyntaxError —— 报告一读这栏就整个 500（2026-10-03 提交审计
+ * 实测；今天这些列都只由 JSON.stringify 写，还没有一版写过 ''，所以这是颗哑弹不是现行 bug）。
+ * 空值该走哪条分支由调用方给 fallback（照原样传 'null' / '[]' / '{}'）。
+ * 真的写坏了的 JSON 照旧往上抛——那是数据损坏，不该被这里悄悄吞成空对象。
+ */
+const readJson = (text, fallback = 'null') => JSON.parse(typeof text === 'string' && text.trim() ? text : fallback);
+
 const today = () => new Date().toISOString().slice(0, 10);
 const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 10);
 const round2 = (value) => Math.round(value * 100) / 100;
@@ -455,7 +464,7 @@ async function closeWave(url, request, env) {
   try {
     // 空波门：当前波次没有任何回答就不许收——否则 travels([]) 为 false 会直接走收尾、跳过整个波次。
     const version = await loadVersion(env.DB, id, v);
-    const wave = JSON.parse(version.plan ?? '{}').wave;
+    const wave = readJson(version.plan, '{}').wave;
     const { results: answered } = await env.DB.prepare('SELECT 1 FROM reactions WHERE post = ? AND number = ? AND wave = ? LIMIT 1').bind(id, v, wave).all();
     if (!answered.length) {
       await release();
@@ -633,13 +642,13 @@ async function showPost(id, env, url, request = null) {
   const keys = Object.keys(preset.reactions);
   const base = {
     post: { id: post.id, preset: presetId, text: post.text, state: post.state, created_at: post.created_at, pool: post.pool },
-    checks: JSON.parse(version.checks ?? '{}'),
-    unlisted: JSON.parse(version.unlisted ?? '[]'),
-    blocked: JSON.parse(version.blocked ?? '[]'),
-    away: JSON.parse(version.away ?? 'null'),
+    checks: readJson(version.checks, '{}'),
+    unlisted: readJson(version.unlisted, '[]'),
+    blocked: readJson(version.blocked, '[]'),
+    away: readJson(version.away),
     // 作者自述的受众（{said, picked}）。原话与挑中的组原样带回：判定留在 reconcileAudience，
     // 那里要 segments() 的读数才算得出来。存 null = 没填，整节不渲染。
-    audience: JSON.parse(version.audience ?? 'null'),
+    audience: readJson(version.audience),
     // 只是「这台机器拿着作者令牌」这一件事的布尔量：逐句承重要花钱、只有作者能点，
     // 但令牌本身绝不能随报告发给任何人——所以这里给的是能不能，不是是什么。
     awayCallable: authorOk(request, post),
@@ -647,7 +656,7 @@ async function showPost(id, env, url, request = null) {
   if (post.state === 'blocked') return json(base);
 
   const people = crowdOf(post.pool);
-  const plan = JSON.parse(version.plan ?? '{}');
+  const plan = readJson(version.plan, '{}');
   const bytes = new Uint8Array(CROWD);
   // 传播层：reactions 表本来就有 wave 列，拼成"第几波看到"的字节（0 = 没看到）随报告带回。
   const waveBytes = new Uint8Array(CROWD);
@@ -692,12 +701,12 @@ async function showPost(id, env, url, request = null) {
     });
 
   const all = segments(presetId, keys, bytes, people);
-  const said = JSON.parse(version.said ?? 'null');
+  const said = readJson(version.said);
   // 开局那份打分（Jev 对 83 组人群打的 CARE 分）与后来发生的事对账：全城按 exposure 分十档，
   // 每档看停下/乐见的比例。scores 一直在 versions 里（settleWave 每波都要读它算下一波），
   // 只是今天不过报告——这一节不花钱、不调 Jev，纯把已有的两个数放在一起。
-  // 迁移之前的旧版本没有 scores（列是 0003 加的，但当时写的是空串/null），那就 null 不渲染。
-  const scores = JSON.parse(version.scores ?? 'null');
+  // 这一栏为空（老存档没写过，或手滑写空串）就 null 不渲染，别让整份报告跟着 500。
+  const scores = readJson(version.scores);
   const bands = scores ? exposureBands(presetId, keys, scores, bytes, people) : null;
   const voices = voicesOf(id, presetId, bytes).map((voice) => ({
     ...voice,
@@ -762,7 +771,7 @@ async function versionsOf(db, id) {
   return results.map((row) => ({
     number: row.number,
     text: row.text,
-    state: JSON.parse(row.blocked ?? '[]').length ? 'blocked' : row.said == null ? 'running' : 'done',
+    state: readJson(row.blocked, '[]').length ? 'blocked' : row.said == null ? 'running' : 'done',
   }));
 }
 

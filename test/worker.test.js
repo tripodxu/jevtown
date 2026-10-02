@@ -397,4 +397,38 @@ test('受众：作者挑的组存进版本、报告里对账，陌生 id 丢掉�
   assert.deepEqual(v2.audience.picked, ['interest:photography']);
 });
 
+// 空串不是 null：JSON 文本列被写空时（老存档、手滑、别的工具灌进来的数据），
+// `x ?? 'null'` 挡不住——JSON.parse('') 直接 SyntaxError，整份报告 500 而不是少一节。
+// 用真 D1 写一行空串进 versions.scores，断言报告照给、十档那一节只是不渲染。
+// 注意这个探针走的是 `wrangler d1 execute --local`，与 unstable_dev 同一份本地库
+// （2026-10-03 实测：写进去的行 worker 立刻读得到）。
+test('存档里的空串列当没有：报告照给，十档那节只是不渲染', { timeout: 120_000 }, async () => {
+  const opening = await (await postJSON(worker, '/api/check', {
+    preset: 'listing',
+    text: '空串验证：出 iPhone 13，128G，电池 86%，1400 元。',
+  })).json();
+  assert.equal(opening.state, 'running');
+  await runToDone(worker, opening.post, opening.version, authorOf(opening));
+
+  const before = await worker.fetch(`/api/post/${opening.post}?v=1`);
+  assert.equal(before.status, 200, '正常存档先要能读');
+  const normal = await before.json();
+  assert.ok(normal.bands, '正常存档有十档对账');
+
+  // 直接改库：把 scores 写成空串（绕开所有写路径，只有这样才能造出这一行）
+  execSync(`npx wrangler d1 execute jevtown --local --command "UPDATE versions SET scores = '' WHERE post = '${opening.post}' AND number = 1"`, { stdio: 'pipe' });
+  const empty = await worker.fetch(`/api/post/${opening.post}?v=1`);
+  assert.equal(empty.status, 200, `空串 scores 不该让报告 500，实得 ${empty.status}`);
+  const view = await empty.json();
+  assert.equal(view.bands, null, '没有 scores 就不渲染十档那一节');
+  assert.deepEqual(view.looks, normal.looks, '除了十档，报告的其余部分一字不变');
+  assert.deepEqual(view.waves, normal.waves, '波次读数一字不变');
+
+  // 写回正常值，确认这条断言量的是空串、不是被测坏的状态
+  execSync(`npx wrangler d1 execute jevtown --local --command "UPDATE versions SET scores = NULL WHERE post = '${opening.post}' AND number = 1"`, { stdio: 'pipe' });
+  const nulled = await worker.fetch(`/api/post/${opening.post}?v=1`);
+  assert.equal(nulled.status, 200);
+  assert.equal((await nulled.json()).bands, null, 'NULL 与空串同义');
+});
+
 

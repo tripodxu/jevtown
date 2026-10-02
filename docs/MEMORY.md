@@ -7,6 +7,72 @@
 ---
 
 ---
+
+## 2026-10-03 · 提交审计：三天里 39 个提交逐个过一遍，第二处腰斩没有找到，顺手补掉一条会让整份报告 500 的哑弹
+
+**为什么审**：R37 收尾时我把 `docs/MEMORY.md` 从 1,170 行截成 84 行，还把它提交了进去（`131d35d`）。
+既然已经有一次「文件被腰斩、没人发现、还进了历史」，就得把最近三天 39 个提交（`359a42c` 之后到 `6e221cd`）
+都过一遍，看还有没有第二处。范围 = `git log --since="3 days ago"`，重点三件事：① 被腰斩/覆写的文件；
+② 回归；③ 静默失效（改名只改一端、常量悄悄变了、断言悄悄被删）。
+
+**结论：没有回归。** HEAD 全量 `npm test` 197/197 绿、`npm run lint` 47 个文件过、
+`node scripts/golden-waves.js --check` 16 行波次名单一字未变。逐提交删除量统计里，**只有
+`131d35d` 的 MEMORY.md（+70/−1310）是异常量级**，已在 `6e221cd` 恢复并核过删除列 = 0；其余最大 47 行。
+完整审计报告：`docs/research/commit-audit-2026-10-03.md`。
+
+**逐个确认过的有意删除**（不是截断）：
+- `5430d3c`(R28) `worker/index.js` −35 = 退役 `spentToday`/`overBudget` + 两处 `const ip` + 闸的 429 分支。
+  这两处 `const ip` 正是 R28 之后 `ip is not defined` 500 的根因，已由 `762cc6d`(R29) 修回——闭环，非新问题。
+- `5430d3c` `test/worker.test.js` −47 = 「每日限额 429」「预算闸 429」两个用例，与功能退役配套（用例名 diff 确认）。
+- `7154081` `scripts/probe-dims.js` −12/+0 整文件删 = 一次性 persona 结构探针，读回内容确认过。
+- `f54cb52`(R34) `feed.js` −42/+173 = 核心重构，删 `namesOf`/`attributesOf`/`NAMES` WeakMap 与旧 `pick()`，换列号 CSR。
+
+**静默失效检测全部为零**：39 个提交的 `import {具名}` 都有对应 export；窗口新增的 11 个导出全部有调用点
+（feed.js `randomBaseline`/`moodZ`/`exposureAll`/`exposureBands`、render.js `bandsView`/`audienceView`、
+summary.js `pickableGroups`/`reconcileAudience`/`filterGroups`/`pickLabelZh`、grid.js `reachLegendInk`）；
+21 条写库语句的列全在 9 个迁移里；18 个判据级常量（`GLAD_ENOUGH`/`WAVES`/`PER_REQUEST`/`TIMEOUT_MS`/
+`MAX_ATTEMPTS`/`GRID`/`CROWD`/`MIN_ASKED`/`MIN_JUDGED`/`ALPHA`/`PRIOR`/`MIN_SLICE`/`SORRY_WHY`/
+`MAX_TEXT_CHARS`/`MAX_AUDIENCE_SAID`/`AUDIENCE_PICK_MAX`/`GROUP_SEARCH_MAX`/`permsFor`）逐提交追踪全部未变；
+12 种 `data-*` 属性的写端读端同名；public/ 与 worker/ 零 `console.log`/`debugger`/TODO；剥注释后 CSS 零悬空 `var(--x)`。
+
+**测试用例数只增不减**：逐提交统计 `test/` 下 `test(` 的次数，132(R24) → 141(R29) → 157(R30) → 167(R32)
+→ 196(R35)，全程无下降；用例名逐提交 diff 只有 R28 那两个 429 用例消失。R36 删掉的两处单行已核实有等价覆盖
+（一条换成了口径自洽的断言，原因写在注释里；「没说的」正例改由 `test/audience.test.js` 用真实存档钉着）。
+
+**R34 重构的独立复核方法（值得记住）**：要证明「换列号 CSR 没改传播行为」，不要凭记忆复刻旧 `pick()`——
+我第一次这么干，猜错 hit 判定与补位逻辑，得出「名单不一样」的假警报。正解是把 `f54cb52^` 用 `git archive`
+倒进临时目录，在旧代码上跑今天的 `scripts/golden-waves.js`，两份 16 行逐行比对：
+`R34 之前 16 行 == 现在 16 行 : True`。另外一万人的 `exposure` 新旧口径逐位比对，0 人不一致、最大偏差 0。
+**验证「重构没改行为」永远要在旧代码上直接跑，而不是在新代码里模仿旧行为。**
+
+**本轮唯一的产品代码改动：空串不是 null。** `worker/index.js` 里 8 处 `JSON.parse(x ?? 'fallback')` 读
+versions 的 JSON 文本列，`??` 挡得住 null/undefined、**挡不住空串**，而 `JSON.parse('')` 抛
+`SyntaxError: Unexpected end of JSON input` → 整份报告 500 而不是少渲染一节。
+查证是哑弹不是现行 bug：`0001_init.sql:19` 就声明 `scores TEXT`（可空）；历史写这些列的表达式只有
+`JSON.stringify(...)`，**没有任何一版写过空串**；本地 D1 508 行 `null_scores=0, empty_scores=0`；
+远端 `posts`/`versions` 各 0 行、`0008`/`0009` 还没应用。但那一栏的原注释写着「当时写的是空串/null」——
+上一位作者以为空串会走 fallback，将来任何导入或迁移都可能真写进空串。修法：
+`const readJson = (text, fallback = 'null') => JSON.parse(typeof text === 'string' && text.trim() ? text : fallback);`
+真的写坏了的 JSON 照旧往上抛——数据损坏不该被悄悄吞成空对象。
+
+**配套断言（`test/worker.test.js`）**：直接 `wrangler d1 execute --local` 改库造出空串那一行
+（已实测 unstable_dev 与 `--local` 是同一份本地库），断言报告 200、`bands` 为 null、
+`looks`/`waves` 与基准**一字不差**；再换 NULL 验一次同义。第一版写成 `assert.ok(view.reach > 0)` 红了：
+报告里的 `reach` 是 base64 编码的 `waveBytes` 不是人数——**断言写错不是产品错，改断言**。
+
+**顺带改对两处过期文档数字**（窗口外遗留，非本轮引入）：`README.md:50`「93 个用例」→ 197；
+`docs/ARCHITECTURE.md:26`「D1 结构，0001–0005」→ 0001–0009。
+
+**换行风格不是问题**：`core.autocrlf = true` 让部分文件 `w/mixed`，但 blob 里存的全是 LF
+（`git show` 输出无 CR），混用只在工作树，不影响提交内容。
+
+**审计探针自己踩的坑（都不是产品的错）**：① `declare(line, name)` 返回 RegExp 对象（永远 truthy）把所有行过滤掉，
+须 `.test()`；② 用 `[^\n]+` 匹配 UPDATE SET 子句时把 `.bind(..., id, v)` 的实参 `id` 当成列名（3 处假阳性），
+正则须止于 SQL 字符串引号；③ PowerShell `[System.IO.File]::ReadAllText` 在中文路径上报「文件名、目录名或卷标
+语法不正确」→ 改用 Node；④ `execSync('... | Where-Object')` 在 cmd.exe 下不认 PowerShell cmdlet；
+⑤ Node 里 `.test()` 前写 `!declare(...)` 恒假。
+审计用的一次性脚本共 40 个（`scripts/probe-audit-*.{mjs,ps1}`），跑完已全删；留在仓库里的只有那条回归断言。
+
 ## 2026-10-03 · R37 创意轮：Jev 开局那份预测到底兑现没有——真实三臂对照，报告新增「押得准吗」十档对账表
 
 **本轮问的问题**：`exposure()`（`feed.js:130`）= Jev 开局给 83 组人群打的 CARE 分数的折立方和
@@ -1433,3 +1499,4 @@ post/product 上答案都在 0.5 附近——Jev 答不出「第一句是否重�
   `npm run lint` = `node --check` + tab/空格 + console.log 三条文本规则。
 - **已知待办**（README 路线图 Step 4）：人格打包管线省 CPU、真实 `database_id` + secret 部署
   （`/api/batch` 作者令牌、收波 CAS、observability 已于 M2/M3 落地）。
+
