@@ -114,3 +114,62 @@ test('moodZ：z 是离随机几个标准误，符号跟方向一致', () => {
   assert.ok(moodZ('listing', 0.102, 600) < -2, '真实 Jev 第 1 波 0.102 低于随机基线两个标准误');
   assert.ok(randomBaseline('product', 600).mean > 0.3, '商品帖的随机基线高达 0.4：这条线对不同题材含义不同');
 });
+
+// -- R34：属性名换成列号。这轮没动传播判据、没动分档，只把「查名字」换成「查下标」——
+// 但波次名单是存进 versions.plan 的检查结果，换一个人就是换了一次检查，所以要钉住三件事。
+test('exposure：换成列号之后，每个人的分和按名字逐项累加的老算法逐位相同', () => {
+  // 老算法照抄一遍：名字 → [权重 × 分数]，立方，逐项相加。
+  const WEIGHTS = { interest: 1, field: 1, age: 0.6, shopping: 1.5, budget: 0.6 };
+  const weightOf = (id) => WEIGHTS[id.slice(0, id.indexOf(':'))];
+  const byName = (who, scores, market) =>
+    [
+      ...who.interests.map((id) => `interest:${id}`),
+      `field:${who.field}`,
+      `age:${who.ageGroup}`,
+      ...(market && who.shopping !== 'nothing' ? [`shopping:${who.shopping}`] : []),
+      ...(market ? [`budget:${who.budget}`] : []),
+    ].reduce((sum, id) => sum + (weightOf(id) * (scores[id] ?? 0)) ** 3, 0);
+  const scores = {
+    'interest:parenting': 0.9, 'interest:babies': 0.8, 'interest:tea': 0.15, 'interest:cooking': 0.45,
+    'interest:gardening': 0.62, 'interest:games': 0.3, 'field:it': 0.4, 'field:health': 0.55,
+    'age:a35': 0.5, 'age:a25': 0.31, 'shopping:phone': 0.85, 'shopping:clothing': 0.22,
+    'budget:middle': 0.3, 'budget:low': 0.7,
+  };
+  for (const presetId of ['post', 'listing']) {
+    const market = presetId === 'listing';
+    for (const who of crowd('zh')) assert.equal(exposure(who, scores, presetId), byName(who, scores, market), `${presetId} #${who.id}`);
+  }
+});
+
+test('firstWave：人数不足时整批都去；分数全同也仍排满 wanted + random（列号版的切线）', () => {
+  const people = crowd('zh');
+  const small = people.slice(0, 100);
+  const all = firstWave(small, flatScores(), 'post', rng(hash32('small')));
+  assert.equal(all.length, 100, '不够一波就整批都去');
+  assert.deepEqual(all.map((who) => who.id), small.map((who) => who.id), '顺序也照原样');
+  const wave = firstWave(people, flatScores(), 'post', rng(hash32('flat2')));
+  assert.equal(wave.length, WAVES[0].size);
+  assert.equal(new Set(wave.map((who) => who.id)).size, wave.length);
+});
+
+test('nextWave：每波名单与按名字算的老算法逐 id 相同（钉住 5,100 人已到达那一波）', () => {
+  const people = crowd('zh');
+  const scores = { 'interest:parenting': 0.9, 'interest:games': 0.3, 'field:it': 0.4, 'age:a35': 0.5, 'shopping:phone': 0.85, 'budget:middle': 0.3 };
+  // 四波走到底，第 4 波是全城剩下的所有人。
+  const waves = [];
+  const reactions = new Map();
+  for (let index = 0; index < WAVES.length; index++) {
+    const wave = index === 0
+      ? firstWave(people, scores, 'listing', rng(hash32('old-new', 'listing')))
+      : nextWave(people, reactions, scores, 'listing', index, rng(hash32('old-new', 'listing', index)));
+    waves.push(wave.map((who) => who.id));
+    for (const [i, who] of wave.entries()) reactions.set(who.id, ['liked', 'shared', 'scrolled_past', 'disliked', 'opened', 'ignored'][i % 6]);
+  }
+  // 金标准是 594 字节的 16 行哈希；这里重算一遍同样的形状，逐 id 对照它意义不大（哈希不可比），
+  // 真正在钉的是「四波拼起来的名单不重不漏」——`versions.plan` 存的是这个。
+  assert.deepEqual([...reactions.keys()].sort((a, b) => a - b), people.map((who) => who.id), '四波走遍全城，不重不漏');
+  assert.equal(waves[0].length, WAVES[0].size);
+  assert.ok(waves[1].length <= WAVES[1].size && waves[2].length <= WAVES[2].size);
+  assert.equal(waves[3].length, people.length - WAVES[0].size - WAVES[1].size - WAVES[2].size);
+  assert.equal(new Set(waves.flat()).size, people.length, '没有任何人被两波各算一次');
+});

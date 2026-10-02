@@ -1,0 +1,18 @@
+# 波次名单金标准（R34 优化前生成）：preset 波号 人数 名单哈希
+# 改动 pick/nextWave 的任何一处，先跑 node scripts/golden-waves.js --check 对比；不一样就不是优化。
+post 0 600 2867060411
+post 1 1500 1883756037
+post 2 3000 4259142346
+post 3 4900 842589848
+listing 0 600 612485438
+listing 1 1500 1597062140
+listing 2 3000 3752032549
+listing 3 4900 1084271273
+product 0 600 1586693077
+product 1 1500 643059993
+product 2 3000 4092929538
+product 3 4900 3937095442
+headline 0 600 2276927554
+headline 1 1500 1141561449
+headline 2 3000 1378394687
+headline 3 4900 1735413793

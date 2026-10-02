@@ -10,6 +10,70 @@
 
 ---
 
+## 2026-10-02 · R34 优化轮：属性名换成列号——nextWave 3.72ms → 1.20ms，波次名单一字不变
+
+**本轮的任务**：轮换到优化。R31 记下的那笔债：`nextWave` 是热点（6.2–6.6ms），
+要给 `share` 换成 `Float64Array` 的属性索引、`attributesOf` 改成 CSR。
+**但先量了一遍，发现排期里把主次排反了。**
+
+**第一步是钉金标准，不是写代码**（`test/golden-waves.txt` + `scripts/golden-waves.js`）。
+波次名单是存进 `versions.plan` 的检查结果——**同一颗种子给出不同的人就不是优化，
+是换了一次检查**，报告上每个数都变成关于一次没发生过的模拟的数。名单本身几十 KB，
+所以钉的是哈希（16 行 = 4 preset × 4 波）。脚本带 `--check`：只比数据行，
+文件头的注释改了不算不一致。**改名之后每一步都跑它，四次全 `GOLDEN IDENTICAL`。**
+
+**量出来的结论（同一批 10,000，`listing`，其余一律不动）**：
+
+| | 原来 | 换列号 |
+|---|---|---|
+| `exposure` ×10,000 | 1.75ms | 0.39ms（逐人行）→ **0.11ms**（CSR 顺序内存） |
+| 到达者清点 | 1.43ms（`Map<string>`） | **0.19ms**（两个 `Float64Array`） |
+| `share` 查表（83 × 10,000） | 2.05ms | **≈0**（列号直接下标） |
+| `nextWave`（600 已到达） | 3.72ms | **1.20ms** |
+| `nextWave`（5,100 已到达） | 1.89ms | **1.11ms** |
+| `firstWave` | 2.83ms | **0.67ms** |
+
+**钱花在「查名字」上，不在算术上。** 一个人的属性是 83 个名字，
+每个都要从对象或 `Map` 里查出来，查两遍（一遍排名、一遍清点）——`Map<string>` 占位访问
+60,000 次是 3.1ms，`Float64Array` 下标 60,000 次是 **0.082ms**（38×）。
+而这些名字不是我们选的，就是 `requests.js:groupsOf` 问 Jev 的那 83 组，且永远不会变，
+**所以列号是同样的信息，不必再哈希**。
+
+**三处改动都在 `public/shared/feed.js`**：
+
+1. `WEIGHT_OF_PART`（原 `namesOf` 里的权重：`interest/field: 1`、`age/budget: 0.6`、
+   `shopping: 1.5`）+ `COLUMNS`/`columnsOf(market)` → `{ ids, at: Map, weights }`，
+   列的来源是 `groupsOf(market)`；`columnsOfPersona(who, market)` 用 `WeakMap` 缓存每人的
+   `Int32Array`，**列顺序与旧 `namesOf` 逐项一致**（3 个 interest → field → age →
+   （market：shopping 非 nothing 则加 → budget））。
+2. `cubeTable(scores, market)` 把 `(权重 × 分数)³` **每次检查折一次**；
+   `exposureBy` / `nextWave` 的排名循环都只折已折好的表。
+   **坑：折立方不能按人格折。** 第一版让 `exposure` 自己折，把 83 项表重建了一万次——
+   `firstWave` 从 2.8ms 变成 **25ms**。注释里把这个数字写在 `exposure` 的 doc 上，
+   因为它是「列号」这件事最容易犯的反面。
+3. `nextWave` 只对 **unseen** 排名（`filter` 掉已到达的人后再算 CSR），
+   `pickBy` 里 `best`/`rest` 从 `{who, rank}` 对象改成**纯下标**（0.64ms → 0.47ms）。
+
+**取切线从全排序换成快速选择**（`kthSmallest`，Hoare + 三点取中），
+9,400 个数里只要一个：0.39ms → **0.04ms**。
+**第一次写错了。** 自己写的那版在 n=1000/5000/9400 上与全排序**全部不一致**，
+300 组大量重复值下 **300 组不一致**——根因是 pivot 只取端点，
+而排名天生大量重复（属性全 0 的人格排名就是 0，一整波人同值）。
+改成中位数三取中后，对着全排序比了 **15,937 组** `(values, k)`
+（大量重复、全等、已排序、逆序、连续）→ **零不一致**。
+**教训：写一个「替代排序」的东西，先把替代品当 oracle 比上千组再往产品里放。**
+
+**写的断言（`test/feed.test.js` +3 组，12/12）**：
+- `exposure` 与**按名字逐项累加的老算法**在 10,000 人 × 2 个 preset 上**逐位 `assert.equal`**；
+- 人数不足时整批都去且顺序照原样；分数全同时仍排满 `wanted + random`；
+- 四波走遍全城**不重不漏**（拼起来的 id 集合 === 全城）。
+
+**数字**：`npm test` **150/150 pass / 0 fail / 42.0s**（R33 是 147，+3）；
+`npm run lint` ✓ 46 个文件；`node scripts/golden-waves.js --check` → `GOLDEN IDENTICAL —— 16 行波次名单一字未变`。
+
+**新增**：`scripts/golden-waves.js`（默认重写 `--check` 对比，`scripts/` 是 CLI 故 `console.log` 免 lint）、
+`test/golden-waves.txt`。
+
 ## 2026-10-02 · R33 前端轮：数字对齐交给 CSS 而不是字体运气，负号全站一个字形，逐句承重那一行在中屏不再被挤碎
 
 **本轮的任务**：按轮换轮到前端。做法照 skill 的纪律来——先审计后改，

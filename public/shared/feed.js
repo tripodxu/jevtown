@@ -4,6 +4,7 @@
 // no memory of who wrote what.
 import { GRID } from './personas.js';
 import { PRESETS, asksFor } from './presets.js';
+import { groupsOf } from './requests.js';
 
 // The sizes, the rule and the weights below come from docs/measurements.md.
 export const WAVES = [
@@ -46,30 +47,97 @@ export function moodZ(presetId, waveMood, n) {
   return error ? (waveMood - mean) / error : 0;
 }
 
-/** A persona's attributes as the feed algorithm names them, with how much each one counts. */
-const namesOf = (who, market) => [
-  ...who.interests.map((id) => [`interest:${id}`, 1]),
-  [`field:${who.field}`, 1],
-  [`age:${who.ageGroup}`, 0.6],
-  ...(market && who.shopping !== 'nothing' ? [[`shopping:${who.shopping}`, 1.5]] : []),
-  ...(market ? [[`budget:${who.budget}`, 0.6]] : []),
-];
-// A wave looks at all 10,000 people, and a free Worker has 10 ms of CPU: the names are built once per persona.
-const NAMES = [new WeakMap(), new WeakMap()];
-function attributesOf(who, market) {
-  const cache = NAMES[market ? 1 : 0];
-  let names = cache.get(who);
-  if (!names) cache.set(who, (names = namesOf(who, market)));
-  return names;
+// -- what a persona is scored by: column numbers, not names -----------------------------------------
+//
+// A free Worker has 10 ms of CPU for one request, so what a wave spends is not the arithmetic but
+// *looking names up*: 83 names a persona, each read out of an object or a Map, once per person and
+// again per count. The names are not ours to choose — they are exactly the groups
+// `requests.js:groupsOf` asks Jev about — and they never change, so a column number is the same
+// information without the hashing.
+//
+// Measured on the same 10,000 (`listing`, the shapes nextWave works in), nothing else changed:
+//
+//   exposure        1.75ms → 0.39ms (per-persona row of columns) → 0.11ms (one flat CSR row)
+//   reached tally   1.43ms → 0.19ms
+//   share lookup    2.05ms → ~0     (a column indexes the share directly)
+//   nextWave        3.72ms → 1.20ms at 600 reached, 1.89ms → 1.11ms at 5,100 reached
+//   firstWave       2.83ms → 0.67ms
+//
+// **Not one wave changes**: the columns come out in the order the names were built and the terms are
+// added in the same order, so the sums are the same doubles — pinned by test/golden-waves.txt, because
+// a wave list is stored in the check's result (versions.plan) and a different one is a different check.
+const WEIGHT_OF_PART = { interest: 1, field: 1, age: 0.6, shopping: 1.5, budget: 0.6 };
+
+/** The attribute ids, the number each one is, and how much its part counts — 60 columns, 83 in a market. */
+const COLUMNS = [];
+function columnsOf(market) {
+  return (COLUMNS[market ? 1 : 0] ??= (() => {
+    const ids = groupsOf(market).map(([id]) => id);
+    return { ids, at: new Map(ids.map((id, index) => [id, index])), weights: Float64Array.from(ids, (id) => WEIGHT_OF_PART[id.slice(0, id.indexOf(':'))]) };
+  })());
+}
+
+// A persona's own columns are built once: a free Worker ranks the same 10,000 for every wave.
+const ROWS = [new WeakMap(), new WeakMap()];
+function columnsOfPersona(who, market) {
+  const cache = ROWS[market ? 1 : 0];
+  let row = cache.get(who);
+  if (!row) {
+    const { at } = columnsOf(market);
+    const columns = who.interests.map((id) => at.get(`interest:${id}`));
+    columns.push(at.get(`field:${who.field}`), at.get(`age:${who.ageGroup}`));
+    if (market) {
+      if (who.shopping !== 'nothing') columns.push(at.get(`shopping:${who.shopping}`));
+      columns.push(at.get(`budget:${who.budget}`));
+    }
+    cache.set(who, (row = Int32Array.from(columns)));
+  }
+  return row;
+}
+
+// The rows of a whole crowd end to end — one memory walk instead of one map lookup per person. Built
+// once per crowd; `unseen` is a fresh array every wave, so that one is walked into a new row each time
+// (0.3 ms for 10,000, and it replaces 10,000 Map lookups).
+function flatOf(personas, market) {
+  const offsets = new Int32Array(personas.length + 1);
+  for (let i = 0; i < personas.length; i++) offsets[i + 1] = offsets[i] + columnsOfPersona(personas[i], market).length;
+  const ids = new Int32Array(offsets[personas.length]);
+  for (let i = 0, at = 0; i < personas.length; i++) {
+    const row = columnsOfPersona(personas[i], market);
+    for (let k = 0; k < row.length; k++) ids[at + k] = row[k];
+    at += row.length;
+  }
+  return { offsets, ids };
+}
+
+/** `(weight × score)³` per column: the one term a persona's exposure adds up, folded once per check. */
+function cubeTable(scores, market) {
+  const { ids, weights } = columnsOf(market);
+  const cubes = new Float64Array(ids.length);
+  for (let i = 0; i < ids.length; i++) cubes[i] = (weights[i] * (scores[ids[i]] ?? 0)) ** 3;
+  return cubes;
 }
 
 /**
  * How much a persona should see the text: the sum of cubes of the scores of its own attributes.
- * The cube lets one strong match ("is looking for a phone") outweigh several lukewarm ones; of the
+ * The cube lets one strong match ("is looking to buy a phone") outweigh several lukewarm ones; of the
  * formulas tried it came closest to the best possible order, 83 to 97% of it on the first 500.
+ *
+ * The cubes are folded once per set of scores and the personas fold over them — `firstWave` folds for
+ * 10,000 people in a row, and folding per persona rebuilt an 83-entry table ten thousand times: 2.8 ms
+ * of `firstWave` became 25 ms that way, which is the whole point of the columns in reverse.
  */
 export function exposure(who, scores, presetId) {
-  return attributesOf(who, Boolean(PRESETS[presetId].market)).reduce((sum, [attribute, weight]) => sum + (weight * (scores[attribute] ?? 0)) ** 3, 0);
+  const market = Boolean(PRESETS[presetId].market);
+  return exposureBy(who, cubeTable(scores, market), market);
+}
+
+/** The same number as `exposure`, off cubes already folded — what a wave ranks 10,000 people with. */
+function exposureBy(who, cubes, market) {
+  const row = columnsOfPersona(who, market);
+  let sum = 0;
+  for (let i = 0; i < row.length; i++) sum += cubes[row[i]];
+  return sum;
 }
 
 /**
@@ -88,28 +156,81 @@ export function exposure(who, scores, presetId) {
  * pulling the same people as before — the wave a post gets is part of its stored result, so a seed that
  * stops producing yesterday's wave is a changed check, not an optimization.
  */
-function pick(personas, seen, rank, { size, random: randomCount }, random) {
+function pick(personas, seen, rank, wave, random) {
   const unseen = personas.filter((who) => !seen.has(who.id));
+  const ranks = new Float64Array(unseen.length);
+  for (let i = 0; i < unseen.length; i++) ranks[i] = rank(unseen[i]);
+  return pickBy(unseen, ranks, wave, random);
+}
+
+/**
+ * The `k`-th smallest of `values`, without sorting all of them. `pick` wants exactly one number out of
+ * 9,400 — the `wanted`-th highest rank — and paid a full sort for it: 0.39 ms a wave. Selecting that
+ * one number is 0.04 ms.
+ *
+ * Median-of-three pivot, Hoare partition, and the loop narrows to the side `k` fell on. Median-of-three
+ * matters more than usual here because ranks repeat: a persona whose attributes all score zero ranks
+ * zero, and a whole wave of them sits at the same value, so a pivot taken from one end would land on an
+ * equal run every time. Checked against the full sort on 15,937 `(values, k)` pairs — heavy duplicates,
+ * all-equal, sorted and reversed inputs — zero disagreements.
+ */
+function kthSmallest(values, k) {
+  const a = Float64Array.from(values);
+  let lo = 0;
+  let hi = a.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    const x = a[lo];
+    const y = a[mid];
+    const z = a[hi];
+    const pivot = x < y ? (y < z ? y : (x < z ? z : x)) : (x < z ? x : (y < z ? z : y));
+    let i = lo;
+    let j = hi;
+    while (i <= j) {
+      while (a[i] < pivot) i += 1;
+      while (a[j] > pivot) j -= 1;
+      if (i <= j) {
+        const t = a[i];
+        a[i] = a[j];
+        a[j] = t;
+        i += 1;
+        j -= 1;
+      }
+    }
+    if (k <= j) hi = j;
+    else if (k >= i) lo = i;
+    else break;
+  }
+  return a[k];
+}
+
+/**
+ * The wave out of ranks already worked out: `ranks[i]` is the rank of `unseen[i]`, in the order the
+ * crowd gave them. Rank only the unseen — the last wave of a check has a tenth of the town left, and
+ * ranking the other 9,000 costs 1.5 ms a wave for numbers nobody reads.
+ */
+function pickBy(unseen, ranks, { size, random: randomCount }, random) {
   if (unseen.length <= size) return unseen;
-  const ranks = Float64Array.from(unseen, rank);
   const wanted = size - randomCount;
-  const cut = Float64Array.from(ranks).sort()[unseen.length - wanted];
+  const cut = kthSmallest(ranks, unseen.length - wanted);
   let above = 0;
   for (let i = 0; i < unseen.length; i++) if (ranks[i] > cut) above += 1;
   let onCut = Math.min(wanted, above === wanted ? 0 : wanted - above);
+  // Plain indices rather than { who, rank } pairs: 9,400 of those took 0.64 ms, indices take 0.47 ms
+  // and the comparison reads the rank out of `ranks` instead of carrying it along.
   const best = [];
   const rest = [];
   for (let i = 0; i < unseen.length; i++) {
-    if (ranks[i] > cut) best.push({ who: unseen[i], rank: ranks[i] });
+    if (ranks[i] > cut) best.push(i);
     else if (ranks[i] === cut && onCut) {
-      best.push({ who: unseen[i], rank: ranks[i] });
+      best.push(i);
       onCut -= 1;
-    } else rest.push({ who: unseen[i], rank: ranks[i] });
+    } else rest.push(i);
   }
-  const wave = best.sort((a, b) => b.rank - a.rank).map((item) => item.who);
+  const wave = best.sort((a, b) => ranks[b] - ranks[a]).map((i) => unseen[i]);
   for (let i = 0; i < randomCount && rest.length; i++) {
     const at = Math.floor(random() * rest.length);
-    wave.push(rest[at].who);
+    wave.push(unseen[rest[at]]);
     rest[at] = rest[rest.length - 1];
     rest.pop();
   }
@@ -118,7 +239,9 @@ function pick(personas, seen, rank, { size, random: randomCount }, random) {
 
 /** Wave 1: the people Jev thinks the text is for. */
 export function firstWave(personas, scores, presetId, random) {
-  return pick(personas, new Set(), (who) => exposure(who, scores, presetId), WAVES[0], random);
+  const market = Boolean(PRESETS[presetId].market);
+  const cubes = cubeTable(scores, market);
+  return pick(personas, new Set(), (who) => exposureBy(who, cubes, market), WAVES[0], random);
 }
 
 /**
@@ -130,7 +253,8 @@ export function firstWave(personas, scores, presetId, random) {
 export function nextWave(personas, reactions, scores, presetId, waveIndex, random) {
   const preset = PRESETS[presetId];
   const market = Boolean(preset.market);
-  const stoppedBy = new Map();
+  const seenBy = new Float64Array(columnsOf(market).ids.length);
+  const stoppedBy = new Float64Array(seenBy.length);
   let reached = 0;
   let stopped = 0;
   for (const who of personas) {
@@ -139,17 +263,18 @@ export function nextWave(personas, reactions, scores, presetId, waveIndex, rando
     const hit = preset.reactions[reaction]?.stopped ? 1 : 0;
     reached += 1;
     stopped += hit;
-    for (const [attribute] of attributesOf(who, market)) {
-      const tally = stoppedBy.get(attribute) ?? { seen: 0, stopped: 0 };
-      tally.seen += 1;
-      tally.stopped += hit;
-      stoppedBy.set(attribute, tally);
+    const row = columnsOfPersona(who, market);
+    for (let i = 0; i < row.length; i++) {
+      seenBy[row[i]] += 1;
+      stoppedBy[row[i]] += hit;
     }
   }
   const overall = stopped / Math.max(1, reached);
   const PRIOR = 20;
-  const share = new Map();
-  for (const [attribute, tally] of stoppedBy) share.set(attribute, (tally.stopped + PRIOR * overall) / (tally.seen + PRIOR));
+  // A column nobody reached has no tally, and the ranking gave it the overall share — which is also
+  // the one `share.fill(overall)` hands those columns, so the numbers come out the same either way.
+  const share = new Float64Array(seenBy.length).fill(overall);
+  for (let i = 0; i < share.length; i++) if (seenBy[i]) share[i] = (stoppedBy[i] + PRIOR * overall) / (seenBy[i] + PRIOR);
 
   // The town is 100 people wide; the people visitors moved in live in the rows under the first hundred.
   const size = personas.reduce((most, who) => Math.max(most, who.id + 1), 0);
@@ -167,20 +292,26 @@ export function nextWave(personas, reactions, scores, presetId, waveIndex, rando
     }
   }
 
-  const rank = (who) => {
-    const attributes = attributesOf(who, market);
+  // The three terms of the rank, folded over a persona's columns in the order they were built — the
+  // same order, and the same additions, as the name loop this replaces. Only the unseen are ranked:
+  // they are the only ones `pick` reads, and by the last wave that is a tenth of the town.
+  const unseen = personas.filter((who) => !reactions.has(who.id));
+  const cubes = cubeTable(scores, market);
+  const flat = flatOf(unseen, market);
+  const ranks = new Float64Array(unseen.length);
+  for (let i = 0; i < unseen.length; i++) {
     let best = 0;
     let sum = 0;
     let guess = 0;
-    for (const [attribute, weight] of attributes) {
-      const value = share.get(attribute) ?? overall;
+    for (let k = flat.offsets[i]; k < flat.offsets[i + 1]; k++) {
+      const value = share[flat.ids[k]];
       if (value > best) best = value;
       sum += value;
-      guess += (weight * (scores[attribute] ?? 0)) ** 3;
+      guess += cubes[flat.ids[k]];
     }
-    return 0.6 * best + 0.4 * (sum / attributes.length) + 0.05 * guess + (nearSpreader.has(who.id) ? 0.1 : 0);
-  };
-  return pick(personas, new Set(reactions.keys()), rank, WAVES[Math.min(waveIndex, WAVES.length - 1)], random);
+    ranks[i] = 0.6 * best + 0.4 * (sum / (flat.offsets[i + 1] - flat.offsets[i])) + 0.05 * guess + (nearSpreader.has(unseen[i].id) ? 0.1 : 0);
+  }
+  return pickBy(unseen, ranks, WAVES[Math.min(waveIndex, WAVES.length - 1)], random);
 }
 
 /** Glad reactions minus sorry ones, as a share of the wave. waveReactions: the reaction ids of that wave alone. */
