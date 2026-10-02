@@ -1,6 +1,22 @@
 // 界面中文标签：把 presets.js 里的英文 id 翻译成人话。Jev 读不到这个文件，它只面向界面。
 import { INTEREST, FIELDS, AGE_GROUP, TEMPER, BUDGET, SHOP, JOB } from './vocab.js';
 
+/**
+ * 有符号数字的唯一写法（R33）。
+ *
+ * 原来每个要显示正负的地方自己拼 `${v >= 0 ? '+' : ''}${v.toFixed(2)}`，于是
+ * ASCII 连字符 '-' 和真减号 '−' 混在同一页里（逐句承重那三处是真减号，
+ * 基线与 z 那些是连字符）。两个字形宽度与高度都不同——连字符坐在 x 高上、
+ * 真减号居中且更宽——同一栏数字排一起时会看出一列在跳。
+ *
+ * 所以定一个规矩：**正数显式写 '+'，负数一律用真减号 U+2212（宽度同数字，
+ * 是排版上正确的负号字形），0 写成 '0' 不带符号。**
+ */
+export const signed = (value, digits = 4) => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(digits)}`;
+
+/** 人计数专用：带千分位（差分看板上的「+1,204 人」不能写成 +1204）。 */
+export const signedCount = (value) => `${value >= 0 ? '+' : '−'}${Math.abs(value).toLocaleString()}`;
+
 export const PRESET_ZH = {
   post: { noun: '帖子', who: '读者' },
   listing: { noun: '闲置转让', who: '买家' },

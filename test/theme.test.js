@@ -129,3 +129,70 @@ test('面版墨水七色齐备，且地图底板墨水在地图上仍过 3:1（�
     }
   }
 });
+
+// ------------------------------------------------------------------
+// 排版纪律（R33）。这些不是对比度，是「看不见但一坏就毁掉一栏数字」的东西，
+// 所以也钉死：对比度坏了有人抱怨，列宽错了只会被当成「风格」。
+// ------------------------------------------------------------------
+
+const bodyBlock = (() => {
+  const start = css.indexOf('body {');
+  assert.notEqual(start, -1, 'styles.css 里找不到 body 块');
+  return css.slice(start, css.indexOf('}', start));
+})();
+
+test('数字对齐不靠字体运气：body 打开 tabular-nums（R33）', () => {
+  // --font-mono 的兜底项是通用 monospace，在部分 Android/旧环境会落到比例数字字体，
+  // 于是表格列左右晃。17 处数据字体用这个栈，所以对齐必须由 CSS 兜底而不是碰运气。
+  assert.match(bodyBlock, /font-variant-numeric:\s*tabular-nums/);
+  // 全站只许有一处，且值必须是 tabular-nums：多写一处就是有人局部改回去的意思。
+  const hits = css.match(/font-variant-numeric:\s*[a-z-]+/g) ?? [];
+  assert.equal(hits.length, 1, `font-variant-numeric 出现了 ${hits.length} 次：${hits.join(' | ')}`);
+  assert.match(hits[0], /tabular-nums/);
+});
+
+/** 取某个媒体查询块里的规则文本（按 max-width 升序取第一个匹配到的）。 */
+const mediaBlock = (width) => {
+  const at = css.indexOf(`@media (max-width: ${width}px) {`);
+  assert.notEqual(at, -1, `styles.css 里找不到 @media (max-width: ${width}px)`);
+  const start = css.indexOf('{', at);
+  let depth = 0;
+  for (let i = start; i < css.length; i += 1) {
+    if (css[i] === '{') depth += 1;
+    else if (css[i] === '}' && (depth -= 1) === 0) return css.slice(start + 1, i);
+  }
+  throw new Error('@media 块没有收尾');
+};
+
+// .arow 是 R32 的逐句承重一行：标号 + 原句 + 双向条 + 人话 + 组数。
+// 宽屏五列；1080px 以下句子会被压到 ~120px（一句 20 字中文折成八行），所以那里
+// 必须改成「句子占满整行 + 条与数字另起一行」；760px 以下再逐格落下。
+test('逐句承重那一行在中等宽度不被挤碎（R33）', () => {
+  assert.match(css, /\.arow \{[^}]*grid-template-columns: 76px/, '宽屏基线仍是五列的左起固定列');
+  const mid = mediaBlock(1080);
+  assert.match(mid, /\.arow \{[^}]*grid-template-columns:/, '1080px 那一档要改列');
+  assert.match(mid, /\.arow \.apart \{[^}]*grid-row: 1/, '句子要提到第一行独占宽度');
+  assert.match(mid, /\.arow \.atwin \{[^}]*grid-row: 2/, '条落到第二行，不与句子抢宽度');
+  assert.match(mid, /\.arow \.fnum \{[^}]*grid-row: 3/, '组数单独一行：它有 18 个字符宽，与条并排会两边都挤短');
+  const narrow = mediaBlock(760);
+  assert.match(narrow, /\.arow \.apart \{[^}]*grid-column: 2/, '窄屏句子缩进让开标号，同行可读');
+  assert.match(narrow, /\.arow \.fsay \{[^}]*grid-row: 3/, '人话自己一行');
+});
+
+test('正文行长落在可读区间：容器不超 1050px（craft floor）', () => {
+  const max = Number(bodyBlock.match(/max-width:\s*(\d+)px/)?.[1]);
+  assert.ok(max, 'body 的 max-width 没写成 px 字面量');
+  // 15px 汉字一行约 15px 宽 → 1050 - 40(padding) - 48(.plate padding) ≈ 64 字，
+  // 等效 128 西文字符，仍在 65–75ch 的舒适区外面一点但不到越界。
+  // 断言的是「上限」而不是某个精确值：再宽就该出现一行读不到底的正文。
+  assert.ok(max <= 1050, `容器 ${max}px 太宽，正文一行会超过 70 个汉字`);
+  assert.ok(max >= 720, `容器 ${max}px 太窄，两栏仪表会挤`);
+});
+
+test('正文行长可读 + 数据一律等宽：令牌与规则没有被拆开', () => {
+  // body 用 font: 15px/1.7 var(--font-body) 简写，行高写在简写里不是独立声明。
+  assert.match(bodyBlock, /font:\s*15px\/1\.[6-9]/, '正文行高 1.7 附近，太紧读不动 15px 中文');
+  assert.match(css, /--font-mono:\s*ui-monospace/, '数据字体栈以 ui-monospace 起头，保证数字等宽');
+  // 等宽栈的兜底必须留着最后一个通用 monospace：把它换成别的会掉到比例数字字体。
+  assert.match(css, /--font-mono:[^;]*\bmonospace\s*;/);
+});

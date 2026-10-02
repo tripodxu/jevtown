@@ -2,6 +2,7 @@
 // 折线/面积用 SVG（清晰、可缩放），漏斗与条形用 DOM（复用主题令牌与等宽数字）。
 import { GLAD_ENOUGH } from './shared/feed.js';
 import { lookOf } from './shared/presets.js';
+import { signed } from './shared/labels.js';
 import { FACE_INKS } from './inks.js';
 
 const esc = (value) => String(value).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
@@ -20,7 +21,7 @@ export function moodLine(points, { width = 560, height = 130 } = {}) {
     const tier = v >= GLAD_ENOUGH ? '绿色（传播）' : v >= 0 ? '蓝色（持平）' : '红色（负面）';
     return `<svg class="chart" viewBox="0 0 ${width} 90" role="img" aria-label="唯一一波的情绪为 ${v.toFixed(2)}">
       <circle cx="${width / 2}" cy="38" r="6" fill="var(--accent)" />
-      <text x="${width / 2}" y="20" text-anchor="middle" class="chart-num">唯一一波 · 情绪 ${v >= 0 ? '+' : ''}${v.toFixed(2)}（${tier}）</text>
+      <text x="${width / 2}" y="20" text-anchor="middle" class="chart-num">唯一一波 · 情绪 ${signed(v, 2)}（${tier}）</text>
       <text x="${width / 2}" y="70" text-anchor="middle" class="chart-axis">第 1 波 · 只跑了一波，没有轨迹可画</text>
     </svg>`;
   }
@@ -32,7 +33,7 @@ export function moodLine(points, { width = 560, height = 130 } = {}) {
   const path = points.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
   const zero = y(0);
   const dots = points
-    .map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.5" fill="var(--accent)" /><text x="${x(i).toFixed(1)}" y="${(y(v) - 9).toFixed(1)}" text-anchor="middle" class="chart-num">${v >= 0 ? '+' : ''}${v.toFixed(2)}</text>`)
+    .map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.5" fill="var(--accent)" /><text x="${x(i).toFixed(1)}" y="${(y(v) - 9).toFixed(1)}" text-anchor="middle" class="chart-num">${signed(v, 2)}</text>`)
     .join('');
   const labels = points.map((_, i) => `<text x="${x(i).toFixed(1)}" y="${height - 6}" text-anchor="middle" class="chart-axis">第 ${i + 1} 波</text>`).join('');
   return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="各波次情绪轨迹">
@@ -97,7 +98,7 @@ export function funnel(waves) {  if (!waves.length) return '';
     return `<div class="frow">
       <span class="flabel">第 ${wave.index + 1} 波</span>
       <span class="fbar"><i class="f${tier}" style="width:${width}%"></i></span>
-      <span class="fnum">${wave.size.toLocaleString()} 人 · 情绪 ${wave.mood >= 0 ? '+' : ''}${wave.mood.toFixed(2)} · ${label}</span>
+      <span class="fnum">${wave.size.toLocaleString()} 人 · 情绪 ${signed(wave.mood, 2)} · ${label}</span>
     </div>`;
   });
   return `<div class="funnel">${rows.join('')}</div>`;

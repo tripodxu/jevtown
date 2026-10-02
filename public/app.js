@@ -2,7 +2,7 @@
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
 import { renderCheck, renderDelta, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
-import { BLOCKED_ZH, AWAY_ZH, presetNoun as PRESET_NOUN_OF } from './shared/labels.js';
+import { BLOCKED_ZH, AWAY_ZH, presetNoun as PRESET_NOUN_OF, signed } from './shared/labels.js';
 import { PRESETS } from './shared/presets.js';
 import { drawGrid, paintDelta } from './grid.js';
 import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
@@ -266,8 +266,8 @@ $('form').addEventListener('submit', async (event) => {
         status('收尾完成。', 0.98);
         announce(`检查收尾，共到达 ${wave.reach} 人`);
       } else {
-        const line = `第 ${wave.wave.index + 1} 波完成，情绪 ${wave.wave.mood >= 0 ? '+' : ''}${wave.wave.mood}，文字继续传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`;
-        monitorRow([`第 ${wave.wave.index + 1} 波收束`, `情绪 ${wave.wave.mood >= 0 ? '+' : ''}${wave.wave.mood}`, `${wave.wave.size} 人`, '', ''], 'wave-row');
+        const line = `第 ${wave.wave.index + 1} 波完成，情绪 ${signed(wave.wave.mood, 2)}，文字继续传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`;
+        monitorRow([`第 ${wave.wave.index + 1} 波收束`, `情绪 ${signed(wave.wave.mood, 2)}`, `${wave.wave.size} 人`, '', ''], 'wave-row');
         status(line, 0.5);
         announce(line);
       }

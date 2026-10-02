@@ -5,7 +5,7 @@ import { faceInk } from './inks.js';
 import { drawGrid, attachTooltip, drawDelta, drawReach, reachLegendInk } from './grid.js';
 import { avatarSvg } from './avatar.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart, waveMixChart } from './charts.js';
 import { randomBaseline, moodZ } from './shared/feed.js';
@@ -171,7 +171,7 @@ function terrainView(result) {
   const t = result.terrain;
   if (!t || t.morans === null) return '';
   const verdict = TERRAIN_VERDICT_ZH[t.verdict] ?? t.verdict;
-  const z = t.z === null ? '' : `，置换检验 z = ${t.z >= 0 ? '+' : ''}${t.z.toFixed(1)}`;
+  const z = t.z === null ? '' : `，置换检验 z = ${signed(t.z, 1)}`;
   const where = [
     t.hot?.length ? `成片的乐见集中在地图${directionZh(t.hotAt)}（${t.hot.length} 格）` : '',
     t.cold?.length ? `成片的反感在${directionZh(t.coldAt)}（${t.cold.length} 格）` : '',
@@ -182,7 +182,7 @@ function terrainView(result) {
   return `<h3>人群地形</h3><div class="terrain-read">
     <span class="chip ${t.verdict}">${verdict}</span>
     <div class="terrain-say">这次的反应<em>${verdict}</em>。${TERRAIN_SAY_ZH[t.verdict] ?? ''}</div>
-    <div class="hint">判定格 ${t.judged.toLocaleString()} · 相邻对 ${t.edges.toLocaleString()} · Moran's I = ${t.morans.toFixed(3)}（把地图随机打乱 ≈ 0，越正越成片、越负越零散${z}）。${local}</div>
+    <div class="hint">判定格 ${t.judged.toLocaleString()} · 相邻对 ${t.edges.toLocaleString()} · Moran's I = ${signed(t.morans, 3)}（把地图随机打乱 ≈ 0，越正越成片、越负越零散${z}）。${local}</div>
   </div>`;
 }
 
@@ -213,13 +213,13 @@ function baselineView(result) {
       return `<div class="frow">
       <span class="flabel">第 ${wave.index + 1} 波</span>
       <span class="fbar"><i class="f${tone}" style="width:${shown}%"></i></span>
-      <span class="fnum">z ${waveZ >= 0 ? '+' : ''}${waveZ.toFixed(1)} · ${wave.size.toLocaleString()} 人</span>
+      <span class="fnum">z ${signed(waveZ, 1)} · ${wave.size.toLocaleString()} 人</span>
     </div>`;
     })
     .join('');
   return `<h3>和纯随机比，谁更想要它</h3>
     <div class="funnel">${bars}</div>
-    <div class="hint">基线：如果谁都没读它、只是乱选，一波 ${first.size.toLocaleString()} 人给出的情绪约 ${base.mean >= 0 ? '+' : ''}${base.mean.toFixed(2)}，随机波动 ±${base.error.toFixed(2)}。z 是这一波离它几个标准误——2 以上才算不是碰运气。第 1 波 z ${z >= 0 ? '+' : ''}${z.toFixed(1)}：${esc(zSayZh(z))}</div>`;
+    <div class="hint">基线：如果谁都没读它、只是乱选，一波 ${first.size.toLocaleString()} 人给出的情绪约 ${signed(base.mean, 2)}，随机波动 ±${base.error.toFixed(2)}。z 是这一波离它几个标准误——2 以上才算不是碰运气。第 1 波 z ${signed(z, 1)}：${esc(zSayZh(z))}</div>`;
 }
 
 /** 组 id（「interest:tea」）→ 中文组名（「茶」）。散播算法用的就是这些组，所以名都对得上。 */
@@ -252,9 +252,9 @@ function awayView(result) {
     const left = Math.max(2, Math.min(50, Math.round((Math.abs(bottom) / scale) * 50)));
     const right = Math.max(2, Math.min(50, Math.round((top / scale) * 50)));
     const readable = sentence.readable
-      ? `${esc(awaySayZh(sentence))}：${esc(groupZh(sentence.top.id))} ${fmt4(top)} ｜ ${esc(groupZh(sentence.bottom.id))} ${fmt4(bottom)}`
+      ? `${esc(awaySayZh(sentence))}：${esc(groupZh(sentence.top.id))} ${signed(top, 3)} ｜ ${esc(groupZh(sentence.bottom.id))} ${signed(bottom, 3)}`
       : esc(awaySayZh(sentence));
-    const mean = `${sentence.mean >= 0 ? '+' : '−'}${Math.abs(sentence.mean).toFixed(4)}`;
+    const mean = signed(sentence.mean, 4);
     return `<div class="arow${sentence.readable ? '' : ' quiet'}">
       // i 在 shared/away.js 里就是 1 起（ablationStats 返回 i + 1），这里直接用。
 <span class="flabel">第 ${sentence.i} 句</span>
@@ -275,7 +275,6 @@ function awayView(result) {
     <div class="funnel">${rows.join('')}</div>
     <div class="hint">${hint}</div>`;
 }
-const fmt4 = (value) => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(3)}`;
 
 /**
  * 这一节的入口：算过就直接渲染，没算过就摆一个按钮。
@@ -558,7 +557,7 @@ export function renderDelta(el, after, before) {
         ${stat(d.both.toLocaleString(), '两版都看到的人')}
       </div>
       <div class="terrain-say">改动的分布<em>${verdict}</em>。${DELTA_SAY_ZH[d.terrain.verdict] ?? ''}</div>
-      <div class="hint">差分只统计两版都被判定到的 ${d.both.toLocaleString()} 人（只被一版排到的人不算"变中立"）。${esc(reach)}${where ? `${esc(where)}。` : ''}差场的 Moran's I = ${d.terrain.morans === null ? '不可比' : d.terrain.morans.toFixed(3)}</div>
+      <div class="hint">差分只统计两版都被判定到的 ${d.both.toLocaleString()} 人（只被一版排到的人不算"变中立"）。${esc(reach)}${where ? `${esc(where)}。` : ''}差场的 Moran's I = ${d.terrain.morans === null ? '不可比' : signed(d.terrain.morans, 3)}</div>
     </div>
     <div class="map-bar"><span class="hint">差分图：绿=变好，红=变差，颜色越满变化越大；底色=两版都没排到或没有变化。</span></div>
     <div class="map-wrap"><canvas class="grid diff" role="img" aria-label="差分地图：这一版相对上一版，哪些人变好、哪些人变差"></canvas><div class="legend delta-legend">${deltaLegend()}</div></div>`;
@@ -581,7 +580,7 @@ function deltaKpis(before, after) {
     const newV = after?.[key] ?? 0;
     const diff = newV - oldV;
     const tone = diff === 0 || goodWhenUp === 0 ? '' : (diff > 0) === (goodWhenUp === 1) ? 'ok' : 'bad';
-    const diffText = diff === 0 ? '持平' : `${diff > 0 ? '+' : '−'}${Math.abs(diff).toLocaleString()}`;
+    const diffText = diff === 0 ? '持平' : signedCount(diff);
     return `<div class="dkpi"><span class="dkpi-label">${label}</span>` +
       `<span class="dkpi-nums">${oldV.toLocaleString()} → ${newV.toLocaleString()}</span>` +
       `<span class="dkpi-diff ${tone}">${diffText}</span></div>`;

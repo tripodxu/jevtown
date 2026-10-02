@@ -209,6 +209,10 @@ body {
   color: var(--text);
   font: 15px/1.7 var(--font-body);
   font-family: var(--font-body);
+  /* R33：等宽字体在主流平台数字恰好等宽，但 --font-mono 的兜底项 monospace 在某些
+     Android/旧环境会落到比例数字字体，表格列就左右晃。这页有 17 处数据字体是等宽栈，
+     所以把「数字对齐」从「碰字体运气」改成「由 CSS 兜底」。齐次要对齐，标题才用比例数字。 */
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -780,6 +784,34 @@ canvas.grid {
 
 .atwin { display: flex; height: 14px; border-radius: 4px; background: var(--inset); overflow: hidden; }
 
+/* R33：761–1080px 之间这套五列会被挤坏——句子那一列 minmax(0,1fr) 先被压到 ~120px，
+   一句 20 字的中文折成八行，而句子正是这一节的主体，不能被条挤碎。
+   所以在够宽之前先把句子提成独占一行的左列：第 1 列标号、第 2 列句子（跨到行尾），
+   下面那行才是条 + 人话 + 组数。两行读起来仍然一行一句，但句子拿回了整个宽度。 */
+@media (max-width: 1080px) {
+  .arow {
+    grid-template-columns: 76px minmax(120px, 300px) minmax(0, 1fr);
+    row-gap: 7px;
+  }
+  .arow .flabel { grid-row: 1; grid-column: 1; }
+  .arow .apart { grid-row: 1; grid-column: 2 / -1; }
+  .arow .atwin { grid-row: 2; grid-column: 1 / 3; max-width: 300px; }
+  .arow .fsay { grid-row: 2; grid-column: 3; }
+  .arow .fnum { grid-row: 3; grid-column: 1 / -1; }
+}
+
+/* 更窄时逐格落下来：标号与句子同一行（句子缩进让开标号），条、人话、组数各占一行。
+   组数单独一行而不是并到条那行，是因为「N/83 组 · 均值 ±0.0234」有 18 个字符宽，
+   在 300px 里和条抢位置只会把两边都挤短。 */
+@media (max-width: 760px) {
+  .arow { grid-template-columns: 52px minmax(0, 1fr); gap: 4px 8px; }
+  .arow .flabel { grid-row: 1; grid-column: 1; }
+  .arow .apart { grid-row: 1; grid-column: 2; }
+  .arow .atwin { grid-row: 2; grid-column: 1 / -1; max-width: none; }
+  .arow .fsay { grid-row: 3; grid-column: 1 / -1; }
+  .arow .fnum { grid-row: 4; grid-column: 1 / -1; }
+}
+
 /* 两端各自成段：右段靠右、左段靠左，中间留出的空当就是「没人被这句改变主意」。 */
 .atwin i { display: block; height: 100%; }
 .atwin i.aup { background: var(--face-glad); margin-left: auto; }
@@ -789,11 +821,6 @@ canvas.grid {
 .arow.quiet .apart { color: var(--muted); }
 .arow.quiet .fsay { font-style: italic; }
 .arow .fnum { color: var(--muted); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
-
-@media (max-width: 760px) {
-  .arow { grid-template-columns: 1fr; gap: 4px; }
-  .arow .atwin { max-width: none; }
-}
 
 .report-meta { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; }
 
