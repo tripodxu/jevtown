@@ -354,7 +354,19 @@ test('受众：作者挑的组存进版本、报告里对账，陌生 id 丢掉�
   const mine = view.audience.rows.filter((row) => view.audience.picked.includes(row.id));
   assert.equal(mine.length, 2, `挑的 2 组应都在表里，得 ${mine.length}`);
   assert.ok(mine.every((row) => ['hit', 'miss'].includes(row.state)), '挑的组只可能是对上了/没等到');
-  assert.ok(view.audience.rows.some((row) => row.state === 'unsaid'), '显著组里应有没挑的');
+  // 下面几条只钉「口径自洽」，不钉「这一轮一定有几个显著组」。
+  // post id 是哈希串，而波次种子是 rng(hash32('waves', pool, `${id}.1`))（worker/index.js:243），
+  // 所以每跑一次这轮测试都是另一批人；而 mock 的读数又粗（score 取 0/1/2），
+  // 实测 topSegments(stopped) 每轮只有 0–2 个显著组（2026-10-03 连跑六次：2 1 1 0 1 1），
+  // 「显著组里一定有没挑的」因此是看运气的断言——2026-10-03 全量跑时它就这样红过一次，
+  // 单跑 worker.test.js 却是绿的。这几条改成不依赖抽签的口径断言，
+  // 「没说的」那一栏的正例由 test/audience.test.js 用真实存档（8 个显著组）钉着。
+  assert.equal(view.audience.hitCount, view.audience.rows.filter((row) => row.state === 'hit').length, 'hitCount 与 hit 行数对不上');
+  assert.equal(view.audience.unsaid, view.audience.rows.filter((row) => row.state === 'unsaid').length + view.audience.unsaidMore, 'unsaid 计数与「列出来的 + 没列的」对不上');
+  assert.equal(view.audience.pickedCount, 2, 'pickedCount 是有效组数，不是作者输入的个数');
+  assert.ok(view.audience.rows.every((row) => ['hit', 'miss', 'unsaid', 'cold'].includes(row.state)), '行状态只能是四种');
+  // 没挑的行若进「对上了」就说明作者挑的 id 没被当成前提——两类行不能串。
+  assert.ok(view.audience.rows.filter((row) => !view.audience.picked.includes(row.id)).every((row) => ['unsaid', 'cold'].includes(row.state)), '没挑的组只能是没说的/两边都冷');
   assert.ok(view.audience.readable, '跑完全程读得出人群分布');
 
   // 清洗：陌生 id 丢、重复去重、said 截到 200 字——存档是外部输入，不给它写胖的余地

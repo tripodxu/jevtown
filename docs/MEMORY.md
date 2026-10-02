@@ -10,6 +10,105 @@
 
 ---
 
+## 2026-10-03 · R36 前端轮：把 R35 新加的挑组表单按 10 类优先级过一遍——焦点环、命中区、键盘可达、读屏播报
+
+**本轮的任务**：轮换到前端。审计对象是 R35 刚落地、还没做过 UX 审计的表面：
+`index.html` 的 `.aud-pick` 表单、`styles.css` 的 `.aud-pick/.aud-list/.aud-tag`、
+`app.js` 的挑组逻辑。skill 用 `ui-ux-pro-max`（它的 10 类优先级：无障碍 → 触控 → 性能 →
+风格一致 → 响应式 → 字体颜色 → 动效 → 表单 → 导航 → 图表）。
+**环境事实：Python 3.10.11 可用，检索脚本必须用全路径
+`C:\Users\lenovo\.agents\skills\ui-ux-pro-max\scripts\search.py` 调。**
+两条检索（`chip multi select removable tag keyboard` / `icon button accessible label`）
+拿回来的 High 项正是这一节要用的：chip 集合要 flex-wrap 不许裁掉、紧凑标签不许折成两行、
+每个可操作控件都要有可见焦点且 tab 顺序与视觉顺序一致、图标按钮要有可访问名。
+
+**量出来的五条缺陷（都先量后判）**：
+
+1. **`var(--focus)` 是悬空令牌——唯一一条真缺陷，但坏得很静。**
+   `styles.css` 里三处引用 `--focus`（input/候选/标签的 `:focus-visible`），
+   而全仓 `--focus` **定义数 0、引用数 3**。CSS 规定 `var()` 解析失败会让**整条声明作废**，
+   所以这三条 focus 规则一条也没生效，页面一直靠 `styles.css:243` 那条全局
+   `:focus-visible { outline: 2px solid var(--accent) }` 兜底——**看起来是好的，只是胶囊控件
+   的焦点框是个 4px 直角，与 `--r-chip` 的弧顶错开**。去注释后重数：`--line` 与 4 个
+   `--face-*` 疑似都只出现在注释里/被 JS 间接引用，不是缺陷。**结论：凡是引用令牌，
+   先确认它存在。**
+2. **命中区太小**：`.aud-list button`（`padding: 4px 10px` + 13px 字 + 2px 边框）实测
+   **≈25.6px**，`.aud-tag` 同。低于 44px 要点，但这一节是**唯一的主交互**。
+   定 28px 并用 `min-height` 实现——用 padding 凑 44 会把胶囊标签撑成一排大药丸。
+3. **光标在撒谎**：全局 `styles.css:508` `button:disabled { cursor: wait }` 让
+   「你不是作者、逐句承重按钮不给点」也摆出等待光标。全站只有两处 disabled，
+   分开写：`button:disabled { cursor: default }` + `#go:disabled { cursor: wait }`。
+4. **标签与控件被容器隔开**：`#audienceSaid` 的 `<label for>` 被一个 `<div class="row between">`
+   包着，读屏软件按「标签→控件」相邻配对会断；`#audienceFilter` 干脆是 `sr-only` 标签 +
+   `placeholder` 当说明（**placeholder 一打字就消失，也不进可访问名**）。
+5. **清单过滤是全子串**：`filterGroups(list, 'a')` 撞出 **40/47** 项。
+
+**改了什么**：
+- `styles.css`：三处 `var(--focus)` 换成「只补圆角」的三选一规则（沿用全局的 `--accent`）；
+  `.aud-pick input` 加 `min-height: 36px`；候选与标签加 `display: inline-flex` +
+  `white-space: nowrap`（**标签是「年龄：25–34 岁 + 812」这种固定串，折成两行会被当成两个组**）
+  + `min-height: 28px`；新增 `.aud-pick .field`（可见标签 + 控件相邻）与 `.aud-pick .row { flex-wrap }`
+  （两条 hint 并排时中文一折就是「半句话 + 半句话」）；删掉零引用的死代码 `.aud-dim`。
+- `index.html`：两个输入框都改成**可见标签** + `aria-describedby`；说明拆成
+  `#audienceSaidHint` / `#audienceHint` 两句（各跟着自己的输入框）；
+  `#audienceList` **去掉 `role="listbox"`**（子项是 button，listbox 的子项必须是 option，
+  两套语义打架）；新增 `<span class="sr-only" id="audienceLive" role="status">`。
+- `summary.js` 的 `filterGroups`：1–2 个纯字母片段按**词首**匹配（`(?<![a-z0-9])a`），
+  多字符片段与中文仍走 `includes`。实测 `a` 40→10、`ai` 1（AI 工具）。
+  放行 1–2 字母是因为中文作者打英文本来就费劲，拦掉 `c++` 只会让人以为没有这门语言。
+- `app.js`：**↑/↓ 走位**（`moveAudienceFocus`，用 `document.activeElement` 定位、越界回绕、
+  真的调 `rows[next].focus()`；候选是普通 button，焦点移过去后 Space/Enter 天然触发 click，
+  不用另写一套激活逻辑）；**live region 播报**（`sayAudienceLive`，先清空再写——live region
+  只在内容变化时通知，同串连写两次不播第二遍；挑/摘时报的是**组名**不是总数，因为
+  「已选 2 组」变「已选 1 组」光听数字不知道少了谁）；**已挑候选从 `disabled` 改成
+  `aria-pressed`**——**disabled 的按钮读屏软件直接跳过，于是读屏用户根本听不到
+  「这项已经算上了」**。代价是 `button:disabled` 的变灰不再生效，于是自己画按下态：
+  `.aud-list button[aria-pressed='true'] { opacity: .5; border-color: var(--face-glad) }`。
+- **本轮顺手修掉一条 R35 留下的看运气的断言**（详见下面「坑」第一条）：
+  `test/worker.test.js` 那句「显著组里应有没挑的」单跑永远绿、全量偶发红。
+
+**断言**（`test/theme.test.js` +6，`test/audience.test.js` +1）：没有悬空令牌（CSS **和 JS**
+各一条——JS 里拼错的 `var(--x)` 同样静默作废）、命中区 ≥28px、光标诚实、每个输入框有
+可见标签且 `</label>\s*<input` 相邻、候选纯键盘可达且不套 listbox、aria-pressed 有对应
+按下态样式。**断言本身也验过不是空转**：故意往 `styles.css` 塞一个 `var(--totally-not-real)`，
+断言报 `引用了但没定义的令牌：--totally-not-real`，移除后 16/16 复绿。
+
+**坑**：
+- **R35 留下的一条看运气的断言，本轮全量跑时红了一次（2026-10-03）。**
+  `test/worker.test.js` 里那句 `assert.ok(rows.some((row) => row.state === 'unsaid'), '显著组里应有没挑的')`
+  **单跑 `node --test test/worker.test.js` 永远是绿的，全量 `npm test` 才偶发红**——这种「单跑绿、全量红」
+  几乎总是抽签，不是并行污染。查下来：post id 是哈希串，而波次种子是
+  `rng(hash32('waves', pool, `${id}.1`))`（`worker/index.js:243`），所以**每跑一次测试都是另一批人**；
+  mock 的读数又粗（`mock.js:60` 的 score 取 0/1/2），实测 `topSegments(stopped)` 每轮只有 **0–2** 个
+  显著组（连跑六次：2 1 1 0 1 1），「显著组里一定有没挑的」因此看运气。
+  **已改成四条不依赖抽签的口径断言**（`hitCount` == hit 行数、`unsaid` == 列出的 + 没列出的、
+  `pickedCount` 是有效组数、行状态只有四种、没挑的组只能是 `unsaid`/`cold`），
+  「没说的」那一栏的正例交给 `test/audience.test.js` 用**真实存档**（8 个显著组）钉着。
+  **教训：断言「本轮一定出现某个稀有事件」就是埋了一颗抽签雷；要钉就钉口径自洽，
+  稀有事件的正例放到数据确定的地方（真实存档）去测。**
+- **stub 里的 `hidden` 方向会骗人。** 给 DOM 元素 stub 的 `hidden` 初值是 `false`，所以探针
+  打印「输入摄影后 hidden=true」是反的，不是产品 bug。
+- **stub `document` 要给的比想象中多**，按顺序踩了 5 次才跑通：`document` 需
+  `getElementById / createElement / querySelectorAll / body / documentElement /
+  addEventListener / activeElement`；元素需 `innerHTML / textContent / value / hidden /
+  disabled / dataset / attrs / handlers` + `addEventListener / querySelector /
+  querySelectorAll / closest / setAttribute / getAttribute / appendChild / remove / click / focus`；
+  还要给 `globalThis.location`、`history.pushState`、`window`（含 `location`/`innerWidth`/
+  `history`/`addEventListener`）、`getComputedStyle`、`localStorage`、`fetch`、`HTMLCanvasElement`。
+  走位探针要断言焦点，得靠 stub 的 `focus()` 写回 `document.activeElement`——只存
+  `this.focused` 会让两次 ↓ 都停在第 0 行。
+- `.aud-list button[aria-pressed='true']:hover` 要显式把 `background` 放回 transparent，
+  否则已挑的项 hover 时底下会浮起一层 `--inset`，看着像还没选中。
+
+**验证**：`npm test` **188/188 pass / 0 fail**（R35 是 180，+8）；`npm run lint` ✓ **47 个文件**。
+断言本身也验过不是空转：故意往 `styles.css` 塞一个 `var(--totally-not-real)`，
+断言报 `引用了但没定义的令牌：--totally-not-real`，移除后复绿。
+
+**轮换位置**：优化 R31(2c017d8) → 创意 R32(a34de8e) → 前端 R33(655a220) → 优化 R34(f54cb52) →
+创意 R35(7154081) → 前端 R36（当前）。
+
+---
+
 ## 2026-10-03 · R35 创意轮：「这段话是给谁的」对账表——作者挑的组 vs 实际停下的组，新增花费 $0
 
 **本轮的任务**：轮换到创意。`docs/ARCHITECTURE.md` 记着两处「上游有、这里没接」的能力

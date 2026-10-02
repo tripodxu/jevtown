@@ -286,7 +286,7 @@ export function reconcileAudience(all, picked, { presetId } = {}) {
 const GROUP_SEARCH_MAX = 40;
 
 /**
- * 清单的本地过滤：输入框打几个字，只给对得上的组。匹配中文名（'年轻' → 5 个年龄段）、
+ * 清单的本地过滤：输入框打几个字，只给对得上的组。匹配中文名（'岁' → 5 个年龄段）、
  * 段 id（'shopping:phone'）与英文 id（'games'）。零花费、零延迟——作者挑的是段 id，
  * 所以这里怎么猜都不会错，只有「找不找得到」的问题。
  * → { list: 截断后的项, total: 命中总数 }
@@ -294,7 +294,16 @@ const GROUP_SEARCH_MAX = 40;
 export function filterGroups(list, query) {
   const q = String(query ?? '').trim().toLowerCase();
   if (!q) return { list: [], total: 0 };
-  const hits = list.filter((one) => `${one.zh} ${one.id} ${one.value}`.toLowerCase().includes(q));
+  // 单词边界：英文 id 里 `a` 命中的是 40 个 ai/anime/tea 之类，而不是作者要找的那个 a。
+  // 一到两个纯字母的片段（'a'、'c++'）放行全子串——中文作者打英文本来就费劲，
+  // 拦掉 'c++' 只会让人以为清单里没有这门语言。
+  const wordy = q.length > 2 || !/^[a-z0-9]{1,2}$/.test(q);
+  const hits = list.filter((one) => {
+    const hay = `${one.zh} ${one.id} ${one.value}`.toLowerCase();
+    if (!hay.includes(q)) return false;
+    if (!wordy) return new RegExp(`(?<![a-z0-9])${q}`, 'i').test(hay);
+    return true;
+  });
   return { list: hits.slice(0, GROUP_SEARCH_MAX), total: hits.length };
 }
 

@@ -230,13 +230,34 @@ const pickedGroups = new Set();
 /** 清单按镇子人群算出，进程内只算一次（pickableGroups 内部按 people 身份还有一层 WeakMap）。 */
 const pickable = () => pickableGroups(crowd('zh'));
 
-function renderAudienceTags() {
-  const byId = new Map(pickable().map((one) => [one.id, one]));
+/** 挑中的组有没有变，视觉上只表现为标签多了一个；读屏用户听不到，所以另开一句播报。
+ *  先清空再写：live region 只在内容变化时通知，同一个字符串连写两次不会播第二遍。 */
+const sayAudienceLive = (word) => {
+  const box = $('audienceLive');
+  box.textContent = '';
+  if (word) box.textContent = word;
+};
+
+/**
+ * 渲染已选标签并报一次总数。`word` 是这一句额外要说的话（挑进来/摘掉的是哪一组）；
+ * 每次渲染都必须带一句——这是唯一一次「用户做了个动作」的机会，下一次渲染可能由别处触发。
+ * 没带就算报了总数，听的人还是不知道动了哪一组。
+ */
+function renderAudienceTags(word = '') {
   $('audienceTags').innerHTML = [...pickedGroups]
-    .map((id) => `<button type="button" class="aud-tag" data-pick="${esc(id)}">${esc(pickLabelZh(byId.get(id) ?? { attribute: '', zh: id }))}</button>`)
+    .map((id) => `<button type="button" class="aud-tag" data-pick="${esc(id)}">${esc(labelOfGroup(id))}</button>`)
     .join('');
-  $('audienceCount').textContent = pickedGroups.size ? AUDIENCE_ZH.pickedCount.replace('%1', String(pickedGroups.size)) : '';
+  const n = pickedGroups.size;
+  const total = n ? AUDIENCE_ZH.pickedCount.replace('%1', String(n)) : '';
+  $('audienceCount').textContent = total;
+  sayAudienceLive(word || total);
 }
+
+/** 清单里某一组的中文标签，找不到就退回段 id（陌生 id 不会走到这里，但别为了它崩掉表单）。 */
+const labelOfGroup = (id) => {
+  const one = pickable().find((g) => g.id === id);
+  return pickLabelZh(one ?? { attribute: '', zh: id });
+};
 
 /** 作者填的受众：一句自述 + 挑中的段 id。两样都空时返回 null——不填就不占存档一列。 */
 const audienceInput = () => {
@@ -247,10 +268,26 @@ const audienceInput = () => {
 /** 过滤框回车/点候选：把那一项收进已选。词表里没有就是没有，UI 直说，不去猜作者想说什么。 */
 function pickGroup(id) {
   if (pickedGroups.has(id)) return;
+  const label = labelOfGroup(id);
   pickedGroups.add(id);
   $('audienceFilter').value = '';
-  renderAudienceTags();
+  // 播报带组名，不只是「已选 N 组」——听的人要知道多了谁。
+  renderAudienceTags(`${label}${AUDIENCE_ZH.picked}`);
   renderAudienceList();
+}
+
+/**
+ * 候选按钮在 input 的下面，但作者的眼睛在 input 上。按 ↑/↓ 只换候选而不碰焦点，
+ * 键盘用户于是不知道列表变了——所以把焦点真的移到候选上：Space/Enter 在 button 上
+ * 天然会触发 click，Tab 顺序也顺（input → 候选 → 已选标签）。
+ */
+function moveAudienceFocus(step) {
+  const box = $('audienceList');
+  const rows = [...box.querySelectorAll('button[data-pick]')];
+  if (!rows.length) return;
+  const now = rows.indexOf(document.activeElement);
+  const next = now < 0 ? (step > 0 ? 0 : rows.length - 1) : (now + step + rows.length) % rows.length;
+  rows[next].focus();
 }
 
 function renderAudienceList() {
@@ -262,7 +299,10 @@ function renderAudienceList() {
     return;
   }
   const { list, total } = filterGroups(pickable(), query);
-  const rows = list.map((one) => `<button type="button" data-pick="${esc(one.id)}"${pickedGroups.has(one.id) ? ' disabled' : ''}>${esc(pickLabelZh(one))} <span class="aud-n">${one.size}</span></button>`);
+  // 已挑过的候选用 aria-pressed 而不是 disabled：disabled 的按钮读屏软件直接跳过，
+  // 于是读屏用户根本听不到「这项已经算上了」。aria-pressed 让它仍在列表里被读到，
+  // 只是被标成按下状态；点它也不该有反应（pickGroup 见到已有的 id 就返回）。
+  const rows = list.map((one) => `<button type="button" data-pick="${esc(one.id)}" aria-pressed="${pickedGroups.has(one.id)}">${esc(pickLabelZh(one))} <span class="aud-n">${one.size}</span></button>`);
   if (!rows.length) rows.push(`<span class="hint">${esc(AUDIENCE_ZH.notFound)}</span>`);
   if (total > list.length) rows.push(`<span class="hint">${esc(AUDIENCE_ZH.more.replace('%1', String(total - list.length)))}</span>`);
   box.innerHTML = rows.join('');
@@ -271,6 +311,13 @@ function renderAudienceList() {
 
 $('audienceFilter').addEventListener('input', renderAudienceList);
 $('audienceFilter').addEventListener('keydown', (event) => {
+  // ↑/↓ 在候选之间走位，Enter 取第一个：候选按钮是普通 button，焦点移过去之后
+  // Space/Enter 天然触发 click，不用在这里另写一套激活逻辑。
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    moveAudienceFocus(event.key === 'ArrowDown' ? 1 : -1);
+    return;
+  }
   if (event.key !== 'Enter') return;
   event.preventDefault();
   const first = $('audienceList').querySelector('button[data-pick]');
@@ -283,8 +330,10 @@ $('audienceList').addEventListener('click', (event) => {
 $('audienceTags').addEventListener('click', (event) => {
   const id = event.target.closest('button[data-pick]')?.dataset.pick;
   if (!id) return;
+  // 摘掉的那一组要报出来：「已选 2 组」变「已选 1 组」，光听数字不知道少了谁。
+  const said = `${labelOfGroup(id)}${AUDIENCE_ZH.dropped}`;
   pickedGroups.delete(id);
-  renderAudienceTags();
+  renderAudienceTags(said);
   renderAudienceList();
 });
 

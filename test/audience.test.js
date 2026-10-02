@@ -133,9 +133,28 @@ test('文案：四个状态各有中文，结论句由标签表给出而不是�
 });
 
 test('文案：表头与表单提示全在标签表里（AGENTS.md：界面文案单点）', () => {
-  for (const key of ['title', 'saidLabel', 'pickLabel', 'filterLabel', 'hint', 'coldNote', 'notFound', 'more', 'pickedCount']) {
+  for (const key of ['title', 'saidLabel', 'pickLabel', 'filterLabel', 'hint', 'coldNote', 'notFound', 'more', 'pickedCount', 'picked', 'dropped']) {
     assert.ok(typeof AUDIENCE_ZH[key] === 'string' && AUDIENCE_ZH[key].length > 0, `AUDIENCE_ZH.${key} 缺`);
   }
+});
+
+test('清单过滤：一两个字母按词首找，别让「a」把全库都撞出来（R36）', () => {
+  const list = pickableGroups(people);
+  const hay = (one) => `${one.zh} ${one.id} ${one.value}`.toLowerCase();
+  // 全子串时 'ai' 会同时命中 anime 与 ai_tools，作者想找 AI 工具却先看到「动漫」。
+  const ai = filterGroups(list, 'ai').list;
+  assert.equal(ai.length, 1, `「ai」只该命中 AI 工具，却来了 ${ai.length} 个：${ai.map((h) => h.zh).join(' ')}`);
+  assert.equal(ai[0].id, 'interest:ai_tools');
+  // 边界匹配不能把真正对得上的挡掉：多词 id 里 'games' / 'anime' / 'phone' 都得能搜到。
+  for (const [q, id] of [['games', 'interest:games'], ['anime', 'interest:anime'], ['phone', 'shopping:phone']]) {
+    assert.ok(filterGroups(list, q).list.some((h) => h.id === id), `「${q}」没命中 ${id}`);
+  }
+  // 单字母 'a'：全子串会撞出 47 项里 38 个；按词首只剩以 a 开头的词。
+  const flood = list.filter((one) => hay(one).includes('a')).length;
+  const a = filterGroups(list, 'a').list;
+  assert.ok(a.length < flood, `「a」还是全子串：命中 ${a.length}，而含字母 a 的有 ${flood} 个`);
+  assert.ok(a.every((h) => new RegExp('(?<![a-z0-9])a', 'i').test(hay(h))), `「a」给出了没有 a 词首的项：${a.map((h) => h.id).join(' ')}`);
+  assert.ok(a.some((h) => h.id === 'interest:ai_tools'), '「a」该命中 AI 工具');
 });
 
 // -- 清单过滤 ------------------------------------------------------------------

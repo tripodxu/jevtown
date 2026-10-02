@@ -64,20 +64,33 @@
         </div>
 
         <!-- 「这段话是给谁的」（R35）：不填也能发，填了报告里多一张对账表。
-             这一行是可选的，所以不做成必填控件，也不拦提交。 -->
+             这一行是可选的，所以不做成必填控件，也不拦提交。
+             两个输入框都是可见标签 + aria-describedby 指向说明：placeholder 一打字就没了，
+             不能当标签用；标签与控件之间也不隔容器，读屏软件才认得出谁是谁。 -->
         <div class="aud-pick" id="audienceRow">
-          <div class="row between">
+          <div class="field">
             <label for="audienceSaid">这段话是给谁的<small>（可不填）</small></label>
+            <input id="audienceSaid" type="text" maxlength="200" autocomplete="off"
+              placeholder="写一句你想找的人，不用准，报告会拿它跟你挑的组对账。"
+              aria-describedby="audienceSaidHint">
           </div>
-          <input id="audienceSaid" type="text" maxlength="200" autocomplete="off"
-            placeholder="写一句你想找的人，不用准，报告会拿它跟你挑的组对账。">
-          <label class="sr-only" for="audienceFilter">加一组人群</label>
-          <input id="audienceFilter" type="text" maxlength="40" autocomplete="off"
-            placeholder="加一组人群：输入「摄影」「昆明」「岁」……" aria-describedby="audienceHint">
+          <div class="field">
+            <label for="audienceFilter">加一组人群<small>（词表里有 115 组）</small></label>
+            <input id="audienceFilter" type="text" maxlength="40" autocomplete="off"
+              placeholder="输入「摄影」「昆明」「岁」……" aria-describedby="audienceHint">
+          </div>
+          <!-- 候选就是一组普通按钮：不套 role="listbox"——listbox 里的子项必须是
+               role="option"，而 option 不该再是 button，两套语义会打架。 -->
           <div class="aud-list" id="audienceList" hidden></div>
           <div class="aud-tags" id="audienceTags"></div>
           <div class="row between">
-            <span class="hint" id="audienceHint">从小镇的人群里挑几组。</span>
+            <span class="hint" id="audienceSaidHint">一句话就能写，不用准——报告会拿它跟你挑的组对账。</span>
+            <span class="hint" id="audienceHint">挑不挑都行；挑了才有一张对账表。</span>
+          </div>
+          <div class="row between">
+            <!-- 挑/摘那一下只有「已选 N 组」这个数字变了，而 #audienceCount 只看得见。
+                 读屏用户听不到变化，所以另开一句只给读屏的播报（视觉上不占地方）。 -->
+            <span class="sr-only" id="audienceLive" role="status" aria-live="polite"></span>
             <span class="hint" id="audienceCount"></span>
           </div>
         </div>

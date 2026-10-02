@@ -287,6 +287,9 @@ export const AUDIENCE_ZH = {
   more: '还有 %1 项没显示，输入得更具体一点。',
   unsaidMore: '还有 %1 组也显著停下来，这次没列。',
   pickedCount: '已选 %1 组',
+  // 下面两条只给读屏用：挑/摘那一下「总数」变了，但变的是哪一组得说出来。
+  picked: '，已加进来',
+  dropped: '，已摘掉',
 };
 
 export const AUDIENCE_STATE_ZH = {

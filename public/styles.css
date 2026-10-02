@@ -505,7 +505,11 @@ button.primary,
 
 button.primary:hover, #go:hover { filter: brightness(1.06); transform: translateY(-1px); }
 button.primary:active, #go:active { transform: translateY(0) scale(0.98); }
-button:disabled { opacity: 0.55; cursor: wait; transform: none; }
+/* 变暗只表示「此刻按不了」；光标形状要分清两种按不了：正在跑（wait，快回来）
+   和你这下按不了（default，不会来）。原来这条无差别给 cursor: wait，
+   于是「不是作者、逐句承重按钮不给点」也摆出一个等待光标——骗人。 */
+button:disabled { opacity: 0.55; cursor: default; transform: none; }
+#go:disabled { cursor: wait; }
 
 .ghost {
   background: transparent;
@@ -701,6 +705,14 @@ canvas.grid {
 
 /* 「这段话是给谁的」（R35）：表单里挑组 + 报告里对账 --------------------------------- */
 
+/* 焦点环：沿用全局那条（styles.css:243 用 --accent），这里只补圆角——胶囊控件套一个 4px 的
+   直角框会跟 --r-chip 的弧顶错开，键盘用户看到的是一条贴着文字的直角。原来的三处写成
+   var(--focus)，而这个令牌全仓从未定义：var() 解析失败会让整条声明作废，于是这三处什么也没
+   覆盖到，只靠上面那条兜底。凡是引用令牌，先确认它存在。 */
+.aud-pick input:focus-visible,
+.aud-list button:focus-visible,
+.aud-tag:focus-visible { border-radius: var(--r-chip); }
+
 /* 表单那一块：贴着提交按钮下面，视觉上属于「可选的补充」而不是必填项——所以不额外加框，
    只用一条 hairline 把它和主表单分开；填了内容它才占地方。 */
 .aud-pick { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hairline); }
@@ -709,6 +721,7 @@ canvas.grid {
 .aud-pick input {
   width: 100%;
   margin-top: 8px;
+  min-height: 36px;
   font: inherit;
   color: var(--text);
   background: var(--card-2);
@@ -716,10 +729,22 @@ canvas.grid {
   border-radius: var(--r-ctrl);
   padding: 8px 10px;
 }
-.aud-pick input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.aud-pick input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .aud-pick .hint { margin-top: 8px; }
 
-/* 过滤出来的候选：按钮而不是链接，点下去就是加一组。hover 才给底色。 */
+/* 两个输入框的可见标签。原来第一行标签被一个 div.row.between 包着，标签和输入框之间隔了
+   一层容器，读屏软件按「标签→控件」相邻来找就断了；sr-only 的那条又把说明藏在
+   placeholder 里（placeholder 一打字就消失）。改成两个都是真正的可见标签：
+   词表那一行的标签是这一节唯一的操作说明，不该靠 placeholder 撑。 */
+.aud-pick .field { display: block; margin-top: 12px; }
+.aud-pick .field > label { display: block; margin-bottom: 4px; }
+/* 说明那两行允许折行：两条 hint 并排时各占一半宽，中文一折就成「半句话 + 半句话」，
+   比换行更难读——换行后每句还是整句。 */
+.aud-pick .row { flex-wrap: wrap; row-gap: 2px; }
+
+/* 过滤出来的候选：按钮而不是链接，点下去就是加一组。min-height 28px 是这个尺寸标签的
+   命中区下限（padding 4+4 + 13px 行高 + 2px 边框 ≈ 26px）——一个 26px 的命中区在手机上
+   很难点准，而这是这一节唯一的主交互。 */
 .aud-list {
   display: flex;
   flex-wrap: wrap;
@@ -729,8 +754,15 @@ canvas.grid {
   overflow-y: auto;
 }
 .aud-list button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font: inherit;
   font-size: 13px;
+  /* nowrap：标签是「年龄：25–34 岁 + 812」这种不长的固定串，折成两行会让人以为是两个组。
+     真长到放不下时靠 flex-wrap 换行，不靠字内折行。 */
+  white-space: nowrap;
+  min-height: 28px;
   padding: 4px 10px;
   border-radius: var(--r-chip);
   border: 1px solid var(--hairline-strong);
@@ -739,13 +771,19 @@ canvas.grid {
   cursor: pointer;
 }
 .aud-list button:hover { background: var(--inset); }
-.aud-list button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.aud-list .aud-dim { color: var(--muted); }
+/* 已挑过的候选用 aria-pressed（不是 disabled，读屏才听得到），所以按下的样子得自己画：
+   变淡 + 描边加重，和上面那条 :hover 的底色一起构成「已选 / 可选」两个状态。 */
+.aud-list button[aria-pressed='true'] { opacity: 0.5; border-color: var(--face-glad); }
+.aud-list button[aria-pressed='true']:hover { background: transparent; }
 .aud-list .aud-n { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 
 /* 已选：可点掉的一个个标签。作者挑的组是这一节的前提，挑错了要能一眼看见、一下改掉。 */
 .aud-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .aud-tag {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  min-height: 28px;
   font: inherit;
   font-size: 13px;
   padding: 4px 8px 4px 10px;
@@ -755,9 +793,10 @@ canvas.grid {
   color: var(--text);
   cursor: pointer;
 }
+/* × 是 CSS 生成的装饰，不进可访问名（sr 读的是按钮自己的文字）；给键盘用户一个真图标位
+   只是排版对齐，不额外读一遍。 */
 .aud-tag::after { content: '×'; margin-left: 6px; color: var(--muted); }
 .aud-tag:hover { background: var(--inset); }
-.aud-tag:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 /* 报告里那一节：状态小标题。四个状态靠左边的色条区分，色就是「谁吃、谁掉头」的信号色。 */
 .aud-state {
