@@ -307,3 +307,48 @@ export function audienceSayZh(summary) {
   if (!summary.hitCount) return AUDIENCE_ZH.miss.replace('%1', String(summary.pickedCount));
   return AUDIENCE_ZH.hit.replace('%1', String(summary.pickedCount)).replace('%2', String(summary.hitCount));
 }
+
+/**
+ * 「Jev 押得准吗」（feed.js 的 exposureBands）的中文，渲染层只从这里取。
+ *
+ * 说的是开局那份预测——83 组人群打分算出的 exposure，第 1 波就是照它挑人发的——后来有没有兑现。
+ * 三种结论，坏消息也要能报出来：斜率够陡说押中了，押平了说押平了，人数不够就直说读不出来。
+ */
+export const CALIBRATE_ZH = {
+  title: 'Jev 开局押的，兑现了吗',
+  lead: '第 1 波那 600 个人，是 Jev 按「谁最该看到这条」挑的。这份打分发生在任何人有反应之前。',
+  band: '档',
+  bandHint: '全城一万格按 exposure 从高到低分十档。第 1 档就是 Jev 认为最该先看到这条的那批人。',
+  people: '人',
+  reached: '读到',
+  stopped: '停下',
+  glad: '乐见',
+  stoppedRate: '停下率',
+  lift: '相对全城',
+  // 结论句。%1 = 倍数（首档与末档的停下率之比）。
+  good: '押中了：Jev 认为最该看到这条的人，停下的概率是它认为最不该看到的人的 %1 倍。',
+  mild: '押得偏弱：最该看到这条的人只多停了 %1 倍——方向对了，量级不够。',
+  flat: '押平了：最该先看到这条的人，并没有比最不该先看到的人更想停下来。这类文本谁都在意，谁的差别不大。',
+  thin: '读不出来：两端到达的人数都不够（要各 %1 人以上），这一节的倍数不能当结论。',
+  townNote: '全城读到 %1 人 · 停下 %2 人 · 乐见 %3 人。',
+  costNote: '这一节不额外调用 Jev：打分是开局那一次算的，这里只是拿结果和后来发生的事对账。',
+};
+
+/**
+ * 表头那一句结论。`readable` 与 `flat` 的口径写死在 exposureBands 里，这里只负责说成人话。
+ *
+ * 三档的界是量出来的，不是拍的：`good` 的门槛 2 倍落在真实 iPhone 存档实测的 28.9 倍与
+ * 「谁都在意」文本实测的 0.97 倍之间，是个不偏向任何一头的整数；`mild` 的 0.8 把「刚过 1 倍」
+ * 与「真的有斜率」分开。null（末档一个停下的人都没有）走 thin：那种时候说「押得偏弱」是在说
+ * 「差一点点」，而事实是一格读数都没有。
+ */
+export const CALIBRATE_SAY_ZH = { good: 2, mild: 0.8 };
+
+export function calibrateSayZh(bands) {
+  if (!bands.readable) return CALIBRATE_ZH.thin.replace('%1', String(bands.minSample));
+  if (bands.flat) return CALIBRATE_ZH.flat;
+  const ratio = bands.first.stoppedRatio;
+  if (ratio === null || ratio === undefined) return CALIBRATE_ZH.thin.replace('%1', String(bands.minSample));
+  const say = ratio >= CALIBRATE_SAY_ZH.good ? CALIBRATE_ZH.good : CALIBRATE_ZH.mild;
+  return say.replace('%1', String(Math.round(ratio * 10) / 10));
+}

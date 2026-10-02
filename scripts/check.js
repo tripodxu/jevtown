@@ -10,10 +10,11 @@ import { fileURLToPath } from 'node:url';
 import { runCheck } from '../public/shared/check.js';
 import { PRESETS } from '../public/shared/presets.js';
 import { crowd } from '../public/shared/personas.js';
+import { exposureBands } from '../public/shared/feed.js';
 import { pickableGroups, reconcileAudience, pickLabelZh, segments } from '../public/shared/summary.js';
 import { pickProvider, ask as askJev } from '../public/shared/jev.js';
 import { createMockAsk } from '../public/shared/mock.js';
-import { AUDIENCE_STATE_ZH, segmentValueZh } from '../public/shared/labels.js';
+import { AUDIENCE_STATE_ZH, CALIBRATE_ZH, calibrateSayZh, segmentValueZh } from '../public/shared/labels.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -133,6 +134,22 @@ if (audience) {
   if (said.unsaidMore) console.log(`    还有 ${said.unsaidMore} 组也显著停下来，这次没列。`);
 }
 
+// -- 对账：Jev 开局押的，兑现了吗 --------------------------------------------------
+// 第 1 波那 600 个人是 Jev 按 exposure 挑的，这里把那份打分与后来实际发生的并排放在一起。
+// 终端与页面同源（都是 exposureBands），所以两边不会出现两个口径。零新增调用。
+
+const bands = exposureBands(presetId, keys, result.scores, Uint8Array.from(result.reactions), crowd('zh'));
+console.log(`\n【${CALIBRATE_ZH.title}】${calibrateSayZh(bands)}`);
+console.log(`  ${CALIBRATE_ZH.townNote.replace('%1', String(bands.town.reached)).replace('%2', String(bands.town.stopped)).replace('%3', String(bands.town.glad))}`);
+for (const row of bands.bands) {
+  const rate = (row.reached ? row.stopped / row.reached : 0);
+  console.log(
+    `    第 ${String(row.band).padStart(2)} 档  exposure ${row.low.toFixed(3)}–${row.high.toFixed(3)} · ${String(row.people).padStart(5)} 人 · ` +
+      `读到 ${String(row.reached).padStart(5)} · 停下 ${(rate * 100).toFixed(1).padStart(5)}% · 乐见 ${((row.reached ? row.glad / row.reached : 0) * 100).toFixed(1).padStart(5)}% · ` +
+      `相对全城 ${row.stoppedLift.toFixed(2)}×`,
+  );
+}
+
 // -- 存档 -------------------------------------------------------------------------
 
 const outDir = path.join(here, '..', 'output', 'checks');
@@ -151,6 +168,9 @@ fs.writeFileSync(
       waves: result.waves,
       checks: result.checks,
       unlisted: result.unlisted,
+      // 开局那份打分：报告里「Jev 押得准吗」这一节要靠它重算 exposure。
+      // 以前不存档，于是旧存档回放时那一节只能空着——这是补上，不是改格式。
+      scores: result.scores,
       said: result.said,
       decisions: result.decisions,
       followUp: result.followUp,

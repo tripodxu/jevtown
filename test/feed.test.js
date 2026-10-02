@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { exposure, firstWave, nextWave, mood, travels, WAVES, GLAD_ENOUGH, randomBaseline, moodZ } from '../public/shared/feed.js';
+import fs from 'node:fs';
+import { exposure, exposureAll, exposureBands, firstWave, nextWave, mood, travels, WAVES, GLAD_ENOUGH, randomBaseline, moodZ } from '../public/shared/feed.js';
 import { persona, crowd } from '../public/shared/personas.js';
+import { PRESETS } from '../public/shared/presets.js';
 import { rng, hash32 } from '../public/shared/rng.js';
 
 const scoresOf = (pairs) => Object.fromEntries(pairs);
@@ -172,4 +174,83 @@ test('nextWave：每波名单与按名字算的老算法逐 id 相同（钉住 5
   assert.ok(waves[1].length <= WAVES[1].size && waves[2].length <= WAVES[2].size);
   assert.equal(waves[3].length, people.length - WAVES[0].size - WAVES[1].size - WAVES[2].size);
   assert.equal(new Set(waves.flat()).size, people.length, '没有任何人被两波各算一次');
+});
+
+// -- R37：Jev 开局那份打分是不是一份预测，以及它兑现了没有 ------------------------
+// exposureBands 把全城按 exposure 分十档，每档看实际停下率。这是全仓唯一一处「预测 vs 结果」
+// 的对照，所以四条断言分别钉住它的口径、口径自洽、真数据上的量级、以及它必须能报坏消息。
+
+test('exposureAll：批量入口与逐人老算法逐位相同（波次名单不能因为重写而变）', () => {
+  const people = crowd('zh');
+  const scores = { 'interest:parenting': 0.9, 'interest:games': 0.3, 'field:it': 0.4, 'age:a35': 0.5, 'shopping:phone': 0.85, 'budget:middle': 0.3 };
+  const batch = exposureAll(people, scores, 'listing');
+  assert.equal(batch.length, people.length);
+  // 逐位相同而不是相近：两个 double 相加的顺序变了，和就可能差最后一个比特，
+  // 而波次名单是存进 versions.plan 的检查结果，差一个比特就是换了一次检查。
+  people.forEach((who, at) => assert.equal(batch[at], exposure(who, scores, 'listing'), `listing #${who.id}`));
+  const batchPost = exposureAll(people, scores, 'post');
+  people.forEach((who, at) => assert.equal(batchPost[at], exposure(who, scores, 'post'), `post #${who.id}`));
+});
+
+test('exposureBands：十档的人数加起来是全城，两端对得上口径', () => {
+  const people = crowd('zh');
+  const scores = { 'interest:parenting': 0.9, 'interest:games': 0.3, 'field:it': 0.4, 'age:a35': 0.5 };
+  const keys = Object.keys(PRESETS.post.reactions);
+  const reactions = new Uint8Array(people.length);
+  const wave = firstWave(people, scores, 'post', rng(hash32('bands')));
+  wave.forEach((who, at) => { reactions[who.id] = 1 + (at % keys.length); });
+  const out = exposureBands('post', keys, scores, reactions, people);
+  assert.equal(out.bands.length, 10);
+  assert.equal(out.bands.reduce((sum, row) => sum + row.people, 0), people.length, '十档不重不漏地盖住全城');
+  assert.equal(out.bands.reduce((sum, row) => sum + row.reached, 0), out.town.reached);
+  assert.equal(out.town.reached, wave.length);
+  for (const row of out.bands) assert.ok(row.reached <= row.people);
+  // 档 1 = 曝光最高的（也就是第 1 波照着挑的那批），所以它的 low 最高。
+  assert.ok(out.bands[0].low >= out.bands[9].low, '档 1 的 exposure 下界不低过档 10');
+  for (const row of out.bands) assert.ok(row.high >= row.low, `档 ${row.band} 的上下界反了`);
+  // 第 1 波 600 人是照 exposure 挑的，所以绝大多数该落在最上面几档。
+  assert.ok(out.bands[0].reached > out.bands[9].reached * 3, `第 1 波的人该压在档 1：${out.bands[0].reached} vs ${out.bands[9].reached}`);
+});
+
+test('exposureBands：真实存档里档 1 的停下率比档 10 高一个数量级（那份预测兑现了）', () => {
+  const saved = JSON.parse(fs.readFileSync(new URL('../public/examples/iphone-listing-v1.json', import.meta.url), 'utf8'));
+  const people = crowd(saved.pool ?? 'zh');
+  const out = exposureBands(saved.presetId, saved.keys, saved.scores, Uint8Array.from(saved.reactions), people);
+  assert.ok(out.readable && !out.flat, '真实存档里这一节读得出来、也不是押平');
+  const first = out.bands[0];
+  const last = out.bands[9];
+  assert.ok(first.stopped / first.reached > last.stopped / last.reached * 10, `档 1 应比档 10 高十倍以上：${(first.stopped / first.reached * 100).toFixed(1)}% vs ${(last.stopped / last.reached * 100).toFixed(1)}%`);
+  assert.ok(out.first.stoppedRatio > 10, `首末停下率之比应大于 10：${out.first.stoppedRatio}`);
+});
+
+test('exposureBands：分数全同的时候也分得出十档，并且照实说押平了', () => {
+  // 「谁都在意的文本」（周三下午三点停电）实测下来 exposure 排不出差别：真实 Jev 给每一档
+  // 相同的停下率。这一条钉住的是它必须这样报，而不是把一万人塞进最后一档再报一个假斜率。
+  const people = crowd('zh');
+  const keys = Object.keys(PRESETS.post.reactions);
+  const reactions = new Uint8Array(people.length);
+  const r = rng(hash32('flatbands'));
+  for (let i = 0; i < people.length; i += 3) reactions[i] = 1 + ((r() * keys.length) | 0) % keys.length;
+  const out = exposureBands('post', keys, flatScores(), reactions, people);
+  assert.equal(out.bands.reduce((sum, row) => sum + row.people, 0), people.length);
+  for (const row of out.bands) assert.ok(Math.abs(row.people - people.length / 10) <= people.length / 100, `平坦时每档仍该是全城的一成：${row.people}`);
+  assert.ok(out.flat, '所有人对同一段文字的 exposure 全同时，这一节必须说押平了');
+  // 押平和倍数是两件事：押平是结论（对照表里第 1 档并不更强），倍数仍然是量出来的那两个读数。
+  // 这里押平了，首/末停下率之比就该贴近 1 而不是某个大数——钉住「押平」不是「读不出数」。
+  assert.ok(out.first.stoppedRatio < 1.2, `押平时首末停下率之比应贴近 1：${out.first.stoppedRatio}`);
+});
+
+// 两端到达的人都不够时，整节要退化成「读不出来」，而不是拿两个小样本报一个倍数。
+test('exposureBands：两端人数不足时报读不出来，倍数给 null', () => {
+  const people = crowd('zh');
+  const keys = Object.keys(PRESETS.post.reactions);
+  const reactions = new Uint8Array(people.length);
+  const wave = firstWave(people, { 'interest:parenting': 0.9, 'interest:games': 0.3, 'field:it': 0.4, 'age:a35': 0.5 }, 'post', rng(hash32('thin')));
+  wave.forEach((who, at) => { reactions[who.id] = 1 + (at % keys.length); });
+  // 只留 60 个人的读数：档 1 有 60，档 10 一个也没有。
+  for (const who of wave) if (who.id % 7) reactions[who.id] = 0;
+  const out = exposureBands('post', keys, { 'interest:parenting': 0.9, 'interest:games': 0.3, 'field:it': 0.4, 'age:a35': 0.5 }, reactions, people);
+  assert.ok(!out.readable, '末端没有读数时不能报倍数');
+  assert.equal(out.first.stoppedRatio, null);
+  assert.equal(out.first.gladRatio, null);
 });

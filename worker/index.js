@@ -9,7 +9,7 @@
 import { crowd, persona, personaLine, CROWD } from '../public/shared/personas.js';
 import { PRESETS, CANT_TELL, priceLadder } from '../public/shared/presets.js';
 import { openingRequest, openingAnswers, reactionRequest, questionId, MAX_TEXT_CHARS, followUpRequest } from '../public/shared/requests.js';
-import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered } from '../public/shared/feed.js';
+import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered, exposureBands } from '../public/shared/feed.js';
 import { drawReaction } from '../public/shared/draw.js';
 import { askQuestion, mergeSaid, listsOf } from '../public/shared/check.js';
 import { counters, segments, topSegments, voicesOf, reconcileAudience, pickableGroups } from '../public/shared/summary.js';
@@ -693,6 +693,12 @@ async function showPost(id, env, url, request = null) {
 
   const all = segments(presetId, keys, bytes, people);
   const said = JSON.parse(version.said ?? 'null');
+  // 开局那份打分（Jev 对 83 组人群打的 CARE 分）与后来发生的事对账：全城按 exposure 分十档，
+  // 每档看停下/乐见的比例。scores 一直在 versions 里（settleWave 每波都要读它算下一波），
+  // 只是今天不过报告——这一节不花钱、不调 Jev，纯把已有的两个数放在一起。
+  // 迁移之前的旧版本没有 scores（列是 0003 加的，但当时写的是空串/null），那就 null 不渲染。
+  const scores = JSON.parse(version.scores ?? 'null');
+  const bands = scores ? exposureBands(presetId, keys, scores, bytes, people) : null;
   const voices = voicesOf(id, presetId, bytes).map((voice) => ({
     ...voice,
     who: personView(people[voice.id]),
@@ -712,6 +718,7 @@ async function showPost(id, env, url, request = null) {
     },
     // 作者说给谁的 vs 实际停在哪（只做对账，不改分发）。没填就 null，前端整节不渲染。
     audience: base.audience ? { ...base.audience, ...reconcileAudience(all, base.audience.picked, { presetId }) } : null,
+    bands,
     terrain: terrainFor(presetId, keys, bytes, `${id}.${v}`, post.state !== 'running'),
     voices,
     decisions: version.decisions ? JSON.parse(version.decisions) : null,

@@ -59,3 +59,32 @@ test('signedCount：人计数带千分位，符号字形与 signed 一致', () =
   assert.equal(signedCount(-9), '−9');
   assert.ok(!signedCount(-1204).includes('-'));
 });
+
+// R37：「Jev 押得准吗」的三种结论。这三条文案会被拼进报告，而报告是给作者看判断的
+// —— 把「押平了」写成「押中了」是这一节唯一能犯的致命错，所以边界钉死在这里。
+import { CALIBRATE_ZH, CALIBRATE_SAY_ZH, calibrateSayZh } from '../public/shared/labels.js';
+
+test('calibrateSayZh：读不出来时先说读不出来，不报倍数', () => {
+  const say = calibrateSayZh({ readable: false, flat: false, first: {}, minSample: 25 });
+  assert.equal(say, CALIBRATE_ZH.thin.replace('%1', '25'));
+  assert.ok(say.includes('25'), '要说出「各要多少人以上」这个门槛');
+  assert.ok(!/%\d/.test(say), '占位符必须全替换掉');
+});
+
+test('calibrateSayZh：押平了就说押平，不能报成押中', () => {
+  // 实测：周三下午三点停电这类谁都在意的文本，首末停下率之比 0.97。
+  const say = calibrateSayZh({ readable: true, flat: true, first: { stoppedRatio: 0.97 }, minSample: 25 });
+  assert.equal(say, CALIBRATE_ZH.flat);
+  assert.ok(!say.includes('%1'));
+  assert.ok(CALIBRATE_ZH.flat.includes('并没有'), '押平的文案必须真的说「没差别」，不能含糊');
+});
+
+test('calibrateSayZh：倍数够陡说押中，方向对但量级不够说押得偏弱', () => {
+  const weak = calibrateSayZh({ readable: true, flat: false, first: { stoppedRatio: 1.02 }, minSample: 25 });
+  assert.equal(weak, CALIBRATE_ZH.mild.replace('%1', '1'), '1.02 倍读成一位小数就是 1.0 那一档');
+  const strong = calibrateSayZh({ readable: true, flat: false, first: { stoppedRatio: 28.92 }, minSample: 25 });
+  assert.equal(strong, CALIBRATE_ZH.good.replace('%1', '28.9'), '真实存档实测 28.9 倍');
+  assert.ok(CALIBRATE_SAY_ZH.good > 1 && CALIBRATE_SAY_ZH.mild < 1);
+  // 三种结论互不相同，且都不是「读不出来」
+  assert.equal(new Set([CALIBRATE_ZH.good, CALIBRATE_ZH.mild, CALIBRATE_ZH.flat, CALIBRATE_ZH.thin]).size, 4);
+});

@@ -5,7 +5,7 @@ import { faceInk } from './inks.js';
 import { drawGrid, attachTooltip, drawDelta, drawReach, reachLegendInk } from './grid.js';
 import { avatarSvg } from './avatar.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount, AUDIENCE_ZH, AUDIENCE_STATE_ZH, audienceSayZh,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount, AUDIENCE_ZH, AUDIENCE_STATE_ZH, audienceSayZh, CALIBRATE_ZH, calibrateSayZh,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart, waveMixChart } from './charts.js';
 import { randomBaseline, moodZ } from './shared/feed.js';
@@ -56,6 +56,9 @@ export function renderCheck(el, result) {
     '<span class="hint" data-map-hint></span></div>' +
     '<div class="map-wrap"><canvas class="grid" tabindex="0" role="img" aria-label="小镇地图：一万个格子，每格一个人格。聚焦后用方向键逐格移动，屏幕阅读器会逐格播报档案；鼠标悬停或触摸点按同样可看。"></canvas><div class="legend"></div></div>');
   html.push(jevReading(result));
+  // 开局那份预测的对账紧接在 audience（作者说给谁的）之后、segments（谁停下了）之前：
+  // 三节问的是同一件事的三个角度，作者说给谁、Jev 说给谁、结果停在哪。
+  html.push(bandsView(result));
   html.push(audienceView(result));
   html.push(segmentsView(result));
   html.push(heatmapView(result, chartWidth));
@@ -221,6 +224,38 @@ function baselineView(result) {
   return `<h3>和纯随机比，谁更想要它</h3>
     <div class="funnel">${bars}</div>
     <div class="hint">基线：如果谁都没读它、只是乱选，一波 ${first.size.toLocaleString()} 人给出的情绪约 ${signed(base.mean, 2)}，随机波动 ±${base.error.toFixed(2)}。z 是这一波离它几个标准误——2 以上才算不是碰运气。第 1 波 z ${signed(z, 1)}：${esc(zSayZh(z))}</div>`;
+}
+
+/**
+ * Jev 开局押的，兑现了吗（R37）：全城一万格按 exposure 从高到低分十档，每档看实际停下率。
+ *
+ * 这是整份报告里唯一一个「预测 vs 结果」的对照：exposure 是 Jev 对 83 组人群打的 CARE 分算出来的，
+ * 发生在任何人有反应之前，而第 1 波那 500 个人就是照它挑的。
+ *
+ * 三种结论都要能画出来：斜率够陡、押平了（这类文本谁都在意）、两端人不够读不出来。
+ * `segments()` 的输出已经在同一份报告里算好，这份数据同源，不重算 reactions。
+ */
+export function bandsView(result) {
+  const bands = result.bands;
+  if (!bands) return '';
+  const rows = (bands.bands ?? []).map((band) => {
+    const share = band.reached ? band.stopped / band.reached : 0;
+    const glad = band.reached ? band.glad / band.reached : 0;
+    return `<div class="crow">
+    <span class="flabel">第 ${band.band} 档</span>
+    <span class="fbar"><i class="fgo" style="width:${Math.max(2, Math.round(share * 100))}%"></i></span>
+    <span class="fnum">${(share * 100).toFixed(1)}% 停下 · 乐见 ${(glad * 100).toFixed(1)}% · ${band.reached.toLocaleString()}/${band.people.toLocaleString()} 人 · ${band.stoppedLift.toFixed(2)}×</span>
+  </div>`;
+  });
+  const html = [
+    `<h3>${CALIBRATE_ZH.title}</h3>`,
+    `<p class="hint">${CALIBRATE_ZH.lead}</p>`,
+    `<p class="hint">${esc(calibrateSayZh(bands))}</p>`,
+    rows.length ? `<div class="funnel">${rows.join('')}</div>` : '',
+    `<div class="hint">${esc(CALIBRATE_ZH.bandHint)}</div>`,
+    `<div class="hint">${esc(CALIBRATE_ZH.townNote.replace('%1', String(bands.town?.reached ?? 0)).replace('%2', String(bands.town?.stopped ?? 0)).replace('%3', String(bands.town?.glad ?? 0)))} ${esc(CALIBRATE_ZH.costNote)}</div>`,
+  ];
+  return html.join('');
 }
 
 /** 组 id（「interest:tea」）→ 中文组名（「茶」）。散播算法用的就是这些组，所以名都对得上。 */

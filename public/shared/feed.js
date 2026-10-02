@@ -141,6 +141,161 @@ function exposureBy(who, cubes, market) {
 }
 
 /**
+ * Every persona's `exposure`, in one walk: cubes folded once, then the crowd's rows end to end.
+ *
+ * `exposure(who, scores, presetId)` folds the cubes again for each call, so asking it about the whole
+ * town costs 22 ms — twice the free Workers tier's 10 ms CPU for one request — while this costs
+ * 0.11 ms (scripts/probe-bandcost.js). The report needs all 10,000 at once to band the town by how
+ * much Jev thought each persona should see the text, and `firstWave` folds them all in a row anyway.
+ *
+ * The sums come out of the same columns in the same order as `exposureBy`, so **the numbers are the
+ * same doubles**: `test/golden-waves.txt` pins the wave rosters, because a roster is stored in the
+ * check's result (versions.plan) and a different one is a different check.
+ */
+export function exposureAll(personas, scores, presetId) {
+  const market = Boolean(PRESETS[presetId].market);
+  const cubes = cubeTable(scores, market);
+  const flat = flatOf(personas, market);
+  const out = new Float64Array(personas.length);
+  for (let i = 0; i < personas.length; i++) {
+    let sum = 0;
+    for (let k = flat.offsets[i]; k < flat.offsets[i + 1]; k++) sum += cubes[flat.ids[k]];
+    out[i] = sum;
+  }
+  return out;
+}
+
+/**
+ * Band 1 = the people Jev thought should see the text most, band 10 = least. For each band: how many
+ * of its people the text reached, and what share of them stopped, was glad, was sorry. People the
+ * text never reached count as not stopped, the way a network counts (same as `segments`).
+ *
+ * The cuts are the nine deciles of the **whole town's** exposure, not of the people it reached: the
+ * bands say "this is how well Jev's opening guess ranks the town", and a cut line that moved with
+ * every check would not say that twice. Each band is about a tenth of the town whether or not anyone
+ * in it saw the text, and the reader gets `reached` to say how much of it was actually tested.
+ *
+ * → { bands: [{ band, low, high, people, reached, stopped, glad, sorry, stoppedLift, gladLift }],
+ *     town: { people, reached, stopped, glad }, first: { stoppedRatio, gladRatio }, flat, readable, minSample }
+ */
+export function exposureBands(presetId, keys, scores, reactions, people, { bands = 10 } = {}) {
+  const preset = PRESETS[presetId];
+  const reactionsOf = preset.reactions;
+  const values = exposureAll(people, scores, presetId);
+  let top = 0;
+  for (let i = 0; i < values.length; i++) if (values[i] > top) top = values[i];
+
+  // Deciles of the town, by a histogram rather than a sort: the scores are quantised, so a lot of
+  // the town sits on the same exposure, and a sort of 10,000 doubles costs 1.85 ms against 0.06 ms
+  // for 2,048 buckets (scripts/probe-bandcost.js). The bucket width shows up in the band's `high`,
+  // which is a display number either way.
+  const HIST = 2048;
+  const width = (HIST / (top || 1));
+  const hist = new Int32Array(HIST);
+  for (let i = 0; i < values.length; i++) hist[Math.min(HIST - 1, (values[i] * width) | 0)] += 1;
+  // Nine cut lines, each one a tenth further down the town. `want` moves as cuts are taken: a
+  // bucket can hold three cut lines at once (scores are quantised, so the town piles up on a few),
+  // and a decile list that stops at one cut per bucket would leave the bands lopsided.
+  const cuts = [];
+  let seen = 0;
+  for (let bucket = 0; bucket < HIST && cuts.length < bands - 1; bucket++) {
+    seen += hist[bucket];
+    while (cuts.length < bands - 1 && seen >= ((values.length * (cuts.length + 1)) / bands | 0)) {
+      cuts.push(((bucket + 1) * (top || 1)) / HIST);
+    }
+  }
+  // A text Jev scores the same for everybody leaves the whole town's exposures at 0: the histogram
+  // empties into bucket 0 and every cut lands on 0. Then `value >= cut` is true for every cut and
+  // the whole town would fall into the last band, so the band comes from the rank instead and the
+  // bands still hold a tenth of the town each — which is what the reader is shown.
+  const flatTown = top <= 0 || cuts.every((cut) => cut >= top);
+  const slots = new Int32Array(values.length);
+  if (flatTown) {
+    const order = Array.from(values, (value, id) => id).sort((a, b) => values[b] - values[a] || a - b);
+    const per = Math.floor(values.length / bands);
+    for (let at = 0, band = 0; band < bands; band++) {
+      const end = Math.min(order.length, (band + 1) * per);
+      for (; at < end; at++) slots[order[at]] = band;
+    }
+  } else {
+    for (let i = 0; i < values.length; i++) {
+      let band = 0;
+      while (band < cuts.length && values[i] >= cuts[band]) band += 1;
+      slots[i] = band;
+    }
+  }
+
+  const rows = [];
+  for (let band = 0; band < bands; band++) {
+    // Filled in cut order (band 1 = lowest cut) and reversed at the end, so `low`/`high` are the
+    // band's own bounds and not the next one's.
+    rows.push({ band, low: cuts[band - 1] ?? 0, high: cuts[band] ?? top, people: 0, reached: 0, stopped: 0, glad: 0, sorry: 0, stoppedLift: 0, gladLift: 0 });
+  }
+  const town = { people: people.length, reached: 0, stopped: 0, glad: 0 };
+  // Two lookup tables of the size of the reaction list, so the walk below never reads a name: the
+  // bytes are indexes into `keys`, and looking each one up in `reactions` per person costs more than
+  // the whole banding (0.46 ms → 0.21 ms over 10,000).
+  const stoppedOf = new Uint8Array(keys.length + 1);
+  const toneOf = new Int8Array(keys.length + 1);
+  for (const [index, key] of keys.entries()) {
+    const reaction = reactionsOf[key];
+    stoppedOf[index + 1] = reaction?.stopped ? 1 : 0;
+    toneOf[index + 1] = reaction?.tone ?? 0;
+  }
+  for (let i = 0; i < values.length; i++) {
+    const row = rows[slots[i]];
+    row.people += 1;
+    const byte = reactions[i];
+    if (!byte) continue;
+    row.reached += 1;
+    town.reached += 1;
+    const stopped = stoppedOf[byte];
+    row.stopped += stopped;
+    town.stopped += stopped;
+    const tone = toneOf[byte];
+    if (tone === 1) { row.glad += 1; town.glad += 1; } else if (tone === -1) row.sorry += 1;
+  }
+  // Same lift as `segments`: how many times this band's share beats the town's share.
+  const lift = (count, sizeOf, total) => (total ? count / sizeOf / (total / people.length) : 0);
+  for (const row of rows) {
+    row.stoppedLift = lift(row.stopped, row.people, town.stopped);
+    row.gladLift = lift(row.glad, row.people, town.glad);
+  }
+  // Cut lines come out of the histogram low to high, so band 1 so far is the band Jev thought should
+  // see it *least*. Read the way the report does — "who it thought should see this first" — so the
+  // rows go highest first. Read off the town from the top down, and "the first band" means the one
+  // wave 1 was drawn from.
+  rows.reverse();
+  for (const [at, row] of rows.entries()) row.band = at + 1;
+
+  // The ratios compare *rates*, not raw counts: a band can be half the town and reach a third of it,
+  // and comparing counts would then be comparing how big the bands are. A ratio against a zero rate
+  // is not a big number, it is no reading at all — so it stays null and the table says so.
+  const MIN_SAMPLE = 25;
+  const enough = (row) => row.reached >= MIN_SAMPLE;
+  const first = rows[0];
+  const last = rows.at(-1);
+  const readable = enough(first) && enough(last);
+  const rate = (row) => (row.reached ? row.stopped / row.reached : 0);
+  const gladRate = (row) => (row.reached ? row.glad / row.reached : 0);
+  const ratioOf = (mine, theirs) => (readable && theirs ? mine / theirs : null);
+  return {
+    bands: rows,
+    town,
+    first: {
+      stoppedRatio: ratioOf(rate(first), rate(last)),
+      gladRatio: ratioOf(gladRate(first), gladRate(last)),
+    },
+    // "押平了" = the people it thought should see the text most did not stop more often than the
+    // people it thought should see it least. Said out loud, never hidden: on a text everybody cares
+    // about (a power cut at three) the ranking is worth nothing, and that is the honest read.
+    flat: readable && rate(first) <= rate(last),
+    readable,
+    minSample: MIN_SAMPLE,
+  };
+}
+
+/**
  * The `size - random` unseen personas that rank highest, best first, plus `random` other unseen ones
  * picked by `random()`. Ranks go through a typed array, which sorts several times faster than objects.
  *
@@ -240,8 +395,8 @@ function pickBy(unseen, ranks, { size, random: randomCount }, random) {
 /** Wave 1: the people Jev thinks the text is for. */
 export function firstWave(personas, scores, presetId, random) {
   const market = Boolean(PRESETS[presetId].market);
-  const cubes = cubeTable(scores, market);
-  return pick(personas, new Set(), (who) => exposureBy(who, cubes, market), WAVES[0], random);
+  const ranks = exposureAll(personas, scores, presetId);
+  return pickBy(personas, ranks, WAVES[0], random);
 }
 
 /**
