@@ -134,11 +134,18 @@ function paint(canvas, entry) {
 // 0.55 只有 2.99——这条是数值复算出来的下限，别凭感觉调回去）。
 const REACH_T = [0.58, 0.72, 0.86, 1];
 
-/** 第 wave 波的传播墨水（图例与地图同源；well 由调用方传入以免逐格重读令牌）。 */
-export function reachInk(wave, well = cssVar('--map-well', '#0a0d13')) {
+/**
+ * 第 wave 波的传播墨水（图例与地图同源；base 由调用方传入以免逐格重读令牌）。
+ * base 默认是地图底板 --map-well；图例点画在卡片上，所以传 --card —— 深色主题
+ * 两者几乎同色（差别 < 0.5:1），浅色主题差 0.9–2.3:1，不换底板图例点就读不出来。
+ */
+export function reachInk(wave, base = cssVar('--map-well', '#0a0d13')) {
   const blue = cssVar('--map-blue', '#6ea8fe');
-  return mixHex(well, blue, REACH_T[wave - 1] ?? 1);
+  return mixHex(base, blue, REACH_T[wave - 1] ?? 1);
 }
+
+/** 图例点专用：同一量表，但掺到卡片表面（--card）上，才和图例文字在同一个底。 */
+export const reachLegendInk = (wave) => reachInk(wave, cssVar('--card', '#151b27'));
 
 /**
  * 传播层视图。upto 供重播用：只画到第 N 波；登记进 drawn（mode 'reach'），

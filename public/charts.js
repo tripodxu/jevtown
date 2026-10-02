@@ -1,7 +1,8 @@
 // 轻量图谱：无依赖，返回 HTML/SVG 字符串，由 render.js 组装进报告页。
 // 折线/面积用 SVG（清晰、可缩放），漏斗与条形用 DOM（复用主题令牌与等宽数字）。
 import { GLAD_ENOUGH } from './shared/feed.js';
-import { LOOKS, lookOf } from './shared/presets.js';
+import { lookOf } from './shared/presets.js';
+import { FACE_INKS } from './inks.js';
 
 const esc = (value) => String(value).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
@@ -52,27 +53,28 @@ export function demandChart(steps, { width = 560, height = 140 } = {}) {
   const line = steps.map((s, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(s.buyers).toFixed(1)}`).join(' ');
   const area = `${line} L${x(steps.length - 1).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`;
   const dots = steps
-    .map((s, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(s.buyers).toFixed(1)}" r="3.5" fill="var(--map-green)" /><text x="${x(i).toFixed(1)}" y="${(y(s.buyers) - 9).toFixed(1)}" text-anchor="middle" class="chart-num">${s.buyers} 人</text>`)
+    .map((s, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(s.buyers).toFixed(1)}" r="3.5" fill="var(--face-glad)" /><text x="${x(i).toFixed(1)}" y="${(y(s.buyers) - 9).toFixed(1)}" text-anchor="middle" class="chart-num">${s.buyers} 人</text>`)
     .join('');
   const labels = steps.map((s, i) => `<text x="${x(i).toFixed(1)}" y="${height - 6}" text-anchor="middle" class="chart-axis">¥${esc(s.price)}</text>`).join('');
   return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="价格阶梯需求曲线：价位越低，愿意买的人越多">
-    <path d="${area}" fill="var(--map-green)" opacity="0.12" />
+    <path d="${area}" fill="var(--face-glad)" opacity="0.12" />
     <line x1="${pad.l}" y1="${y(0).toFixed(1)}" x2="${width - pad.r}" y2="${y(0).toFixed(1)}" class="chart-zero" />
-    <path d="${line}" fill="none" stroke="var(--map-green)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+    <path d="${line}" fill="none" stroke="var(--face-glad)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
     ${dots}${labels}
   </svg>`;
 }
 
 /**
- * 每波反应构成（DOM 堆叠条）：一根条 = 一波，段色 = LOOKS 反应墨水（与地图图例同源）。
+ * 每波反应构成（DOM 堆叠条）：一根条 = 一波，段色 = 面版反应墨水（FACE_INKS，与地图图例同源同色相）。
  * 这里用类别色是语义正确的——它就是"什么反应"，不是量表（区别于传播层的单色渐满）。
+ * 段画在 --inset 上，所以用面版而不是地图版墨水：浅色主题里亮墨水 1.1–2.4:1，读不出来（inks.js 头注）。
  * mix 来自 summary.js 的 waveMix（各波同序）；段标题承载精确计数，窄屏由 .seg 家族规则兜底。
  */
 export function waveMixChart(mix) {
   const rows = mix.waves.map(({ wave, size, mix: parts }) => {
     const segs = parts
       .map((part) => {
-        const color = LOOKS[lookOf(mix.presetId, part.reaction)];
+        const color = FACE_INKS[lookOf(mix.presetId, part.reaction)];
         const pct = Math.round(part.share * 100);
         return `<i style="width:${Math.max(2, part.share * 100)}%;background:${color}" ` +
           `title="第 ${wave} 波 · ${esc(part.zh)} ${part.count.toLocaleString()} 人（${pct}%）"></i>`;
@@ -89,7 +91,7 @@ export function waveMixChart(mix) {
 export function funnel(waves) {  if (!waves.length) return '';
   const max = Math.max(...waves.map((w) => w.size), 1);
   const rows = waves.map((wave) => {
-    const tier = wave.mood >= GLAD_ENOUGH ? 'go' : wave.mood >= 0 ? 'hold' : 'drop';
+    const tier = wave.mood >= GLAD_ENOUGH ? 'fgo' : wave.mood >= 0 ? 'fhold' : 'fdrop';
     const width = Math.max(6, Math.round((wave.size / max) * 100));
     const label = wave.index === waves.length - 1 && !wave.travels ? '检查结束' : wave.travels ? '继续传播' : '停在这里';
     return `<div class="frow">
@@ -147,16 +149,18 @@ export function shareChart(samples, { width = 560, height = 150, window: win = 6
   const sorryTopOf = (d) => gladOf(d) + sorryOf(d);
   const last = data[data.length - 1];
   const reach = last.judged;
-  const legend = `<text x="${width - pad.r + 8}" y="${pad.t + 14}" class="chart-axis" fill="var(--map-green)">● 乐见 ${(gladOf(last) * 100).toFixed(0)}%</text>
+  // 带状面积：中性/反感/乐见三层。填充是同一片域的成分，不是三样独立的东西，
+  // 所以压到半档再用描边收口——0.5 的填充在暗底上只有 2.1–3.0:1（实测），读不出边界。
+  const legend = `<text x="${width - pad.r + 8}" y="${pad.t + 14}" class="chart-axis" fill="var(--face-glad)">● 乐见 ${(gladOf(last) * 100).toFixed(0)}%</text>
     <text x="${width - pad.r + 8}" y="${pad.t + 32}" class="chart-axis" fill="var(--muted)">● 中性 ${((1 - gladOf(last) - sorryOf(last)) * 100).toFixed(0)}%</text>
-    <text x="${width - pad.r + 8}" y="${pad.t + 50}" class="chart-axis" fill="var(--map-red)">● 反感 ${(sorryOf(last) * 100).toFixed(0)}%</text>
+    <text x="${width - pad.r + 8}" y="${pad.t + 50}" class="chart-axis" fill="var(--face-sorry)">● 反感 ${(sorryOf(last) * 100).toFixed(0)}%</text>
     <text x="${width - pad.r + 8}" y="${pad.t + 74}" class="chart-axis">覆盖 ${reach.toLocaleString()} 人</text>`;
   const labels = `<text x="${x(0).toFixed(1)}" y="${height - 6}" class="chart-axis">开始</text>
     <text x="${x(data.length - 1).toFixed(1)}" y="${height - 6}" text-anchor="end" class="chart-axis">现在</text>`;
   return `<svg class="chart ekg" data-chart="share" viewBox="0 0 ${width} ${height}" role="img" aria-label="态度占比随时间发展：乐见、中性、反感各占已判定人数的比例">
-    <path d="${band(neutralTopOf, sorryTopOf)}" fill="var(--map-blue)" opacity="0.28" />
-    <path d="${band(sorryTopOf, gladOf)}" fill="var(--map-red)" opacity="0.5" />
-    <path d="${band(gladOf, () => 0)}" fill="var(--map-green)" opacity="0.5" />
+    <path d="${band(neutralTopOf, sorryTopOf)}" fill="var(--face-stopped)" opacity="0.5" />
+    <path d="${band(sorryTopOf, gladOf)}" fill="var(--face-sorry)" opacity="0.7" />
+    <path d="${band(gladOf, () => 0)}" fill="var(--face-glad)" opacity="0.7" />
     ${legend}${labels}
   </svg>`;
 }
@@ -216,7 +220,9 @@ export function sliceChart(data, { width = 940 } = {}) {
       row.cells
         .map((cell, c) => {
           const empty = cell.share == null;
-          const fill = empty ? 'var(--map-well)' : `color-mix(in srgb, var(--map-green) ${Math.round(cell.share * 100)}%, var(--map-well))`;
+          // 热力格画在 --card 上，用面版墨水对卡片掺（浅色主题里 --map-green 在卡片上只有 1.4–1.7:1）。
+          // 空格子给 --card-2 的虚线框，不用地图底板——那会把浅色主题的浅卡片掏出一个深洞。
+          const fill = empty ? 'var(--card-2)' : `color-mix(in srgb, var(--face-glad) ${Math.round(cell.share * 100)}%, var(--card-2))`;
           const title = `${row.zh} · ${cell.zh}：判定 ${cell.judged.toLocaleString()} 人 · ` +
             (empty ? '判定太少，不下结论' : `乐见 ${Math.round(cell.share * 100)}%（全城 ${Math.round(data.cityShare * 100)}%）`);
           const text = label
@@ -235,7 +241,7 @@ export function sliceChart(data, { width = 940 } = {}) {
     .join('');
   const legendY = pad.t + data.rows.length * rowH + 14;
   const legend = `<defs><linearGradient id="${ramp}" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="var(--map-well)" /><stop offset="1" stop-color="var(--map-green)" />
+      <stop offset="0" stop-color="var(--card-2)" /><stop offset="1" stop-color="var(--face-glad)" />
     </linearGradient></defs>
     <rect x="${pad.l}" y="${legendY}" width="120" height="8" rx="4" style="fill:url(#${ramp});stroke:var(--hairline);stroke-width:1" />
     <text x="${pad.l + 128}" y="${legendY + 8}" class="chart-num">乐见占比 0 → 100%</text>

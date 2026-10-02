@@ -118,7 +118,7 @@ function updateCharts() {
   const wide = Math.min(940, Math.max(300, $('chartShare').clientWidth || 900));
   const narrow = Math.min(420, Math.max(260, $('chartTput').clientWidth || 420));
   $('chartTput').innerHTML = rollingChart(live.tput, { width: narrow, color: 'var(--accent)', unit: ' 人/s' });
-  $('chartMs').innerHTML = rollingChart(live.msSeries, { width: narrow, color: 'var(--map-yellow)', unit: 'ms', format: (v) => Math.round(v) });
+  $('chartMs').innerHTML = rollingChart(live.msSeries, { width: narrow, color: 'var(--face-spreads)', unit: 'ms', format: (v) => Math.round(v) });
   $('chartShare').innerHTML = shareChart(live.shares, { width: wide });
 }
 

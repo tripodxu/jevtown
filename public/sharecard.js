@@ -59,7 +59,8 @@ export function renderShareCard(view, mapCanvas) {
   ];
   kpis.forEach(([value, label], i) => {
     const x = 90 + i * 155;
-    ctx.fillStyle = i === 0 ? text : i === 2 ? cssVar('--map-green', '#3ddc84') : i === 3 ? cssVar('--map-red', '#ff5c5c') : text;
+    // 卡片底 = --card，所以取面版墨水（浅色主题里 --map-green 在卡片上只有 1.4–1.7:1，读不出来）
+    ctx.fillStyle = i === 0 ? text : i === 2 ? cssVar('--face-glad', '#3ddc84') : i === 3 ? cssVar('--face-sorry', '#ff5c5c') : text;
     ctx.font = `600 44px ${FONT_MONO}`;
     ctx.fillText(Number(value).toLocaleString(), x, 380);
     ctx.fillStyle = muted;

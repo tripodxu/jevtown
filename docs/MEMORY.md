@@ -6,6 +6,51 @@
 
 ---
 
+## 2026-10-02 · R30 前端轮：给六色反应墨水分「地图版」与「面版」——浅色主题的图表此前全线隐形
+
+- **要修的缺陷（自己算的数，不是 detector 说的）**：报告里的条、堆叠段、图例点、SVG 图表、
+  人格声音点、切片热力格这些**直接压在卡片/内槽表面上**的图形，一直用的是地图数据墨水
+  （`--map-green` 等，字面值来自 `presets.js` 的 `LOOKS`）。R3 只解决了地图画布那一层
+  （把 `--map-well` 做成暖近黑/冷钢灰），**卡片表面这条路没被兜住**。实测浅色两套主题：
+  bulletin 的 inset/card 上 绿 **1.42–1.67**、黄 **1.10–1.29**、蓝 **1.92–2.26**、红 **2.41–2.83**；
+  instrument 几乎同值。非文字图形要 3:1，全线不到。
+- **做法**：新增一层 `--face-*`（`--face-dark/scrolled/hollow/stopped/glad/spreads/sorry`），
+  同色相压暗一档的「面版」，四套主题各自定值；映射单源在 `public/inks.js`
+  （`faceInk(look)` / `FACE_INKS`）。暗色两套主题的面版 = 地图墨水本身（它们本来就够亮），
+  浅色两套换成深墨，**四个信号色在四个表面（bg/card/card-2/inset）上全部 ≥3:1，最低 4.36**。
+  背景级三色（dark/scrolled/hollow）刻意不给下限——它们本来就该退到背景里去，
+  给下限会逼着人把「没轮到他」的格子调亮。
+- **换掉的地方**：`styles.css` 的 `.fgo/.fhold/.fdrop`（旧漏斗三色）、R29 新加的
+  `.ffar/.fnear/.fbelow`、`.chip.clustered/.scattered`、`.legend .dot.ring.hot/.cold`；
+  `charts.js` 的 `waveMixChart` 段色、`demandChart` 曲线、`shareChart` 带状填充与图例
+  字色、`sliceChart` 热力格与色标；`render.js` 的 `countsView` 条、`segmentsView` 条、
+  `voicesView` 反应点、`reactionLegend` 图例点；`app.js` 的耗时曲线色；
+  `sharecard.js` 的乐见/反感 KPI 字色。
+- **顺手修的两个连带缺陷**：① `charts.js` 的 `funnel` 里类名少了 `f` 前缀
+  （`go/hold/drop` 而 CSS 是 `.fgo/.fhold/.fdrop`）——**三档情绪色从来没生效过，一直是默认 `--accent`**。
+  ② 传播图例点与差分图例的半档都按**地图底板**掺，但图例画在卡片上：浅色主题浅档只有
+  **2.26–2.29:1**。现在 `grid.js` 加 `reachLegendInk(wave)`（掺 `--card`），
+  差分图例的半档改 `color-mix(..., var(--card))`。地图画布本身仍按 `--map-well` 掺（那条路径没动，
+  断言里钉住了）。
+- **`shareChart` 的带状填充**从 0.28/0.5/0.5 提到 0.5/0.7/0.7：这三片是同一片域的成分，
+  0.5 的填充在暗底上只有 2.06–2.95:1，读不出边界。
+- **顺带发现并修掉的三个文字对比度缺陷**（都在最深的 `--inset` 表面上，全部低于 WCAG AA 4.5:1）：
+  bulletin `--muted #6f6a5c` → `#6b665a`（4.30 → 4.55）；bulletin `--ok #1d7a4c` → `#1a7145`（4.24 → 4.79）；
+  instrument `--bad #c22f2f` → `#bc2a2a`（4.48 → 4.79）。改完四套主题 × 4 表面 × 5 文字角色
+  + 按钮文字全部 ≥4.5。
+- **测试**：新建 `test/theme.test.js`（4 组）。① 四主题 × 4 表面 × 5 文字角色 + 按钮文字 ≥4.5；
+  ② 令牌完整性；③ `--face-*` 四个信号色 × 四表面 ≥3:1；④ 七色齐备 + 地图墨水在 `--map-well`
+  上仍 ≥3:1（防止面版改造把地图那条路径改坏）。**解析器要跟 `var()`**：面版在暗色主题里写成
+  `var(--map-blue)`，只认字面 `#rrggbb` 会漏掉它们（第一版就这么写，4 组里挂了 2 组）。
+  `tokensOf` 递归解 `var()`（带深度上限防环），非颜色值（`--font-body` 之类）直接跳过。
+- **`impeccable detect` 的输出全是假阳性**：报 `index.html:0` 上 7 条低对比，
+  配的底色是 `#f5f7fc`——**这个色在仓库里根本不存在**（grep 零命中），且行号 `:0` 说明它没定位到行。
+  **detector 只当线索，一切以自己算的数字为准**；那三个真缺陷都是自写脚本算出来的。
+- **验证**：`npm test` **126/126 pass / 0 fail / 22.9s**（比上轮 122 多 4 个，就是 `theme.test.js`）；
+  `npm run lint` ✓ **44 个文件**；`node --check` 六个改动文件全过；
+  用 DOM 桩跑 `renderCheck`（示例存档 `iphone-listing-v1.json` 经 `replayToView`）
+  抓下渲染出的全部颜色变量：**只剩 `--face-*`，无任何地图墨水漏进卡片表面，也无写死的字面色**。
+
 ## 2026-10-02 · R29 创意轮：随机基线实验——续传阈值画在随机线之下（判据本轮不改，只交证据）
 
 - **用户问题已答**：为什么"几次实验都早停在第一轮很少的人数"——不是人数上限（`WAVES[0].size = 600`），
@@ -40,9 +85,9 @@
   符号与 0/±1σ 对齐、且 `moodZ('listing', 0.102, 600) < -2` 钉住实测事实；另断言
   `randomBaseline('product', 600).mean > 0.3` 说明这条线对题材含义不同）；新建
   `test/labels.test.js`（3 组：`zSayZh` 边界 2/−2、三档互异且措辞、`directionZh` 九宫格）。
-  **`npm test` 首次真跑全绿：122/122 pass / 0 fail / 39.1s**（R28 时代的老 bug 已修，见下一条）。
+  `npm test` **122/122 pass / 0 fail / 39.1s**（worker 集成测试真跑通——日志见
+  `POST /api/check 200 OK` + `GET /api/batch 200 OK` 连发；上轮 R28 时代的老 bug 已修，见下一条）。
   `npm run lint` ✓ **42 个文件**（新增 `test/labels.test.js`）；`node --check scripts/probe-waves.js` ✓。
-  worker 集成测试这次是真跑通了（日志见 `POST /api/check 200 OK` + `GET /api/batch 200 OK` 连发），
   所以 MEMORY 里「R28 退役闸后全量绿未跑完」那条待办**已销账**。
 - **复跑全量的正确姿势**：`npm test *> full-test.log`（**必须落盘**）。`2>&1 | Select-Object -Last N`
   会缓冲到命令结束才输出，管道中途看不到任何进度，很容易误判成「卡住」——本轮前两次

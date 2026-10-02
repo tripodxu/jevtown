@@ -28,6 +28,18 @@
   --map-green: #3ddc84;
   --map-yellow: #ffd84d;
   --map-red: #ff5c5c;
+
+  /* 面版墨水（--face-*）：同七色语义，但压到能直接画在卡片/内槽表面上。
+     地图底板是深版（--map-well），地图用 --map-*；条、堆叠段、图例点、SVG 图表这些
+     直接落在 --card / --card-2 / --inset 上的地方用 --face-*。
+     暗色两套主题的面就是底板本身（墨水本来就够亮），浅色两套必须换暗一档的墨。 */
+  --face-dark: #141922;
+  --face-scrolled: #39414f;
+  --face-hollow: #5d6880;
+  --face-stopped: var(--map-blue);
+  --face-glad: var(--map-green);
+  --face-spreads: var(--map-yellow);
+  --face-sorry: var(--map-red);
 }
 
 /* 夜巡观测台（默认） */
@@ -67,19 +79,29 @@
   --card-2: #f2ecdd;
   --inset: #ece5d4;
   --text: #22201b;
-  --muted: #6f6a5c;
+  --muted: #6b665a;
   --hairline: rgba(34, 32, 27, 0.16);
   --hairline-strong: rgba(34, 32, 27, 0.32);
   --accent: #b43a2b;
   --accent-soft: rgba(180, 58, 43, 0.26);
   --btn-bg: #22201b;
   --btn-ink: #f4efe4;
-  --ok: #1d7a4c;
+  --ok: #1a7145;
   --bad: #b43a2b;
   /* 地图底板是"印刷墨版"式的暖近黑，不是米纸色：六色反应墨水在浅底板上几乎隐形
      （实测 spreads 黄 1.07:1、glad 绿 1.38、sorry 红 2.34，全线达不到非文字图形 3:1）。
      换成深版后 5/6 过线，最低 1.67（scrolled 本就该退到背景里去）。 */
   --map-well: #1e1b16;
+  /* 面版墨水：这一套的表面是米纸，--map-* 的亮色在它上面全线隐形（蓝 1.92、绿 1.42、
+     黄 1.10、红 2.41 —— 非文字图形要 3:1）。所以条/段/图例改用压暗一档的同色相墨水：
+     三个信号色全部过 3:1（最低 4.36），三个背景色按"越不显眼越好"排在 1.4–3.6。 */
+  --face-dark: #c6bca4;
+  --face-scrolled: #9d957e;
+  --face-hollow: #6f7887;
+  --face-stopped: #2a67c4;
+  --face-glad: #1a7145;
+  --face-spreads: #8a5a00;
+  --face-sorry: #bc2a2a;
   --shadow: 0 10px 30px rgba(84, 70, 40, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.7);
   --grain: 0.05;
   --font-display: Georgia, "Noto Serif SC", "Songti SC", "STZhongsong", "SimSun", serif;
@@ -103,9 +125,18 @@
   --btn-bg: #17191d;
   --btn-ink: #eef0f3;
   --ok: #157347;
-  --bad: #c22f2f;
+  --bad: #bc2a2a;
   /* 同公报：浅底板吃掉了亮墨水（spreads 1.09:1）。冷钢灰近黑，4/6 过线，最低 1.55。 */
   --map-well: #1d222a;
+  /* 同公报：这一套表面是冷灰，亮墨水在它上面也读不出来（绿 1.43、黄 1.10、红 2.42）。
+     面版墨水换成同色相的深墨，四个信号色全部过 3:1。 */
+  --face-dark: #c6bca4;
+  --face-scrolled: #9d957e;
+  --face-hollow: #6f7887;
+  --face-stopped: #2559ad;
+  --face-glad: #17683e;
+  --face-spreads: #7d5200;
+  --face-sorry: #bc2a2a;
   --shadow: 0 10px 30px rgba(25, 35, 60, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   --grain: 0.03;
   --font-display: "Segoe UI", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -131,6 +162,13 @@
   --ok: #3ddc84;
   --bad: #ff5c5c;
   --map-well: #141922;
+  --face-dark: var(--map-well);
+  --face-scrolled: #39414f;
+  --face-hollow: #5d6880;
+  --face-stopped: var(--map-blue);
+  --face-glad: var(--map-green);
+  --face-spreads: var(--map-yellow);
+  --face-sorry: var(--map-red);
   --shadow: 0 14px 44px rgba(0, 0, 0, 0.4);
   --grain: 0;
   --font-display: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -718,14 +756,14 @@ canvas.grid {
 
 .frow .fbar i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
 
-/* 漏斗的情绪分层：够 glad=绿、持平=蓝、负面=红 */
-.frow .fbar i.fgo { background: var(--map-green); }
-.frow .fbar i.fhold { background: var(--map-blue); }
-.frow .fbar i.fdrop { background: var(--map-red); }
+/* 漏斗的情绪分层：够 glad=绿、持平=蓝、负面=红（面版墨水：条直接画在 --inset 上） */
+.frow .fbar i.fgo { background: var(--face-glad); }
+.frow .fbar i.fhold { background: var(--face-stopped); }
+.frow .fbar i.fdrop { background: var(--face-sorry); }
 /* 随机对照条（R29）：离基线远=绿（明显强于随机）、读不出=蓝（与随机无异）、比随机还冷=红 */
-.frow .fbar i.ffar { background: var(--map-green); }
-.frow .fbar i.fnear { background: var(--map-blue); }
-.frow .fbar i.fbelow { background: var(--map-red); }
+.frow .fbar i.ffar { background: var(--face-glad); }
+.frow .fbar i.fnear { background: var(--face-stopped); }
+.frow .fbar i.fbelow { background: var(--face-sorry); }
 
 .frow .fnum { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
 
@@ -783,8 +821,8 @@ canvas.grid {
   padding: 0 4px;
   background: linear-gradient(transparent 62%, var(--accent-soft) 0);
 }
-.chip.clustered { color: var(--map-green); border-color: var(--map-green); }
-.chip.scattered { color: var(--map-blue); border-color: var(--map-blue); }
+.chip.clustered { color: var(--face-glad); border-color: var(--face-glad); }
+.chip.scattered { color: var(--face-stopped); border-color: var(--face-stopped); }
 .chip.unclear { color: var(--muted); }
 
 /* 地图上方的开关条 */
@@ -792,10 +830,11 @@ canvas.grid {
 .map-bar .ghost { padding: 6px 14px; font-size: 12.5px; }
 .map-bar .ghost[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 
-/* 聚集地形的图例点是环，不是实心——与地图上描的环同色 */
+/* 聚集地形的图例点是环，不是实心——与地图上描的环同色相。图例画在卡片上，
+   所以取面版墨水（地图上的环在深底板上，仍用地图墨水）。 */
 .legend .dot.ring { background: transparent; box-shadow: inset 0 0 0 2px currentColor; width: 12px; height: 12px; }
-.legend .dot.ring.hot { color: var(--map-green); }
-.legend .dot.ring.cold { color: var(--map-red); }
+.legend .dot.ring.hot { color: var(--face-glad); }
+.legend .dot.ring.cold { color: var(--face-sorry); }
 
 /* 两版之差：排版借地形段（同一套 say/统计行），图例点是实心——差分是实色量表，不是环 */
 .delta-read { margin: 4px 0 6px; }

@@ -1,7 +1,8 @@
 // 视图渲染：app.js（实时检查）与 showcase.js（示例回放）共用。
 // 输入形状 = GET /api/post/:v 的 payload（replay.js 能从存档 JSON 拼出同一形状）。
-import { PRESETS, LOOKS, lookOf } from './shared/presets.js';
-import { drawGrid, attachTooltip, drawDelta, drawReach, reachInk } from './grid.js';
+import { PRESETS, lookOf } from './shared/presets.js';
+import { faceInk } from './inks.js';
+import { drawGrid, attachTooltip, drawDelta, drawReach, reachLegendInk } from './grid.js';
 import { avatarSvg } from './avatar.js';
 import {
   REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh,
@@ -240,10 +241,9 @@ function countsView(result) {
     .sort((a, b) => b[1] - a[1]);
   const max = rows[0]?.[1] ?? 1;
   const bars = rows.map(([reaction, count]) => {
-    const look = lookOf(presetId, reaction);
     const width = Math.max(3, Math.round((count / max) * 100));
     return `<div class="seg"><span class="label">${esc(REACTIONS_ZH[reaction] ?? reaction)}</span>` +
-      `<span class="bar2"><i style="width:${width}%;background:${LOOKS[look]}"></i></span>` +
+      `<span class="bar2"><i style="width:${width}%;background:${faceInk(lookOf(presetId, reaction))}"></i></span>` +
       `<span class="num">${count.toLocaleString()} · ${Math.round((count / reach) * 100)}%</span></div>`;
   });
   return `<h3>反应分布（占到达人数）</h3>${bars.join('')}`;
@@ -286,8 +286,8 @@ function segmentsView(result) {
     html.push(`<h3>${title}（显著高于全城）</h3>`);
     for (const seg of list) {
       const share = seg.size ? seg[key] / seg.size : 0;
-      // 条色对齐地图图例的语义色：停下=蓝，乐见=绿，反感=红（--map-* 是全主题不变的数据墨水）。
-      const color = key === 'sorry' ? 'var(--map-red)' : key === 'glad' ? 'var(--map-green)' : 'var(--map-blue)';
+      // 条色对齐地图图例的语义色：停下=蓝，乐见=绿，反感=红。条画在 --inset 上，取面版墨水。
+      const color = key === 'sorry' ? 'var(--face-sorry)' : key === 'glad' ? 'var(--face-glad)' : 'var(--face-stopped)';
       html.push(
         `<div class="seg"><span class="label">${esc(SEGMENT_ZH[seg.attribute] ?? seg.attribute)}：${esc(segmentValueZh(seg.attribute, seg.value))}</span>` +
         `<span class="bar2"><i style="width:${Math.round(share * 100)}%;background:${color}"></i></span>` +
@@ -349,7 +349,7 @@ function voicesView(result) {
   const cards = result.voices.map((voice) =>
     `<div class="voice">${avatarSvg(pool, voice.id, { size: 36 })}` +
     `<div class="v-body"><div class="who">${esc(voice.who.name)}，${voice.who.age}岁 · ${esc(voice.who.job ?? '')} · ${esc(voice.who.city)}</div>` +
-    `<div class="what"><i class="rdot" style="background:${LOOKS[voice.look]}"></i>${esc(REACTIONS_ZH[voice.reaction] ?? voice.reaction)}${voice.who.temper ? ` · ${esc(voice.who.temper)}` : ''}</div></div></div>`,
+    `<div class="what"><i class="rdot" style="background:${faceInk(voice.look)}"></i>${esc(REACTIONS_ZH[voice.reaction] ?? voice.reaction)}${voice.who.temper ? ` · ${esc(voice.who.temper)}` : ''}</div></div></div>`,
   );
   const collapsed = cards.length > 24 ? ' collapsed' : '';
   const more = cards.length > 24
@@ -380,11 +380,11 @@ function terrainLegend(terrain) {
   return rows.join('');
 }
 
-/** 传播层的图例：逐波一行（点色与 reachInk 同源）+ 没看到。 */
+/** 传播层的图例：逐波一行（点色与 reachInk 同量表，但掺到卡片表面上）+ 没看到。 */
 function reachLegend(result) {
   const rows = result.waves.map((wave) =>
-    `<span class="dot" style="background:${reachInk(wave.index + 1)}"></span>第 ${wave.index + 1} 波 · ${wave.size.toLocaleString()} 人`);
-  rows.push('<span class="dot" style="background:var(--map-well);box-shadow:inset 0 0 0 1px var(--hairline-strong)"></span>没看到');
+    `<span class="dot" style="background:${reachLegendInk(wave.index + 1)}"></span>第 ${wave.index + 1} 波 · ${wave.size.toLocaleString()} 人`);
+  rows.push('<span class="dot" style="background:var(--inset);box-shadow:inset 0 0 0 1px var(--hairline-strong)"></span>没看到');
   return rows.join('');
 }
 
@@ -517,10 +517,13 @@ function deltaKpis(before, after) {
   return `<div class="delta-kpis">${items.join('')}</div>`;
 }
 
-/** 差分图例：两档幅度 × 两个方向（与 drawDelta 的 inks 同色，半档 = 墨水与底板各半）。 */
+/** 差分图例：两档幅度 × 两个方向（与 drawDelta 的 inks 同色相，半档 = 墨水与底板各半）。
+    图例点画在卡片上，所以半档掺卡片表面而不是地图底板——深色主题两者近乎同色，
+    浅色主题不换底板的话浅档只有 2.3:1，看不出"小幅"这一档。 */
 function deltaLegend() {
-  return '<span class="dot" style="background:color-mix(in srgb, var(--map-green) 50%, var(--map-well))"></span>小幅变好'
-    + '<span class="dot" style="background:var(--map-green)"></span>大幅变好'
-    + '<span class="dot" style="background:color-mix(in srgb, var(--map-red) 50%, var(--map-well))"></span>小幅变差'
-    + '<span class="dot" style="background:var(--map-red)"></span>大幅变差';
+  const half = (ink) => `color-mix(in srgb, ${ink} 50%, var(--card))`;
+  return `<span class="dot" style="background:${half('var(--face-glad)')}"></span>小幅变好`
+    + `<span class="dot" style="background:var(--face-glad)"></span>大幅变好`
+    + `<span class="dot" style="background:${half('var(--face-sorry)')}"></span>小幅变差`
+    + `<span class="dot" style="background:var(--face-sorry)"></span>大幅变差`;
 }
