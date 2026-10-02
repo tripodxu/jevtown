@@ -16,6 +16,7 @@ import { counters, segments, topSegments, voicesOf } from '../public/shared/summ
 import { crowdTerrain } from '../public/shared/spatial.js';
 import { encodeBytes, decodeBytes } from '../public/shared/bytes.js';
 import { personView } from '../public/shared/labels.js';
+import { runAblation } from '../public/shared/away.js';
 import { pickProvider, PROVIDERS, ask as askJev } from '../public/shared/jev.js';
 import { createMockAsk } from '../public/shared/mock.js';
 import { rng, hash32 } from '../public/shared/rng.js';
@@ -149,6 +150,7 @@ export default {
       if (request.method === 'GET' && path === '/api/batch') return await runBatch(url, request, env);
       if (request.method === 'POST' && path === '/api/wave') return await closeWave(url, request, env);
       if (request.method === 'GET' && path.startsWith('/api/post/')) return await showPost(path.slice('/api/post/'.length), env, url, request);
+      if (request.method === 'POST' && path === '/api/away') return await runAway(url, request, env);
       if (request.method === 'GET' && path === '/api/feed') return await listFeed(env);
       return fail('not found', 404);
     } catch (error) {
@@ -273,6 +275,46 @@ async function runVersion(request, env) {
     addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, ms, day: today() }),
   ]);
   return json({ post: id, version: number, state: 'running', wave: { index: 0, total: wave0.length } });
+}
+
+// -- POST /api/away：哪一句在撑 ---------------------------------------------------
+
+// 按钮触发，不阻塞主流程：传播还在跑的时候问「哪句在撑」没有意义（文本的处境还在变），
+// 所以只在 post 已经 done 时才接。算过就还旧结果——回访不该重复花钱。
+// 外呼上限比 providerOf 的共享预算松一点：这里只在作者点了按钮时才跑，句数也已限到 6。
+const AWAY_MAX_CALLS = 50;
+/** batches.n 的分工：base / control / noise 走负数，gone:<i> 走句号下标，各自一行不互相累加。 */
+const AWAY_N = { base: -1, control: -2, noise: -3 };
+
+/**
+ * 删掉第 i 句后 Jev 会改多少主意（public/shared/away.js）。一句一路消融读数，
+ * 连同 BASE / CONTROL / NOISE 一共 N+3 次请求；每路返回后记一次流水。
+ */
+async function runAway(url, request, env) {
+  const id = url.searchParams.get('post');
+  const v = Number(url.searchParams.get('v') ?? '1') || 1;
+  if (!id) return fail('post is required');
+  const post = await loadPost(env.DB, id);
+  if (!post) return fail('no such post', 404);
+  if (!authorOk(request, post)) return fail('this post is not yours', 403);
+  if (post.state !== 'done') return fail('the check is not finished yet', 409);
+  const version = await loadVersion(env.DB, id, v);
+  if (!version) return fail('no such version', 404);
+  const stored = version.away ? JSON.parse(version.away) : null;
+  if (stored) return json({ post: id, version: v, away: stored, cached: true });
+
+  const provider = providerOf(env, request);
+  const day = today();
+  const result = await runAblation((req) => provider.ask(req), {
+    presetId: post.preset,
+    text: version.text,
+    maxCalls: AWAY_MAX_CALLS,
+    onSent: (key, sent) => addSpend(env.DB, { post: id, number: v, stage: 'ablate', n: AWAY_N[key] ?? Number(key.split(':')[1]), usd: sent.usd, tokens: sent.tokens, ms: sent.ms, day }).run(),
+  });
+  if (!result.sentences.length) return fail(result.error ?? 'ablation failed');
+  const away = { sentences: result.sentences, noise: result.noise, worded: result.worded, settled: result.settled, groups: result.groups, provider: provider.name };
+  await env.DB.prepare('UPDATE versions SET away = ? WHERE post = ? AND number = ?').bind(JSON.stringify(away), id, v).run();
+  return json({ post: id, version: v, away, cached: false });
 }
 
 // -- GET /api/batch：问 Jev 一批人 ---------------------------------------------
@@ -559,6 +601,10 @@ async function showPost(id, env, url, request = null) {
     checks: JSON.parse(version.checks ?? '{}'),
     unlisted: JSON.parse(version.unlisted ?? '[]'),
     blocked: JSON.parse(version.blocked ?? '[]'),
+    away: JSON.parse(version.away ?? 'null'),
+    // 只是「这台机器拿着作者令牌」这一件事的布尔量：逐句承重要花钱、只有作者能点，
+    // 但令牌本身绝不能随报告发给任何人——所以这里给的是能不能，不是是什么。
+    awayCallable: authorOk(request, post),
   };
   if (post.state === 'blocked') return json(base);
 

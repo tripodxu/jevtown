@@ -2,7 +2,7 @@
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
 import { renderCheck, renderDelta, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
-import { BLOCKED_ZH, presetNoun as PRESET_NOUN_OF } from './shared/labels.js';
+import { BLOCKED_ZH, AWAY_ZH, presetNoun as PRESET_NOUN_OF } from './shared/labels.js';
 import { PRESETS } from './shared/presets.js';
 import { drawGrid, paintDelta } from './grid.js';
 import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
@@ -326,6 +326,35 @@ function showResult(view) {
   }
   $('result').scrollIntoView({ behavior: 'smooth' });
 }
+
+// -- 哪一句在撑（R32）-----------------------------------------------------------
+
+// 委托在 #result 上而不是绑在按钮上：renderCheck 每次都把 innerHTML 换掉，
+// 重绑容易漏（报告刷新、对照卡重渲染都会丢），委托跟着容器走就不会。
+$('result').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-away]');
+  if (!button || !current.post) return;
+  button.disabled = true;
+  const hint = $('result').querySelector('[data-away-hint]');
+  // 按钮旁边没有 statusLine（那行属于检查流程），进度写在这一节自己的提示位上。
+  if (hint) hint.textContent = AWAY_ZH.running;
+  announce(AWAY_ZH.running);
+  try {
+    const res = await postJSON(`/api/away?post=${encodeURIComponent(current.post)}&v=${current.version}`);
+    const view = await readJSON(`/api/post/${current.post}?v=${current.version}`);
+    showResult(view);
+    announce(`已算出：${res.away.sentences.filter((s) => s.readable).length} 句读得出承重`);
+  } catch (error) {
+    button.disabled = false;
+    const text = AWAY_ZH.failed.replace('%1', error.message);
+    if (hint) {
+      hint.innerHTML = `<span class="error">${esc(text)}</span>`;
+    } else {
+      $('statusLine').innerHTML = `<span class="error">${esc(text)}</span>`;
+    }
+    announce(`算逐句承重失败：${error.message}`);
+  }
+});
 
 // -- 改一版再发 ------------------------------------------------------------------
 

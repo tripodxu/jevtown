@@ -5,7 +5,7 @@ import { faceInk } from './inks.js';
 import { drawGrid, attachTooltip, drawDelta, drawReach, reachLegendInk } from './grid.js';
 import { avatarSvg } from './avatar.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart, waveMixChart } from './charts.js';
 import { randomBaseline, moodZ } from './shared/feed.js';
@@ -44,6 +44,7 @@ export function renderCheck(el, result) {
   html.push(terrainView(result));
   html.push(wavesView(result, chartWidth));
   html.push(waveMixView(result));
+  html.push(awayBar(result));
   html.push(countsView(result));
   // 地图三视图：反应（恒有）/ 传播（逐人波次数据在时）/ 聚集地形（有成片格子时）。
   // 数据不在就摘掉对应按钮——旧存档没有 waveOf，传播按钮优雅缺席。
@@ -219,6 +220,77 @@ function baselineView(result) {
   return `<h3>和纯随机比，谁更想要它</h3>
     <div class="funnel">${bars}</div>
     <div class="hint">基线：如果谁都没读它、只是乱选，一波 ${first.size.toLocaleString()} 人给出的情绪约 ${base.mean >= 0 ? '+' : ''}${base.mean.toFixed(2)}，随机波动 ±${base.error.toFixed(2)}。z 是这一波离它几个标准误——2 以上才算不是碰运气。第 1 波 z ${z >= 0 ? '+' : ''}${z.toFixed(1)}：${esc(zSayZh(z))}</div>`;
+}
+
+/** 组 id（「interest:tea」）→ 中文组名（「茶」）。散播算法用的就是这些组，所以名都对得上。 */
+function groupZh(id) {
+  const [attribute, value] = String(id).split(':');
+  return segmentValueZh(attribute, value);
+}
+
+/**
+ * 哪一句在撑（R32）：把文本切句，逐句删掉重读一遍（shared/away.js）。
+ * 一句的读数是**组与组之间的差距**而不是平均——一组人买、一组人掉头会把平均抵平成 0，
+ * 信号却还在：实测三段文本的组间差距都在 45–134 倍噪声，而平均常常不过噪声。
+ * 条只画两端：绿=吃它的组（删了更不在乎），红=掉头的组（删了反而更在乎），中心是 0。
+ */
+function awayView(result) {
+  const away = result.away;
+  if (!away) return '';
+  if (!away.sentences?.length) {
+    return `<h3>${esc(AWAY_ZH.title)}</h3><div class="hint">${esc(String(AWAY_ZH.failed).replace('%1', away.error ?? '未知原因'))}</div>`;
+  }
+  if (away.sentences.length < 2) {
+    return `<h3>${esc(AWAY_ZH.title)}</h3><div class="hint">${esc(AWAY_ZH.none)}</div>`;
+  }
+  const groups = away.groups ?? away.sentences[0].deltas.length;
+  const rows = away.sentences.map((sentence) => {
+    const top = Math.max(sentence.top.delta, 0);
+    const bottom = Math.min(sentence.bottom.delta, 0);
+    // 两端各占条的一半，宽度按同一把尺子（|delta| / spread），超过的那端封顶。
+    const scale = Math.max(sentence.spread, 0.0001);
+    const left = Math.max(2, Math.min(50, Math.round((Math.abs(bottom) / scale) * 50)));
+    const right = Math.max(2, Math.min(50, Math.round((top / scale) * 50)));
+    const readable = sentence.readable
+      ? `${esc(awaySayZh(sentence))}：${esc(groupZh(sentence.top.id))} ${fmt4(top)} ｜ ${esc(groupZh(sentence.bottom.id))} ${fmt4(bottom)}`
+      : esc(awaySayZh(sentence));
+    const mean = `${sentence.mean >= 0 ? '+' : '−'}${Math.abs(sentence.mean).toFixed(4)}`;
+    return `<div class="arow${sentence.readable ? '' : ' quiet'}">
+      // i 在 shared/away.js 里就是 1 起（ablationStats 返回 i + 1），这里直接用。
+<span class="flabel">第 ${sentence.i} 句</span>
+      <span class="apart">${esc(sentence.part)}</span>
+      ${sentence.readable ? `<span class="atwin"><i class="adown" style="width:${left}%"></i><i class="aup" style="width:${right}%"></i></span>` : ''}
+      <span class="fsay">${readable}</span>
+      <span class="fnum">${sentence.strong}/${groups} 组 · 均值 ${mean}</span>
+    </div>`;
+  });
+  const hint = [
+    `绿色向右：删掉这句，<em>在吃它的人</em>更不在乎。红色向左：删掉这句，<em>掉头的人</em>反而更在乎。`,
+    `一句话读两遍之间的抖动约 ${away.noise.toFixed(4)}，下面每句都压过了它才算数。`,
+    esc(AWAY_ZH.meanHint),
+    away.settled ? '' : esc(AWAY_ZH.settled),
+  ].filter(Boolean).join(' ');
+  return `<h3>${esc(AWAY_ZH.title)}</h3>
+    <div class="away-bar"><span class="hint">${esc(AWAY_ZH.buttonHint)}</span></div>
+    <div class="funnel">${rows.join('')}</div>
+    <div class="hint">${hint}</div>`;
+}
+const fmt4 = (value) => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(3)}`;
+
+/**
+ * 这一节的入口：算过就直接渲染，没算过就摆一个按钮。
+ * 按钮不在 runCheck 的主流程里——它要花钱（实测 $0.002–0.003），所以只有点了才算，
+ * 也只有作者能算（worker 的 authorOk 兜底；这里按作者令牌决定显不显示）。
+ */
+function awayBar(result) {
+  if (result.away) return awayView(result);
+  if (result.post.state !== 'done' || !result.post.text) return '';
+  const author = Boolean(result.awayCallable);
+  return `<h3>${esc(AWAY_ZH.title)}</h3>
+    <div class="away-bar">
+      <button type="button" class="ghost" data-away${author ? '' : ' disabled'}>${esc(AWAY_ZH.button)}</button>
+      <span class="hint" data-away-hint>${esc(author ? AWAY_ZH.buttonHint : AWAY_ZH.noCall)}</span>
+    </div>`;
 }
 
 /**

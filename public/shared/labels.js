@@ -171,6 +171,9 @@ export function reportStageZh(stage) {
   if (stage === 'opening') return '开局打分';
   if (stage === 'followup') return '追问阶段';
   if (stage === 'ask') return '收尾提问';
+  // 逐句消融（R32）的四路在 batches 里各占一行同一 stage，靠 n 区分：
+  // -1 原文、-2 原文+同样措辞（对照）、-3 复读（噪声底）、>=0 是删掉第 n+1 句。
+  if (stage === 'ablate') return '逐句承重';
   const wave = /^wave(\d+)$/.exec(stage);
   if (wave) return `第 ${Number(wave[1]) + 1} 波`;
   return stage;
@@ -218,3 +221,32 @@ export const Z_SAY_ZH = {
   below: '这一波比纯随机还冷——没人要它。这是个真答案，不是没读出来。',
 };
 export const zSayZh = (z) => (z >= 2 ? Z_SAY_ZH.far : z <= -2 ? Z_SAY_ZH.below : Z_SAY_ZH.near);
+
+/**
+ * 「哪一句在撑」（shared/away.js 的逐句消融）的中文，渲染层只从这里取。
+ * 绿=吃它的组（删掉这句他们更不在乎），红=掉头的组（删掉这句他们反而更在乎）。
+ */
+export const AWAY_ZH = {
+  title: '哪一句在撑',
+  button: '看看哪一句在撑',
+  buttonHint: '会调用 Jev，约 $0.003。按句逐句删一遍重读，谁在乎哪句就显出来。',
+  running: '正在逐句重读…',
+  green: '吃它的组',
+  red: '掉头的组',
+  holding: '这句在撑',
+  blocking: '这句在挡路',
+  quiet: '这一句，%1 组人读不出差别',
+  quietHint: '读不出来不等于没用——只是这段话里它不是决定性的那一半。',
+  meanHint: '每句末尾那个均值常常抵平成 0，因为一组人买、一组人掉头——差距在组与组之间，不在平均上。',
+  settled: '只读成了前面几句，后面几句这次没读完。',
+  none: '只有一句话，删掉它就是删掉整段——这样的消融说明不了什么。',
+  failed: '这次没能算出逐句承重：%1',
+  noCall: '作者可以算这一节',
+};
+
+/** 一句消融结果的人话判断：均值与组间两端各说各的，取说得上话的那个。 */
+export function awaySayZh(sentence) {
+  if (!sentence.readable) return AWAY_ZH.quiet.replace('%1', String(sentence.deltas.length));
+  if (sentence.mean >= 0) return AWAY_ZH.holding;
+  return AWAY_ZH.blocking;
+}

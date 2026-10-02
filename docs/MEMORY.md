@@ -6,6 +6,67 @@
 
 ---
 
+---
+
+## 2026-10-02 · R32 创意轮：「哪一句在撑」——给 Jev 差分题而不是判断题，统计量取组间拉得开度
+
+**用户问的**（本轮开头就定了）：用 Jev 做点有意思的。做法按 brainstorming skill 的流程走：
+先探索找空白 → 提方案 → 分节逐节获批 → 写 spec → 才动手（HARD-GATE 守住了，获批前只写探针）。
+
+**找到的空白**：Jev 在这个项目里只被问过两种问题，都关于**人**——「多在乎」（`exposureRequest`
+83 组 score）与「会怎么做」（`reactionRequest` 每人一道 choice）。没有一个关于**文本自身**。
+唯一试图问文本的 `TEXT_CHECKS.point_first` 恰恰失败：`docs/measurements.md` 记着它在
+post/product 上答案都在 0.5 附近——Jev 答不出「第一句是否重要」。
+
+**换法：不给判断题，给差分题。** 同一批人同一套问题，删掉第 i 句再读一遍，看差多少
+（消融法，`public/shared/away.js`）。
+
+**三条实测结论（探针 `scripts/probe-sentence.js`，真跑 typesafe，成本 $0.002–0.003/次）**：
+
+1. **均值承重只在「没人要的文字」上可用**。三段文本 9 句里只有 3 句的均值压过噪声；
+   婴儿车那段 3 句的均值全是 0.0003 / −0.0068 / −0.0018，作者会拿到一张空白报告。
+2. **组间拉得开度三段全过**（45–134 倍噪声），每句有 30–55 组压过自身噪声 3 倍。
+   婴儿车「急出婴儿车，九成新，」这半句在 `interest:parenting` 是 **+0.445**、
+   在 `field:student` 是 **−0.175**——均值把「一组人买、一组人掉头」抵平成 0，信号却还在。
+   → **统计量取拉得开度**（用户 m01634 看到数据后改的选，理由就是第 2 条）。
+3. **措辞本身的影响比一部分句子的信号还大**（0.0114–0.0198，iPhone 第 4 句信号只有 0.0079）。
+   消融变体要改 `instructions`（点明删了哪句），delta 里就混进了「我说了删了一句」这件事。
+   只量「同措辞复读」不够，**必须在 variants 循环里同时累计 `worded = |base − control|` 再从 delta 里减掉**。
+
+**交付形态**：按钮触发（用户 m01637 选）——不塞进 `runCheck`（不阻塞主流程）、算过不重算
+（存在 `versions.away`，回访返回 `cached: true`）、只有作者能点。
+设计另两条决定：`MAX_ABLATION_SENTENCES = 6`（最坏 9 次请求，在免费档 50 次外呼内）、
+`SPREAD_OVER_NOISE = 6`（定 1 会让每句都通过）、`STRONG_OVER_NOISE = 3`。
+
+**落点**：`public/shared/away.js`（切句 / 一路请求 / 统计 / 编排）、`migrations/0008_away.sql`
+（`ALTER TABLE versions ADD COLUMN away TEXT`）、`worker/index.js` 的 `runAway`
+（校验序 404 → 403 作者 → 409 未完 → 404 版本 → cached）、`public/render.js` 的 `awayBar`/`awayView`、
+`public/app.js` 的 `#result` 委托按钮、`public/shared/labels.js` 的 `AWAY_ZH`。
+
+**记账口径**：`batches.stage='ablate'`，`n` 用 `AWAY_N = { base:-1, control:-2, noise:-3 }`，
+`gone:<i>` 走句号下标——**负数让四路与 N 个消融路各自成行不互相累加**，
+`callReport` 按 stage 聚合后 `ablate.n === 句数 + 3`。
+
+**三个自己写的 bug（都是当场被测出来的）**：
+1. `ablationStats(parts, { base, control, noise, gone })` 的 `gone` 要是**数组**，
+   而 `runAblation` 存的是 `{'gone:0': …}` 这种带键对象——`gone[i]` 永远 undefined。
+2. `requests` 原来在 `send` 成功后才 `+=1`，**失败的那一次不计数** → 外呼上限形同虚设。
+   改成进函数就计数（尝试次数，不是成功次数）。
+3. 测试里拿「第几组」当「第几档」写期望，`groupsOf` 的顺序会变 → 改成按 key 顺序重算期望值。
+
+**「没有 NOISE 就没有门槛」**：跑不成全部路数时把 `readable` 全部压回 false，
+宁可说读不出，不说读得开（base 顶替 noise 会让 spread/noise 恒等于 1 → 每句都通过）。
+
+**验证**：真实 Jev 用落地的 `runAblation` 复跑探针数据——iPhone 4 句 / 7 次请求 / $0.0025，
+句 1 top `shopping:phone` **+0.515**（探针 +0.537）、句 2 bottom `tea` **−0.4175**（探针 −0.408）；
+婴儿车 3 句 / 6 次 / $0.0021，句 1 `interest:parenting` **+0.46**（探针 +0.445）。
+**spread/noise ≈ 121×**。`test/away.test.js` 10 组 + `test/worker.test.js` 端到端 1 组。
+
+**坑**：`impeccable detect` 的输出仍全是假阳性（底色配的 `#f5f7fc` 仓库里不存在）——
+**detector 只当线索，一切以自写脚本算的数字为准**。
+
+---
+
 ## 2026-10-02 · R31 优化轮：pick() 的切线补位是平方级——平坦分数下开局就超免费档 CPU 预算
 
 - **怎么找到的**：R30 做完轮到优化轮，先按 MEMORY 里的老规矩「先剖析再动手」量 Worker 的

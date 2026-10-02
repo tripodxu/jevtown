@@ -767,6 +767,34 @@ canvas.grid {
 
 .frow .fnum { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
 
+/* 逐句承重（R32）：一行 = 一句话 + 一条双向条 + 一句人话。
+   条从中线往两边长：绿向右=吃它的组，红色向左=掉头的组，两端各占条的一半，
+   中线本身就是「删掉这句没差」的位置，所以不用画 0 刻度。 */
+.away-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+
+.arow { display: grid; grid-template-columns: 76px minmax(0, 1fr) minmax(120px, 300px) minmax(0, 1.4fr) auto; align-items: center; gap: 12px; margin: 9px 0; }
+
+.arow .flabel { color: var(--muted); font-size: 12.5px; }
+
+.arow .apart { color: var(--text); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+
+.atwin { display: flex; height: 14px; border-radius: 4px; background: var(--inset); overflow: hidden; }
+
+/* 两端各自成段：右段靠右、左段靠左，中间留出的空当就是「没人被这句改变主意」。 */
+.atwin i { display: block; height: 100%; }
+.atwin i.aup { background: var(--face-glad); margin-left: auto; }
+.atwin i.adown { background: var(--face-sorry); margin-right: auto; }
+
+.arow .fsay { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.arow.quiet .apart { color: var(--muted); }
+.arow.quiet .fsay { font-style: italic; }
+.arow .fnum { color: var(--muted); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .arow { grid-template-columns: 1fr; gap: 4px; }
+  .arow .atwin { max-width: none; }
+}
+
 .report-meta { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; }
 
 /* 人格声音折叠：默认只露 24 张，按钮展开 */

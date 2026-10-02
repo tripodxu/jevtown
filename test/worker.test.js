@@ -275,4 +275,60 @@ test('版本深链：?v= 指到不存在的版本返回 404（不 500）', { tim
   assert.equal(latest.status, 200, '不带 v 仍取最新版');
 });
 
+test('逐句承重：非作者 403、检查未完 409、算过不重算、GET 读回 away', { timeout: 120_000 }, async () => {
+  const opening = await (await postJSON(worker, '/api/check', { preset: 'listing', text: '逐句承重验证：出 iPhone 13，128G，电池 86%，无维修，1400 元，包邮。' })).json();
+  const author = authorOf(opening);
+  const head = { 'x-jev-author': author };
+  const post = opening.post;
+
+  // 还没收尾：这一节没意义（文本的处境还在变），409
+  const early = await worker.fetch(`/api/away?post=${post}&v=1`, { method: 'POST', headers: head });
+  assert.equal(early.status, 409, `检查未完时 away=${early.status}`);
+
+  // 作者门先于 409 之前？顺序是 404 → 403 → 409，所以没令牌在 running 帖上也是 403
+  const noToken = await worker.fetch(`/api/away?post=${post}&v=1`, { method: 'POST' });
+  assert.equal(noToken.status, 403, `无令牌 away=${noToken.status}`);
+  const wrongToken = await worker.fetch(`/api/away?post=${post}&v=1`, { method: 'POST', headers: { 'x-jev-author': 'nope' } });
+  assert.equal(wrongToken.status, 403, `错令牌 away=${wrongToken.status}`);
+  const missing = await worker.fetch(`/api/away?post=nosuchpost&v=1`, { method: 'POST', headers: head });
+  assert.equal(missing.status, 404, `不存在的帖 away=${missing.status}`);
+
+  await runToDone(worker, post, opening.version, author);
+
+  const first = await (await worker.fetch(`/api/away?post=${post}&v=1`, { method: 'POST', headers: head })).json();
+  assert.equal(first.cached, false, '第一次算不该命中缓存');
+  assert.ok(first.away.sentences.length >= 2, `至少切出两句，得 ${first.away.sentences.length}`);
+  assert.ok(first.away.groups >= 60, `组数=${first.away.groups}`);
+  assert.ok(first.away.noise >= 0, '噪声底是数');
+  // 每句都带 part / 两端 / deltas，deltas 长度 = 组数
+  for (const sentence of first.away.sentences) {
+    assert.equal(sentence.deltas.length, first.away.groups, `第 ${sentence.i} 句 deltas 不齐`);
+    assert.ok(typeof sentence.readable === 'boolean');
+    assert.ok(sentence.top.id && sentence.bottom.id);
+  }
+  // mock 通道下读数可能是 0，但 spread 与门槛的关系必须自洽
+  for (const sentence of first.away.sentences) {
+    if (sentence.noiseFloor !== undefined) assert.equal(sentence.readable, sentence.spread > sentence.noiseFloor * 6);
+  }
+
+  // 记账：四路 + N 个消融路各占一行 stage='ablate'，靠 n 区分；总额要跟版本对得上
+  const detail = await (await worker.fetch(`/api/post/${post}?v=1`, { headers: head })).json();
+  const ablate = detail.report?.stages?.find((s) => s.stage === 'ablate');
+  assert.ok(ablate, '调用报告里应有 ablate 阶段');
+  assert.equal(ablate.n, first.away.sentences.length + 3, `ablate 行数=${ablate.n}（句数 + BASE/CONTROL/NOISE 三路）`);
+  assert.ok(detail.away, 'GET /api/post 应带回 away');
+  assert.equal(detail.away.sentences.length, first.away.sentences.length);
+  assert.equal(detail.awayCallable, true, '带作者令牌读报告时这一节可算');
+
+  // 算过不重算：再点一次返回同一份
+  const second = await (await worker.fetch(`/api/away?post=${post}&v=1`, { method: 'POST', headers: head })).json();
+  assert.equal(second.cached, true, '第二次应命中缓存');
+  assert.deepEqual(second.away.sentences, first.away.sentences, '回访读数不变');
+
+  // 匿名读报告：away 照给，但按钮不该亮（这一节要花钱，只有作者能点）
+  const anon = await (await worker.fetch(`/api/post/${post}?v=1`)).json();
+  assert.equal(anon.awayCallable, false, '匿名读报告时不该能算');
+  assert.ok(anon.away, '匿名也读得到已算好的结果');
+});
+
 
