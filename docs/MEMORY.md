@@ -8,6 +8,38 @@
 
 ---
 
+## 2026-10-06 · 优化轮：每 IP 日闸回归（CHECK_DAILY_LIMIT）、收波写路径增量快照、首屏 modulepreload
+
+**每 IP 日闸**：审计指出 R28 拆掉的旧闸护的是两样东西——站方钱包（BYOK-only 后确实没了）
+和 **D1 每日写入配额（还在）**。无 key 的 mock 检查同样落库，一次全城 ≈1 万行 reactions，
+免费档 10 万行/天：无闸时脚本访客一天就能耗光全站写入额度，连真实用户一起失败。
+`overDailyLimit(env, ip)` 对 check/version **双路生效**（version 自己只写一行，但给持令牌者
+开了继续烧 reactions 的口子），按 `posts.(ip, day)` 计数，代码默认 20、`CHECK_DAILY_LIMIT`
+可覆盖（0 = 不限）。键 = `CF-Connecting-IP`（边缘注入伪造不了）；**环回豁免**——第一次
+实现想用「无头 = 本地」豁免，全量测试 17 个用例 429 才发现本地 workerd 给无头请求注入
+`127.0.0.1`（显式假头则原样透传，一次性探针实测），豁免条件改成环回后生产语义不变
+（边缘 IP 来自真实对端，不可能是环回）。`npm run dev` 的 mock 零门槛不破，闸的用例用
+每轮现取的假 IP + 文件级 after 清理残留（本地库跨运行复用，写死的 IP 会被上一轮卡死）。
+这道闸替代的是 R28 前旧闸的配额那半，不是复活钱包闸。
+
+**收波写路径增量快照**：R25 把读报告从 1 万行降到 1 行，但收波每波仍全量读 reactions 算
+`reached`（最多 4 次 × 1 万行）。现在 `reached` 从上一波收波落下的 `versions.looks` 起步、
+只合并本波 rows（读 1 行），推进波次时随 plan 同批写回；`looks` 为空才全量读兜底（第一波
+= 全量；旧帖自愈，合并幂等）。终笔写 looks/reach 的口径不变（looks 不再从 reached 重建）。
+**不变式变更**：0007 注释里「running 版 looks 为 NULL」不再成立——showPost 快照路径门槛
+从 `version.looks` 改为 `version.looks && version.said != null`（said 与终笔 looks 同批），
+running 版照走逐行实时路径，v2 进行中回看 v1 仍走快照。`closeWave` 顺带把 version 传入
+`settleWave`，去掉收波路径上连续两次 `loadVersion` 的白付往返。
+
+**首屏 modulepreload**：app.js/showcase.js 的静态 import 闭包共 22 个 ESM，浏览器逐级发现
+每个层级一个往返；head 里整排 `<link rel="modulepreload">` 并行拉起（`personas-pack.js`
+~290KB 最受益）。清单手工同步（frontend.md 已记约定），新增静态 import 记得补。
+
+验证：`npm run lint` 47 文件过；`npm test` 198/198 绿（新增日闸双路用例，见
+`test/worker.test.js`「每 IP 日闸」）。
+
+---
+
 ## 2026-10-03 · 提交审计：三天里 39 个提交逐个过一遍，第二处腰斩没有找到，顺手补掉一条会让整份报告 500 的哑弹
 
 **为什么审**：R37 收尾时我把 `docs/MEMORY.md` 从 1,170 行截成 84 行，还把它提交了进去（`131d35d`）。

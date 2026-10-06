@@ -5,11 +5,9 @@ import { unstable_dev } from 'wrangler';
 export async function startWorker(vars = {}) {
   // 迁移是幂等的；--local 复用 .wrangler/state 的本地 D1。
   execSync('npx wrangler d1 migrations apply jevtown --local', { stdio: 'pipe' });
-  return unstable_dev('worker/index.js', {
-    config: 'wrangler.jsonc',
-    port: 0,
-    vars: { CROWD_DAILY_LIMIT: '0', CROWD_DAILY_BUDGET_USD: '0', ...vars }, // 测试默认不受限额
-  });
+  // 测试请求不带 CF 头 ⇒ workerd 注入 127.0.0.1，CHECK_DAILY_LIMIT 日闸按环回豁免
+  // （见 worker/index.js 的 overDailyLimit）；要测闸就在请求头里带假 IP（会原样透传）。
+  return unstable_dev('worker/index.js', { config: 'wrangler.jsonc', port: 0, vars });
 }
 
 /** 把一个版本跑完：batch 到 done，再 wave 到 done。author 经 x-jev-author 头带上。 */

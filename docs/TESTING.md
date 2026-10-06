@@ -28,14 +28,15 @@ npm run bench   # 实时监控增量统计的一次性对拍（旧全量重扫 v
 | `test/spatial.test.js` | 人群地形：成片/零散/无方差/判定不足/确定性/置换收缩/成片格不重叠；两版之差 `crowdDelta`：交集口径、差值计数、不可比编码、差场成片/零散、确定性、100×100 实跑 |
 | `test/bytes.test.js` | base64 小件 |
 | `test/pipeline.test.js` | 引擎编排（mock send 端到端） |
-| `test/worker.test.js` | Worker 集成（`unstable_dev` 起真实本地 Worker）：全链路、版本、blocked、调用报告/决策样本、每日限额双路 429、**预算闸双路由 429 + 未花超放行**、**作者校验（无头/错令牌 403、带头放行）**、**收波 CAS 不变量**、**批次认领并发不变量** |
+| `test/worker.test.js` | Worker 集成（`unstable_dev` 起真实本地 Worker）：全链路、版本、blocked、调用报告/决策样本、**每 IP 日闸双路 429（check/version，无 CF 头豁免）**、**作者校验（无头/错令牌 403、带头放行）**、**收波 CAS 不变量**、**批次认领并发不变量** |
 | `test/helper.js` | 共享夹具（非测试文件） |
 
 ## Worker 集成测试要点
 
 - 用 wrangler 的 `unstable_dev` 在本地起真实 Worker（含 D1 本地库、assets）。
-- 已验证的关键行为：每日限额对 `/api/check` **与** `/api/version` 双路 429 一致；
-  检查→批次→收波→报告全链路；预算闸对 batch/wave 429；作者令牌 403/放行；
+- 已验证的关键行为：每 IP 日闸对 `/api/check` **与** `/api/version` 双路 429 一致
+  （本地 workerd 注入的 127.0.0.1 走环回豁免，闸的用例用假头造受闸 IP）；
+  检查→批次→收波→报告全链路；作者令牌 403/放行；
   收波与批次的并发不变量（无 500、波次/人数恰好）。
 - 测试用本地 D1，不碰远程；`npm test` 前不需要 `npm run dev`（迁移由测试自行应用）。
 - **环境注意**：wrangler dev server 可能把 `Promise.all` 的请求**串行化**——并发类

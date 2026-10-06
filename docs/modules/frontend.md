@@ -135,6 +135,9 @@ app.js  fetch /api/post/:id
 - canvas 图表须可被主题重绘（注册/注销集中管理，防泄漏——审计轮修过画布泄漏）。
 - voices 卡片默认折叠 24 条，可展开全部（防 DOM 过重）。
 - BYOK key 只进 localStorage，弹窗在 `app.js`；请求头由 Worker 侧 `providerOf` 消费。
+- 首屏模块闭包（22 个 ESM）在 `index.html` head 用 `<link rel="modulepreload">` 整排
+  预载（最大的 `shared/personas-pack.js` ~290KB 最受益，无构建步骤压平不了模块瀑布）。
+  **清单是手工同步的：新增静态 import 后记得补那一排。**
 
 ## 交互细节（R6 起）
 

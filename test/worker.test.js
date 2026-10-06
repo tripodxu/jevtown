@@ -167,6 +167,36 @@ test('作者校验：没有 x-jev-author 头，batch/wave/version 全部 403；�
   assert.equal(ok.status, 200, `batch with author=${ok.status}`);
 });
 
+// 每 IP 日闸（CHECK_DAILY_LIMIT）：R28 退役的旧闸护的是两样东西，站方钱包那半死了、
+// D1 每日写入配额那半还活着——无 key 的 mock 检查同样落库，一次全城 ≈1 万行 reactions。
+// 本地 workerd 给无头请求注入 127.0.0.1（环回豁免，见 worker/index.js），闸的用例必须
+// 假头造受闸 IP；IP 每轮现取——本地库跨运行复用，写死的 IP 会被上一轮残留卡死，
+// 残留由下方 after 钩子清理。
+test('每 IP 日闸：check 超限 429，version 双路同样 429，换 IP 不受牵连', { timeout: 120_000 }, async () => {
+  const ip = `203.0.113.${(Date.now() % 180) + 20}`;
+  const head = { 'CF-Connecting-IP': ip };
+  for (let i = 0; i < 20; i++) {
+    const res = await postJSON(worker, '/api/check', { preset: 'post', text: `写入闸验证：第 ${i + 1} 条` }, head);
+    assert.equal(res.status, 200, `同 IP 第 ${i + 1} 次不该被限`);
+  }
+  const over = await postJSON(worker, '/api/check', { preset: 'post', text: '写入闸验证：超限的一条' }, head);
+  assert.equal(over.status, 429, '同 IP 第 21 次该被限');
+
+  // version 双路：限额排在作者门之前（404 → 409 → 限额 → 作者），用 blocked 帖穿过 409 门
+  const blocked = await (await postJSON(worker, '/api/check', { preset: 'listing', text: '傻逼东西你去死吧' })).json();
+  const version = await postJSON(worker, '/api/version', { post: blocked.post, text: '超限 IP 想再发一版' }, { ...head, 'x-jev-author': blocked.author });
+  assert.equal(version.status, 429, '超限 IP 的 version 也要被限');
+
+  // 限额按 IP 算：别的 IP 不受牵连；环回流量走豁免（本文件其余用例即证明）
+  const other = await postJSON(worker, '/api/check', { preset: 'post', text: '写入闸验证：换个 IP' }, { 'CF-Connecting-IP': '198.51.100.9' });
+  assert.equal(other.status, 200, '别家 IP 不该被牵连');
+});
+
+after(() => {
+  // 日闸用例的残留：本地库跨运行复用，不清会让同一假 IP 的下一轮开局即 429
+  execSync(`npx wrangler d1 execute jevtown --local --command "DELETE FROM posts WHERE ip LIKE '203.0.113.%' OR ip = '198.51.100.9'"`, { stdio: 'pipe' });
+});
+
 test('收波 CAS：并发收波只推进一次，且收波后批次还能继续', { timeout: 120_000 }, async () => {
   const opening = await (await postJSON(worker, '/api/check', {
     preset: 'product',

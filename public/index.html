@@ -16,6 +16,32 @@
     } catch (e) {}
   </script>
   <link rel="stylesheet" href="/styles.css">
+  <!-- 首屏模块闭包预载：app.js / showcase.js 两个入口静态 import 一共 22 个 ESM，浏览器
+       逐级发现、每个层级都多付一个往返；在 head 就把整张清单并行拉起，最大的
+       shared/personas-pack.js（~290KB）最受益。清单是手工同步的静态 import 闭包
+       （2026-10-06 用脚本展开核对过），新增 import 后记得补这一排。 -->
+  <link rel="modulepreload" href="/app.js">
+  <link rel="modulepreload" href="/showcase.js">
+  <link rel="modulepreload" href="/theme.js">
+  <link rel="modulepreload" href="/render.js">
+  <link rel="modulepreload" href="/charts.js">
+  <link rel="modulepreload" href="/grid.js">
+  <link rel="modulepreload" href="/tally.js">
+  <link rel="modulepreload" href="/avatar.js">
+  <link rel="modulepreload" href="/inks.js">
+  <link rel="modulepreload" href="/sharecard.js">
+  <link rel="modulepreload" href="/shared/bytes.js">
+  <link rel="modulepreload" href="/shared/feed.js">
+  <link rel="modulepreload" href="/shared/labels.js">
+  <link rel="modulepreload" href="/shared/personas.js">
+  <link rel="modulepreload" href="/shared/personas-pack.js">
+  <link rel="modulepreload" href="/shared/presets.js">
+  <link rel="modulepreload" href="/shared/replay.js">
+  <link rel="modulepreload" href="/shared/requests.js">
+  <link rel="modulepreload" href="/shared/rng.js">
+  <link rel="modulepreload" href="/shared/spatial.js">
+  <link rel="modulepreload" href="/shared/summary.js">
+  <link rel="modulepreload" href="/shared/vocab.js">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>

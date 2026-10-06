@@ -172,11 +172,26 @@ const addSpend = (db, { post, number = 1, stage, n = 0, usd = 0, tokens = 0, ms 
 // R28：站点不提供站方 key——每 IP 每日限额与全站日预算两个闸整体退役
 //（它们保护的站方钱包不存在了；真实检查一律走访客自填的 BYOK key，无 key 即 mock）。
 
-/** 一条 post 某个版本的所有反应，作为 Map<personaId, reactionId>。 */
-const reactionsMap = async (db, id, number = 1) => {
-  const { results } = await db.prepare('SELECT id, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, number).all();
-  return new Map(results.map((row) => [row.id, row.reaction]));
-};
+/**
+ * 每 IP 每日写入闸：R28 拆掉的旧闸保护的是两样东西——站方钱包（BYOK-only 后确实不存在了）
+ * 和 D1 每日写入配额（免费档 10 万行/天，一次全城检查 ≈1 万行 reactions，无 key 的 mock
+ * 检查同样落库）。钱包死了，配额还在：无闸时一个脚本访客当天就能耗光全站写入额度，连真实
+ * 用户一起失败。这道轻闸只护配额，对 /api/check 与 /api/version 双路生效——version 自己
+ * 只写一行，但它给持令牌者开了继续烧 reactions 的口子，不能只堵 check。
+ * 键是 CF-Connecting-IP（生产由边缘注入，客户端伪造不了）。环回豁免：本地 workerd 给
+ * 无头请求注入 127.0.0.1（2026-10-06 实测；测试里的显式假头会原样透传），而生产边缘的
+ * 这个头来自真实 TCP 对端、不可能是环回——本地 mock 零门槛与测试不受限由此而来，也绕开
+ * 「测试用满本地日限额」的坑（MEMORY.md 2026-09-29）。0 = 不限。
+ */
+const CHECK_DAILY_LIMIT_DEFAULT = 20;
+
+async function overDailyLimit(env, ip) {
+  if (ip === 'local' || ip === '127.0.0.1' || ip === '::1') return false;
+  const limit = Number(env.CHECK_DAILY_LIMIT ?? CHECK_DAILY_LIMIT_DEFAULT);
+  if (!(limit > 0)) return false;
+  const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM posts WHERE ip = ? AND day = ?').bind(ip, today()).first();
+  return row.n >= limit;
+}
 
 // -- 路由 ----------------------------------------------------------------------
 
@@ -216,9 +231,10 @@ async function runCheck(request, env) {
     : null;
   if (presetId === 'product' && !prices) return fail('product 需要 prices：至少两个正数的数组，如 [9,19,39,79]');
 
-  // posts.ip 只剩观测用途（每 IP 限额已随 R28 退役），但列还在迁移里，写 NULL 等于把这份
-  // 观测数据扔掉——同一个头仍读一次，两个 INSERT 共用。
+  // posts.ip 供每 IP 日闸计数（R28 退役的旧闸护的是站方钱包；D1 写入配额那半由
+  // CHECK_DAILY_LIMIT 接管），两个 INSERT 共用这一次读取。
   const ip = request.headers.get('CF-Connecting-IP') ?? 'local';
+  if (await overDailyLimit(env, ip)) return fail('daily check limit for this IP is reached', 429);
   const day = today();
   const provider = providerOf(env, request);
   const pool = 'zh';
@@ -287,6 +303,10 @@ async function runVersion(request, env) {
   if (post.state === 'running') return fail('previous version is still running', 409);
 
   const day = today();
+  // 限额排在作者之前（404 → 409 → 限额 → 作者）：per-IP 计数是全局信息，先返回无害。
+  if (await overDailyLimit(env, request.headers.get('CF-Connecting-IP') ?? 'local')) {
+    return fail('daily check limit for this IP is reached', 429);
+  }
   if (!authorOk(request, post)) return fail('this post is not yours', 403);
 
   const row = await env.DB.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS number FROM versions WHERE post = ?').bind(id).first();
@@ -470,7 +490,7 @@ async function closeWave(url, request, env) {
       await release();
       return fail('this wave has no answers yet', 409);
     }
-    return await settleWave(env, post, id, v, request);
+    return await settleWave(env, post, id, v, request, version);
   } catch (error) {
     await release();
     throw error;
@@ -478,8 +498,9 @@ async function closeWave(url, request, env) {
 }
 
 /** 收波本体：算情绪定去留；推进则把状态还回 running（批次还要继续），收尾则置 done。 */
-async function settleWave(env, post, id, v, request) {
-  const version = await loadVersion(env.DB, id, v);
+async function settleWave(env, post, id, v, request, version) {
+  // version 由 closeWave 传入（空波门刚读过同一行）：closing 期间 batch/wave 都以 running
+  // 为门，这一行不会再被写，重读一次是白付的 D1 往返。
   const plan = JSON.parse(version.plan);
   const presetId = post.preset;
   const pool = post.pool;
@@ -490,7 +511,7 @@ async function settleWave(env, post, id, v, request) {
 
   const waveIndex = plan.wave;
   const order = plan.history[String(waveIndex)];
-  const { results: waveRows } = await env.DB.prepare('SELECT reaction FROM reactions WHERE post = ? AND number = ? AND wave = ?')
+  const { results: waveRows } = await env.DB.prepare('SELECT id, reaction FROM reactions WHERE post = ? AND number = ? AND wave = ?')
     .bind(id, v, waveIndex)
     .all();
   const drawn = waveRows.map((row) => row.reaction);
@@ -498,7 +519,27 @@ async function settleWave(env, post, id, v, request) {
   const waveTravels = travels(presetId, drawn);
   const waveInfo = { index: waveIndex, asked: order.length, size: drawn.length, mood: round2(waveMood), travels: waveTravels };
 
-  const reached = await reactionsMap(env.DB, id, v);
+  // reached（pid → reaction）从上一波收波落下的 looks 快照起步，只把本波 reactions 合并进来
+  // ——R25 把读报告从 1 万行降到 1 行，这里把同一思路搬到写侧（收波每波都要付的全量读）。
+  // looks 为空才全量读一次兜底：第一波收波本就等于全量；R25 之前就在 running 的旧帖也走
+  // 这条路自愈。合并幂等（主键 (post, number, id) 一人一行），少谁补谁。
+  const keys = Object.keys(preset.reactions);
+  const bytes = new Uint8Array(CROWD);
+  if (version.looks) {
+    bytes.set(decodeBytes(version.looks));
+  } else {
+    const { results: allRows } = await env.DB.prepare('SELECT id, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, v).all();
+    for (const row of allRows) {
+      const index = keys.indexOf(row.reaction);
+      bytes[row.id] = index >= 0 ? index + 1 : 0;
+    }
+  }
+  for (const row of waveRows) {
+    const index = keys.indexOf(row.reaction);
+    bytes[row.id] = index >= 0 ? index + 1 : 0;
+  }
+  const reached = new Map();
+  for (let pid = 0; pid < CROWD; pid++) if (bytes[pid]) reached.set(pid, keys[bytes[pid] - 1]);
 
   // 传播：够 glad，且还有波次与还没看到的人。
   if (waveTravels && waveIndex + 1 < maxWaves && reached.size < CROWD) {
@@ -509,7 +550,8 @@ async function settleWave(env, post, id, v, request) {
     plan.answered = 0;
     plan.history[String(waveIndex + 1)] = next.map((who) => who.id);
     await env.DB.batch([
-      env.DB.prepare('UPDATE versions SET plan = ? WHERE post = ? AND number = ?').bind(JSON.stringify(plan), id, v),
+      // 快照随波次推进落库：下一波收波从它起步，不再全量读 reactions。
+      env.DB.prepare('UPDATE versions SET plan = ?, looks = ? WHERE post = ? AND number = ?').bind(JSON.stringify(plan), encodeBytes(bytes), id, v),
       env.DB.prepare("UPDATE posts SET state = 'running' WHERE id = ? AND state = 'closing'").bind(id),
     ]);
     return json({ wave: waveInfo, travels: true, next: { index: waveIndex + 1, total: next.length } });
@@ -555,15 +597,10 @@ async function settleWave(env, post, id, v, request) {
   }
   const said = mergeSaid(parts, missing);
   // 报告快照（R25）：冻结的两份字节随"置 done"同批写入——读路径从 1 万行 reactions 降到 1 行。
-  // bytes 来自 reached（pid → reaction）；waveBytes 用 plan.history（波次 → 名单）回填，
-  // 只标记真正被判定到的人（批次失败的问过但没答，不算到达）。
-  const snapKeys = Object.keys(preset.reactions);
-  const snapBytes = new Uint8Array(CROWD);
+  // looks 就是上面合并好的 bytes（与 reached 同一来源，不必再从 reached 重建一遍）；
+  // snapWave 用 plan.history（波次 → 名单）回填，只标记真正被判定到的人
+  //（批次失败的问过但没答，不算到达）。
   const snapWave = new Uint8Array(CROWD);
-  for (const [pid, reaction] of reached) {
-    const index = snapKeys.indexOf(reaction);
-    snapBytes[pid] = index >= 0 ? index + 1 : 0;
-  }
   for (const waveKey of Object.keys(plan.history)) {
     for (const pid of plan.history[waveKey]) {
       if (reached.has(pid)) snapWave[pid] = Number(waveKey) + 1;
@@ -572,7 +609,7 @@ async function settleWave(env, post, id, v, request) {
   await env.DB.batch([
     // 收尾提问的花费也计入版本总账（batches 流水之外，versions.usd 是页面显示的口径）。
     env.DB.prepare('UPDATE versions SET said = ?, looks = ?, reach = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
-      .bind(JSON.stringify(said), encodeBytes(snapBytes), encodeBytes(snapWave), round4(askUsd), askTokens, id, v),
+      .bind(JSON.stringify(said), encodeBytes(bytes), encodeBytes(snapWave), round4(askUsd), askTokens, id, v),
     env.DB.prepare("UPDATE posts SET state = 'done' WHERE id = ? AND state = 'closing'").bind(id),
   ]);
   return json({ wave: waveInfo, travels: false, done: true, reach: reached.size, followUp: followUp && { asked: followUp.asked } });
@@ -663,9 +700,12 @@ async function showPost(id, env, url, request = null) {
   const byWave = new Map();
   let versions;
   let report;
-  if (version.looks) {
-    // 快照路径（R25）：冻结版报告的两份字节已在收波时写进 versions，
+  if (version.looks && version.said != null) {
+    // 快照路径（R25）：终笔收波把两份字节随 said 同批写进 versions，此后不再变化，
     // 每波反应名单可从 bytes × waveBytes 无损重建——reactions 表一次都不用读。
+    // 门槛是"这一版收过终笔"（said 与 looks 同批落库）：2026-10-06 起 looks 随波次
+    // 推进增量落库，running 版的快照只是中间态、reach 还没写，实时语义必须走下面的
+    // 逐行路径；而 v2 进行中回看 v1（said 已落）仍走快照，对比区不因新版本在跑而变慢。
     bytes.set(decodeBytes(version.looks));
     waveBytes.set(decodeBytes(version.reach ?? ''));
     for (let pid = 0; pid < bytes.length; pid++) {
