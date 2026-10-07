@@ -17,17 +17,21 @@ const current = { post: null, version: 1 };
 // 最近一次渲染的报告 payload（分享卡片的数据源）
 let lastView = null;
 
-// BYOK：访客自填的 Jev key（localStorage），随每个 API 请求头发给 Worker；mock 通道不发。
+// 通道选择：访客自填的 Jev key（BYOK，localStorage）随请求头发给 Worker；显式选 mock 时
+// 只发通道名不发 key——2026-10-07 起站点默认通道是真模型（Zen 免费档），mock 必须显式点选
+// 才能回到离线假答案，"清空"回到站点默认。
 const byok = () => {
   const provider = localStorage.getItem('jevtown.provider');
   const key = localStorage.getItem('jevtown.key');
   return provider && key && provider !== 'mock' ? { provider, key } : null;
 };
+const mockChosen = () => localStorage.getItem('jevtown.provider') === 'mock';
 let currentAuthor = null; // 当前检查的作者令牌（/api/check 响应带回；刷新页面即失效，需重开检查）
 const authHeaders = () => {
   const picks = byok();
   return {
     ...(picks ? { 'x-jev-provider': picks.provider, 'x-jev-key': picks.key } : {}),
+    ...(mockChosen() ? { 'x-jev-provider': 'mock' } : {}),
     ...(currentAuthor ? { 'x-jev-author': currentAuthor } : {}),
   };
 };
@@ -356,6 +360,8 @@ $('form').addEventListener('submit', async (event) => {
       currentAuthor = opening.author;
       localStorage.setItem(`jevtown.author.${opening.post}`, opening.author);
     }
+    siteProvider = opening.provider ?? siteProvider;
+    refreshModeChip();
     if (opening.state === 'blocked') {
       const reason = `Jev 拒绝发布：${opening.blocked.map((id) => BLOCKED_ZH[id] ?? id).join('、')}`;
       status(reason, 1);
@@ -597,9 +603,13 @@ document.addEventListener('click', async (event) => {
 // -- 通道设置（BYOK） -----------------------------------------------------------
 
 const modeChip = $('modeChip');
+let siteProvider = null; // 开局响应带回的默认通道名（mock / opencode…）：访客不填 key 也该知道这轮是假答案还是站点免费档
 const refreshModeChip = () => {
   const picks = byok();
-  modeChip.textContent = picks ? `BYOK · ${picks.provider}` : '默认通道';
+  modeChip.textContent = picks
+    ? `BYOK · ${picks.provider}`
+    : mockChosen() ? 'mock（离线）'
+    : siteProvider ? `默认 · ${siteProvider}` : '默认通道';
 };
 
 $('settingsBtn').addEventListener('click', () => {
@@ -611,7 +621,11 @@ $('settingsBtn').addEventListener('click', () => {
 $('saveKey').addEventListener('click', () => {
   const provider = $('providerSel').value;
   const key = $('keyInput').value.trim();
-  if (provider === 'mock' || !key) {
+  if (provider === 'mock') {
+    // 显式 mock：记住这个选择，请求头带 x-jev-provider: mock 让 Worker 回离线假答案
+    localStorage.setItem('jevtown.provider', 'mock');
+    localStorage.removeItem('jevtown.key');
+  } else if (!key) {
     localStorage.removeItem('jevtown.provider');
     localStorage.removeItem('jevtown.key');
   } else {

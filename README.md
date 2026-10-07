@@ -7,9 +7,9 @@
 > 🤖 **给 agent**：先读 [AGENTS.md](./AGENTS.md)（入口 + 分层阅读协议），文档全集索引在 [docs/README.md](./docs/README.md)，项目记忆在 [docs/MEMORY.md](./docs/MEMORY.md)（最新在上）。不需要全量阅读仓库。
 
 > **当前状态：已上线（预览域）→ https://jevtown-cn.xd04040212.workers.dev 。**
-> 站点不提供站方 key：不填 key 全流程可玩（mock 模式，零花费）；填自己的 TypeSafe /
-> OpenRouter key（BYOK，只存本浏览器）即刻切真实模型，花自己的钱，不受任何额度限制；
-> 也可选 OpenCode Zen 免费档（`jev-1.13-free`，限时免费，零成本）。
+> **不填 key 就走真实模型**：站点默认通道是 OpenCode Zen 免费档（`jev-1.13-free`，匿名可用、
+> 限时零花费）；也可以在 Key… 里填自己的 TypeSafe / OpenRouter / Zen key（BYOK，只存本浏览器）；
+> mock 离线假答案仍在，作为显式选择的演示模式（默认通道、BYOK、mock 三者都有）。
 
 ---
 
@@ -24,13 +24,13 @@ npm run dev        # 应用本地 D1 迁移并启动 → http://localhost:5191
 
 打开页面：**输入框就在首屏**——选类型（帖子/闲置转让/商品文案/标题）、写文字、点"让小镇来读"。下面紧挨着的两份存档示例只是回放演示，仅供参考。
 
-### 填入你的 Jev key（可选）
+### 换用自己的 Jev 通道（可选）
 
-页面右上角 **"Key…" 按钮**：
+站点默认通道（OpenCode Zen 免费档）已经免费走真实模型，不填 key 即可玩。想用自己的 key（更稳的通道或别的供应商）——页面右上角 **"Key…" 按钮**：
 
 1. 通道选 `TypeSafe 官方 API`、`OpenRouter Decisions API` 或 `OpenCode Zen 免费档`
 2. 粘贴你的 key（TypeSafe 的 `apikey_…`、OpenRouter 的 `sk-or-…`，或 Zen 的 API key）
-3. 保存后顶栏出现 `BYOK · typesafe` 徽章，下一次检查就走真实模型
+3. 保存后顶栏出现 `BYOK · typesafe` 徽章，下一次检查就走你的通道；选 `mock` 则回到离线假答案
 
 - key 只存在**本浏览器 localStorage**，随每个 API 请求头发给本 Worker 使用，不落库不打日志；不填或选 mock 时走离线假答案（按文本特征 + 人格属性算出的确定性概率，小镇样貌真实但不花钱）。
 - Zen 免费档（`jev-1.13-free`）限时零成本：花费记 0，tokens 照常上报；付费档与 TypeSafe/OpenRouter 的花费口径不变。

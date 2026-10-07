@@ -22,16 +22,17 @@ export const PROVIDERS = {
     model: 'typesafe/jev-1.13',
     usd: (usage) => usage?.cost ?? 0,
   },
-  // 免费档（限时），2026-10-07 真 key 实测：响应 { answers, usage:{input_tokens,output_tokens} }，
-  // tokens 真实上报（开局 93 题 8,012、百人 Choice 批 21,168），只是不计费——账面成本恒 0。
-  // 排在本表末位：env 兜底只在显式 JEV_PROVIDER=opencode 或唯一有它的 key 时才启用，
-  // 别让免费档默默吃下全站流量（它有限额）。
+  // 免费档（限时）。匿名可用是该通道的立足点（2026-10-07 实测：无 Authorization 头也 200，
+  // 响应 answers + usage + 顶层 cost:"0"，连发 6 次无 429）——运营方配 OPENCODE_API_KEY
+  // 只是走认证流量更稳，不是必需。openAccess 让 ask() 在没有 key 时照发（且不带
+  // Authorization 头），providerOf 也据此把它作为免 key 的兜底通道。
   opencode: {
     label: 'OpenCode Zen',
     keyName: 'OPENCODE_API_KEY',
     url: 'https://opencode.ai/zen/v1/systemone',
     model: 'jev-1.13-free',
     usd: () => 0,
+    openAccess: true,
   },
 };
 
@@ -62,7 +63,9 @@ const usable = (answer) => Boolean(answer) && typeof answer === 'object' && !Arr
  * the call would be paid for twice over once the batch is never asked again.
  */
 export async function ask(provider, { state, questions }, retries = { left: Infinity }) {
-  if (!provider?.apiKey) throw Object.assign(new Error('no Jev API key is set'), { code: 'no_key' });
+  if (!provider?.apiKey && !provider?.openAccess) {
+    throw Object.assign(new Error('no Jev API key is set'), { code: 'no_key' });
+  }
 
   let lastError;
   let throttled = 0;
@@ -77,7 +80,10 @@ export async function ask(provider, { state, questions }, retries = { left: Infi
       const sentAt = performance.now();
       const response = await fetch(provider.url, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}),
+        },
         body: JSON.stringify({ model: provider.model, state, questions }),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });

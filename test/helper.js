@@ -7,7 +7,13 @@ export async function startWorker(vars = {}) {
   execSync('npx wrangler d1 migrations apply jevtown --local', { stdio: 'pipe' });
   // 测试请求不带 CF 头 ⇒ workerd 注入 127.0.0.1，CHECK_DAILY_LIMIT 日闸按环回豁免
   // （见 worker/index.js 的 overDailyLimit）；要测闸就在请求头里带假 IP（会原样透传）。
-  return unstable_dev('worker/index.js', { config: 'wrangler.jsonc', port: 0, vars });
+  // JEV_PROVIDER 强制 mock：unstable_dev 的 vars 覆盖 wrangler.jsonc 与 .dev.vars
+  // （旧限额闸时代验证过），生产配置改成匿名免费档后测试也绝不碰真实 Jev。
+  return unstable_dev('worker/index.js', {
+    config: 'wrangler.jsonc',
+    port: 0,
+    vars: { JEV_PROVIDER: 'mock', ...vars },
+  });
 }
 
 /** 把一个版本跑完：batch 到 done，再 wave 到 done。author 经 x-jev-author 头带上。 */

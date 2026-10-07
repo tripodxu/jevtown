@@ -2,7 +2,7 @@
 // 不发真请求——真实调用一律走 mock（TESTING.md 规则 3）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PROVIDERS, pickProvider, TYPESAFE_USD_PER_TOKEN } from '../public/shared/jev.js';
+import { PROVIDERS, pickProvider, ask, TYPESAFE_USD_PER_TOKEN } from '../public/shared/jev.js';
 
 test('三条通道都在册，地址与模型 id 各就各位', () => {
   assert.equal(PROVIDERS.typesafe.url, 'https://api.typesafe.ai/v1/systemone');
@@ -37,4 +37,30 @@ test('pickProvider：显式指定 opencode 优先；只有它的 key 也能选�
   assert.equal(pickProvider({}), null);
   // 注意 JEV_PROVIDER=mock 的拦截在 worker 的 providerOf（wanted !== 'mock' 才问 pickProvider），
   // 不在 pickProvider 自己——这里不钉它。
+});
+
+test('openAccess 通道无 key 照发：不带 Authorization 头、能拿回答案；普通通道无 key 仍拒绝', async () => {
+  const calls = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, headers: init.headers });
+    return new Response(
+      JSON.stringify({ answers: { q: { type: 'noul', noul: 0.5 } }, usage: { input_tokens: 1 }, cost: '0' }),
+      { status: 200 },
+    );
+  };
+  try {
+    const res = await ask(PROVIDERS.opencode, { state: 'x', questions: { q: { type: 'noul', instructions: '?' } } });
+    assert.equal(res.usd, 0, '免费档账面恒 0');
+    assert.equal(calls[0].url, PROVIDERS.opencode.url);
+    assert.equal(Object.prototype.hasOwnProperty.call(calls[0].headers, 'Authorization'), false,
+      '匿名请求不该带 Authorization 头');
+    await assert.rejects(
+      ask(PROVIDERS.typesafe, { state: 'x', questions: {} }),
+      (error) => error.code === 'no_key',
+      '普通通道没有 key 必须拒绝，不能裸发',
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
 });

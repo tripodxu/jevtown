@@ -8,6 +8,29 @@
 
 ---
 
+## 2026-10-07 · 默认通道改为真实 Jev：Zen 匿名免费档坐实，浏览器直发被 CORS 否决
+
+**三个实测事实**（当日真流量验证）：① Zen 的 systemone **无 Authorization 头也 200**——
+`answers` + `usage` + 顶层 `cost:"0"`，连发 6 次无 429（匿名限流存在但宽松）；② **Zen 不开
+CORS**：OPTIONS 预检 404、POST 响应无任何 `Access-Control-Allow-*` 头——「从访客浏览器
+直发 Jev 请求」不可行，只能从 Worker（服务器侧）发；③ 站方 key 进浏览器 = 公开送人，本来
+也不该走那条路。三个诉求（免 key 免费 / BYOK / 从服务器发）因此自洽。
+
+**落点**：`providerOf` 兜底链 = BYOK 头 → 站方 secret（`OPENCODE_API_KEY`，可选，走认证
+流量更稳）→ **Zen 匿名免费档**（`PROVIDERS.opencode.openAccess`）→ `JEV_PROVIDER=mock`
+（本地/测试）。`ask()` 对 openAccess 通道放行无 key 请求且不发 Authorization 头（普通通道
+无 key 仍 `no_key` 拒绝，单测钉住）。wrangler.jsonc 的 `JEV_PROVIDER` 改为 `opencode`；
+**test/helper.js 强制注入 `JEV_PROVIDER: 'mock'`**（unstable_dev vars 覆盖 config，旧闸时代
+验证过的机制）——测试永碰不到真实通道，`report.provider === 'mock'` 既有用例就是金丝雀。
+
+**连带修正**：默认通道变真模型后，设置弹窗里的 mock 选项会被"不发 BYOK 头"静默吞掉——
+现在显式 mock 走 `x-jev-provider: mock` 头（无 key），Worker 侧 `providerOf` 认这个头；
+app.js 的 modeChip 显示开局响应带回的真实通道名（`默认 · opencode` / `mock（离线）` /
+`BYOK · <通道>`）。R28 的"站点不提供站方 key"论述正式失效：它拆的是付费 key 的钱包风险，
+免费匿名通道没有钱包可烧，滥用面由每 IP 日闸管。
+
+---
+
 ## 2026-10-07 · 新通道：OpenCode Zen 免费档的 Jev（jev-1.13-free）——已用真 key 三连发验证
 
 **契约（2026-10-07 真 key 实测）**：`POST https://opencode.ai/zen/v1/systemone`，Bearer 认证，

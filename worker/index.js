@@ -131,6 +131,9 @@ const RETRIES_PER_INVOCATION = 40;
 function providerOf(env, request = null) {
   if (request) {
     const headerName = String(request.headers.get('x-jev-provider') ?? '').trim().toLowerCase();
+    // 访客在设置里显式选了 mock（只发通道名不带 key）：回到离线假答案——默认通道是真模型的
+    // 2026-10-07 起，mock 必须能被显式选回去，不能靠"不发 BYOK 头"来表达。
+    if (headerName === 'mock') return { name: 'mock', ask: createMockAsk() };
     const headerKey = String(request.headers.get('x-jev-key') ?? '').trim();
     if (headerKey && PROVIDERS[headerName]) {
       const picked = { ...PROVIDERS[headerName], apiKey: headerKey };
@@ -144,6 +147,14 @@ function providerOf(env, request = null) {
     if (picked) {
       const retries = { left: RETRIES_PER_INVOCATION };
       return { name: picked.name, ask: (req) => askJev(picked, req, retries) };
+    }
+    // 纯免费兜底（2026-10-07）：Zen 的 systemone 匿名开放，无 key 也有真实 Jev——
+    // 这就是访客「什么都不填」时的默认通道。匿名限流随时可能收紧，届时运营方
+    // `npx wrangler secret put OPENCODE_API_KEY` 即回到认证流量，代码与访客都无感。
+    // R28 拆站方 key 闸拆的是钱包风险：这条通道免费，没有钱包可烧，每 IP 日闸管滥用。
+    if (PROVIDERS.opencode.openAccess) {
+      const retries = { left: RETRIES_PER_INVOCATION };
+      return { name: 'opencode', ask: (req) => askJev(PROVIDERS.opencode, req, retries) };
     }
   }
   return { name: 'mock', ask: createMockAsk() };

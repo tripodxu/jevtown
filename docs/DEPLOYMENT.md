@@ -12,16 +12,20 @@ npx wrangler secret put TYPESAFE_API_KEY            # 站方兜底 key（正常�
 npx wrangler deploy                   # → https://jevtown-cn.xd04040212.workers.dev
 ```
 
-- **计费模型（R28 决策）**：站点不提供站方 key、无站内额度。真实检查一律走访客
-  自填的 BYOK key（花自己的钱，或零成本走 OpenCode Zen 免费档 `jev-1.13-free`，限时）；
-  无 key 即 mock。曾经的每 IP 每日限额与全站日预算闸已整体退役——但 D1 写入配额那半的
-  保护由每 IP 日闸（`CHECK_DAILY_LIMIT`，2026-10-06 回归）接管，线上有按 IP 的 429。
+- **计费模型（R28 决策 + 2026-10-07 更新）**：默认通道 = OpenCode Zen 免费档
+  （`jev-1.13-free`，**匿名可用、零花费**）——访客不填 key 就有真实 Jev；也可自填 BYOK key
+  （TypeSafe / OpenRouter / Zen，只进浏览器）。站方 key 变为可选：
+  `npx wrangler secret put OPENCODE_API_KEY` 把匿名流量升级为认证流量（限流更稳），不配也
+  照常工作。R28 拆闸拆的是付费 key 的钱包风险，免费通道无钱包可烧；滥用面由每 IP 日闸
+  （`CHECK_DAILY_LIMIT`，2026-10-06 回归）接管。请求一律从 Worker 侧发——Zen 不开 CORS，
+  浏览器直发不可行（2026-10-07 实测）。
 - `TYPESAFE_API_KEY` secret 仅作兜底（`JEV_PROVIDER=mock` 时实际不消费）；撤销它
   不影响 BYOK 用户。
 
 ## 后续待办（按优先级）
 
-- [ ] **线上冒烟测试**：首页 200、`/api/feed` 200、一次 BYOK 真实检查跑通全流程
+- [ ] **线上冒烟测试**：首页 200、`/api/feed` 200、**不填 key 的默认通道检查跑通**（开局
+      响应 `provider` 应为 `opencode`、花费 $0）、一次 BYOK 真实检查跑通全流程
       （部署当日 curl 到 workers.dev 超时，未区分网络/部署问题，先 `curl -v` 复核）。
 - [ ] **闸退役后的 `npm test` 全量绿**（部署当日集成测试起停缓慢被中断；已验证
       lint ✓ 与 `node --check`，被删的只有三个闸用例）。
@@ -34,7 +38,8 @@ npx wrangler deploy                   # → https://jevtown-cn.xd04040212.worker
 |---|---|---|
 | 访客 BYOK | 浏览器 localStorage（页面 Key… 弹窗） | **线上真实检查的唯一路径** |
 | 本地 CLI | `.env.local` 放 `TYPESAFE_API_KEY` / `OPENROUTER_API_KEY` / `OPENCODE_API_KEY`（gitignored） | `npm run check` |
-| 站方兜底 secret | `npx wrangler secret put TYPESAFE_API_KEY` | 已设置；`JEV_PROVIDER=mock` 下不消费 |
+| 站方免费档 secret（可选） | `npx wrangler secret put OPENCODE_API_KEY` | 把默认通道的匿名流量升级为认证流量，更稳；不配也照常工作 |
+| 站方兜底 secret | `npx wrangler secret put TYPESAFE_API_KEY` | 已设置；仅 `JEV_PROVIDER=typesafe` 时消费 |
 
 - BYOK key 只存浏览器 localStorage，随请求头发给本 Worker，不落库不打日志。
 
@@ -42,7 +47,8 @@ npx wrangler deploy                   # → https://jevtown-cn.xd04040212.worker
 
 - [ ] `npm run lint` ✓ 且 `npm test` 全绿（mock 通道，不花钱）。
 - [ ] 线上首页与 `/api/feed` 200。
-- [ ] 用真实 BYOK key 跑一次检查抽查成本口径（预期单波 600 人 $0.01–0.02）。
+- [ ] 用真实 BYOK key 跑一次检查抽查成本口径（预期单波 600 人 $0.01–0.02）；
+      默认通道（Zen 免费档）抽查花费应为 $0。
 
 ## 成本口径（实测，2026-09-28）
 

@@ -85,7 +85,7 @@
         <textarea id="text" rows="5" maxlength="2000"
           placeholder="写下你想发的内容……&#10;试试：一条二手手机转让、一句朋友圈观点、一个商品卖点。"></textarea>
         <div class="row between">
-          <span class="hint" id="hint">mock 模式答案确定、不花钱；接真实 key 走真实模型——OpenCode Zen 免费档限时零成本，其余按次计费。</span>
+          <span class="hint" id="hint">不填 key 也走真实模型：站点免费通道（OpenCode Zen 免费档，限时零花费）；Key… 里可换自己的通道，mock 是离线假答案。</span>
           <button id="go" type="submit">让小镇来读</button>
         </div>
 
@@ -183,7 +183,7 @@
 
   <dialog id="settings" aria-labelledby="settingsTitle">
     <h2 id="settingsTitle">Jev 通道设置</h2>
-    <p class="hint">填你自己的 key 即刻切换真实模型。key 只存在本浏览器 localStorage、随每个请求发给本 Worker 使用，不落库不打日志；正式部署请改用 Worker secret。</p>
+    <p class="hint">不填即走站点免费通道（真实 Jev，零花费）。填自己的 key 即刻切换：key 只存在本浏览器 localStorage、随每个请求发给本 Worker 使用，不落库不打日志；站点运营方的 key 走 Worker secret，绝不进浏览器。</p>
     <div class="row">
       <label for="providerSel">通道</label>
       <select id="providerSel">

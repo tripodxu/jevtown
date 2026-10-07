@@ -81,12 +81,14 @@ GET  /api/post/:id      报告与图谱的数据源（含调用报告与决策�
 | 变量 | 现值 | 含义 |
 |---|---|---|
 | `CROWD_MAX_WAVES` | 4 | 文本最多传几波（1=仅第一波 600 人） |
-| `JEV_PROVIDER` | mock | mock / typesafe / openrouter / opencode；留空=有哪个 key 用哪个（TypeSafe 优先，免费档排末位） |
+| `JEV_PROVIDER` | opencode | mock / typesafe / openrouter / opencode；无 key 时兜底到 Zen 匿名免费档（openAccess） |
 
-站点不提供站方 key：**所有真实检查一律走访客自填的 BYOK key**（花自己的钱，或零成本走
-OpenCode Zen 免费档 `jev-1.13-free`），无 key 即 mock。曾经的每 IP 每日限额与全站日预算闸
-（R28 前）已整体退役——但 D1 写入配额那半的保护由每 IP 日闸（`CHECK_DAILY_LIMIT`）接管，
-见 [worker-api.md](modules/worker-api.md)。
+**默认通道即真实模型**（2026-10-07 起）：Zen 的 systemone 匿名开放，访客不填 key 也有真实
+Jev、零花费；BYOK 头与站方 secret（`OPENCODE_API_KEY`，可选）优先于匿名兜底。请求一律从
+Worker（服务器侧）发出：Zen 不开 CORS（2026-10-07 实测 OPTIONS 404、响应无 ACAO 头），
+浏览器直发不可行；站方 key 也绝不能进访客浏览器。R28 拆闸拆的是站方付费 key 的钱包风险——
+免费匿名通道没有钱包可烧，滥用面由每 IP 日闸（`CHECK_DAILY_LIMIT`）接管，见
+[worker-api.md](modules/worker-api.md)。
 
 ## 关键设计约束
 
