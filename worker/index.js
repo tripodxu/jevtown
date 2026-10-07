@@ -223,7 +223,10 @@ export default {
       return fail('not found', 404);
     } catch (error) {
       console.error(path, error);
-      return fail(error?.message ?? 'worker error', error?.status ?? 500);
+      // 上游限流/网关繁忙（ask() 的 429/5xx 重试耗尽）是"稍后再来"，不是我们的 bug：
+      // 503 让客户端的退避重试能识别它；error.status 是 D1 等抛出的既有状态码，优先尊重。
+      const upstreamBusy = error?.throttled || error?.throttledTimes;
+      return fail(error?.message ?? 'worker error', error?.status ?? (upstreamBusy ? 503 : 500));
     }
   },
 };

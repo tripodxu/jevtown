@@ -49,26 +49,35 @@ const readJSON = async (url) => {
 };
 
 /**
- * 批次请求的限流退避：匿名免费档是全站共享的通道，撞 429 是常态而非异常。Worker 侧对 Jev
- * 的重试耗尽后才把 429/5xx 浮上来，此时认领已在服务端条件回滚，原地重试同一批人是安全的。
- * 指数退避（2s→30s，带抖动）最多 6 轮 ≈ 90s，仍失败才把检查判死；409（认领冲突，提示语
- * 本身就是 retry）与网络层失败同样值得原地重试，400/403/404 这类确定性失败照旧即死。
+ * 批次与开局的限流退避：匿名免费档是全站共享的通道，撞 429 是常态而非异常（线上冒烟
+ * 实测开局就能撞上）。Worker 侧对 Jev 的重试耗尽后把限流以 503 浮上来，此时批次的认领
+ * 已在服务端条件回滚、开局还没写任何行（provider.ask 先于全部 INSERT），原地重试安全。
+ * 指数退避（2s→30s，带抖动）最多 6 轮 ≈ 90s，仍失败才报错；网络层失败同样值得原地重试。
+ * 可重试的状态码按路由区分：批次 409 是认领冲突（提示语就是 retry），开局/版本 409 是
+ * 确定性冲突（上一版还在跑），重试它没有意义。
  */
 const BATCH_BACKOFF = [2_000, 4_000, 8_000, 16_000, 30_000, 30_000];
-const getBatch = async (url) => {
+const retrying = async (label, send, { conflictRetryable }) => {
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(url, { headers: authHeaders() }).catch(() => null);
+    const res = await send().catch(() => null);
     const data = (await res?.json().catch(() => undefined)) ?? {};
     if (res?.ok) return data;
     const code = res?.status ?? 0; // 0 = 网络/浏览器层失败，同样值得原地重试
-    const retryable = code === 0 || code === 409 || code === 429 || code >= 500;
+    const retryable = code === 0 || code === 429 || code >= 500 || (conflictRetryable && code === 409);
     if (!retryable || attempt >= BATCH_BACKOFF.length) {
       throw new Error(data?.error ?? res?.statusText ?? 'network error');
     }
-    status(`Jev 通道限流，${BATCH_BACKOFF[attempt] / 1000}s 后重试同一批（第 ${attempt + 1}/${BATCH_BACKOFF.length} 轮）`);
+    status(`Jev 通道繁忙或限流，${BATCH_BACKOFF[attempt] / 1000}s 后重试（第 ${attempt + 1}/${BATCH_BACKOFF.length} 轮）`);
     await new Promise((resolve) => setTimeout(resolve, BATCH_BACKOFF[attempt] * (0.8 + Math.random() / 2.5)));
   }
 };
+const getBatch = (url) => retrying('批次', () => fetch(url, { headers: authHeaders() }), { conflictRetryable: true });
+const postRetry = (url, body) =>
+  retrying('开局', () => fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body ?? {}),
+  }), { conflictRetryable: false });
 
 const postJSON = async (url, body) => {
   const res = await fetch(url, {
@@ -368,8 +377,8 @@ $('form').addEventListener('submit', async (event) => {
   try {
     status(current.post ? '再发一版：Jev 重新掂量……' : '开局：Jev 正在掂量这段文字是写给谁的……', 0.02);
     const opening = current.post
-      ? await postJSON('/api/version', { post: current.post, text, audience })
-      : await postJSON('/api/check', { preset, text, prices: preset === 'product' ? [9, 19, 39, 79] : undefined, audience });
+      ? await postRetry('/api/version', { post: current.post, text, audience })
+      : await postRetry('/api/check', { preset, text, prices: preset === 'product' ? [9, 19, 39, 79] : undefined, audience });
 
     if (opening.author) {
       currentAuthor = opening.author;
