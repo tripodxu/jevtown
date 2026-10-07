@@ -13,10 +13,11 @@ test('三条通道都在册，地址与模型 id 各就各位', () => {
   assert.equal(PROVIDERS.opencode.keyName, 'OPENCODE_API_KEY');
 });
 
-test('Zen 免费档的记账：没有 usage 对象也不炸，账面恒 0', () => {
-  // Zen 回顶层 cost:"0"，无 usage——ask() 会以 provider.usd(undefined) 取账
+test('Zen 免费档的记账：usage 爱给不给，账面恒 0（免费档不计费）', () => {
+  // 2026-10-07 真 key 实测：响应带 usage{input_tokens,output_tokens}，tokens 走 ask() 的
+  // 通用读取即可；免费档不计费，usd 必须恒 0，且不能被 usage 里的任何字段带偏
   assert.equal(PROVIDERS.opencode.usd(undefined), 0);
-  assert.equal(PROVIDERS.opencode.usd({}), 0);
+  assert.equal(PROVIDERS.opencode.usd({ input_tokens: 21_168 }), 0);
   // 对照：TypeSafe 按 input_tokens 计价（每百万 token $0.042），不能被顺手改成 0
   assert.equal(PROVIDERS.typesafe.usd({ input_tokens: 1e6 }), 1e6 * TYPESAFE_USD_PER_TOKEN);
 });

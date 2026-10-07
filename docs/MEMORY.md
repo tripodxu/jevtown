@@ -8,13 +8,17 @@
 
 ---
 
-## 2026-10-07 · 新通道：OpenCode Zen 免费档的 Jev（jev-1.13-free）
+## 2026-10-07 · 新通道：OpenCode Zen 免费档的 Jev（jev-1.13-free）——已用真 key 三连发验证
 
-**契约（2026-10 实测 curl 口径）**：`POST https://opencode.ai/zen/v1/systemone`，Bearer 认证，
-请求与 TypeSafe 官方 API 同形状（`{model, state, questions}`），响应顶层 `{answers, cost:"0"}`
-——**没有 usage 对象**：tokens 记 0、账面成本恒 0（免费档限时）。模型 id `jev-1.13-free`
-（付费档 `jev-1.13` 也在 Zen 上，本次未接）。key 是 OpenCode Zen 的 API key：
-env 用 `OPENCODE_API_KEY`，BYOK 请求头 `x-jev-provider=opencode` + `x-jev-key`。
+**契约（2026-10-07 真 key 实测）**：`POST https://opencode.ai/zen/v1/systemone`，Bearer 认证，
+请求与 TypeSafe 官方 API 同形状（`{model, state, questions}`），响应
+`{answers, usage:{input_tokens,output_tokens}}`——**usage 存在、tokens 真实上报**（用户提供
+的 curl 示例是裁剪版，别再信「无 usage」）。免费档不计费：花费账面恒 0（`usd: () => 0`）。
+实测读数：单题 noul 4.0s/317 tokens；开局 93 题 1.6s/8,012 tokens（83 组分数、blocked=0，
+`openingAnswers` 直接可用）；百人 Choice 批 1.2s/21,168 tokens（`probabilities` 形状与
+`drawReaction` 咬合）。**满城检查 ≈ 2M+ tokens 免费额度，限额未知，撞 429 靠现有退避重试**。
+模型 id `jev-1.13-free`（付费档 `jev-1.13` 也在 Zen 上，未接）。key：env 用
+`OPENCODE_API_KEY`，BYOK 请求头 `x-jev-provider=opencode` + `x-jev-key`。
 
 **改动**：`jev.js` 的 PROVIDERS 加 opencode 通道，env 兜底顺序排在 typesafe/openrouter
 **之后**（免费档有限额，仅显式指定或唯一有 key 时启用，别让它默默吃全站流量）；设置弹窗

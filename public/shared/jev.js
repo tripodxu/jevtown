@@ -22,9 +22,10 @@ export const PROVIDERS = {
     model: 'typesafe/jev-1.13',
     usd: (usage) => usage?.cost ?? 0,
   },
-  // 免费档（限时），2026-10 实测口径：响应是顶层 { answers, cost: "0" }，没有 usage 对象——
-  // tokens 记 0、账面成本恒 0。排在本表末位：env 兜底只在显式 JEV_PROVIDER=opencode 或
-  // 唯一有它的 key 时才启用，别让免费档默默吃下全站流量（它有限额）。
+  // 免费档（限时），2026-10-07 真 key 实测：响应 { answers, usage:{input_tokens,output_tokens} }，
+  // tokens 真实上报（开局 93 题 8,012、百人 Choice 批 21,168），只是不计费——账面成本恒 0。
+  // 排在本表末位：env 兜底只在显式 JEV_PROVIDER=opencode 或唯一有它的 key 时才启用，
+  // 别让免费档默默吃下全站流量（它有限额）。
   opencode: {
     label: 'OpenCode Zen',
     keyName: 'OPENCODE_API_KEY',
