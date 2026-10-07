@@ -183,7 +183,7 @@
 
   <dialog id="settings" aria-labelledby="settingsTitle">
     <h2 id="settingsTitle">Jev 通道设置</h2>
-    <p class="hint">不填即走站点免费通道（真实 Jev，零花费）。填自己的 key 即刻切换：key 只存在本浏览器 localStorage、随每个请求发给本 Worker 使用，不落库不打日志；站点运营方的 key 走 Worker secret，绝不进浏览器。</p>
+    <p class="hint">不填即走站点免费通道（真实 Jev，零花费）。填自己的 key 即刻切换：key 只存在本浏览器 localStorage、随每个请求发给本 Worker 使用，不落库不打日志；站方不持有任何 key（零 secret）。</p>
     <div class="row">
       <label for="providerSel">通道</label>
       <select id="providerSel">
@@ -197,6 +197,10 @@
       <label for="keyInput">API Key</label>
       <input id="keyInput" type="password" placeholder="apikey_… / sk-or-… / Zen 的 key" autocomplete="off">
     </div>
+    <!-- 领 key 的入口跟通道走：三家的 key 页都在这，选哪家去哪家。 -->
+    <p class="hint">key 在哪领：<a href="https://typesafe.ai" target="_blank" rel="noopener">TypeSafe</a> ·
+      <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener">OpenRouter</a> ·
+      <a href="https://opencode.ai/auth" target="_blank" rel="noopener">OpenCode Zen（免费）</a></p>
     <div class="row between">
       <button class="ghost" id="clearKey" type="button">清除</button>
       <button class="primary" id="saveKey" type="button">保存</button>
@@ -207,7 +211,7 @@
 
   <footer>
     引擎与架构来自 <a href="https://github.com/gaborishka/jevtown" target="_blank" rel="noopener">gaborishka/jevtown</a>（MIT）。
-    决策模型：<a href="https://typesafe.ai" target="_blank" rel="noopener">Jev</a>，TypeSafe 的 System One。本地开发中，未上线。
+    决策模型：<a href="https://typesafe.ai" target="_blank" rel="noopener">Jev</a>，TypeSafe 的 System One。默认通道为 OpenCode Zen 免费档（限时）。
   </footer>
 
   <script type="module" src="/app.js"></script>
