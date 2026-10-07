@@ -18,7 +18,8 @@ npx wrangler deploy                   # → https://jevtown-cn.xd04040212.worker
   `npx wrangler secret put OPENCODE_API_KEY` 把匿名流量升级为认证流量（限流更稳），不配也
   照常工作。R28 拆闸拆的是付费 key 的钱包风险，免费通道无钱包可烧；滥用面由每 IP 日闸
   （`CHECK_DAILY_LIMIT`，2026-10-06 回归）接管。请求一律从 Worker 侧发——Zen 不开 CORS，
-  浏览器直发不可行（2026-10-07 实测）。
+  浏览器直发不可行（2026-10-07 实测），Worker 出口是 Cloudflare 共享 IP 池。匿名通道撞 429
+  时前端自动退避重试（2–30s × 6 轮），检查不会因此中断；认证 secret 是降低限流概率的主力。
 - `TYPESAFE_API_KEY` secret 仅作兜底（`JEV_PROVIDER=mock` 时实际不消费）；撤销它
   不影响 BYOK 用户。
 

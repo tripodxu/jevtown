@@ -48,11 +48,26 @@ const readJSON = async (url) => {
   return data;
 };
 
-const getJSON = async (url) => {
-  const res = await fetch(url, { headers: authHeaders() });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? res.statusText);
-  return data;
+/**
+ * 批次请求的限流退避：匿名免费档是全站共享的通道，撞 429 是常态而非异常。Worker 侧对 Jev
+ * 的重试耗尽后才把 429/5xx 浮上来，此时认领已在服务端条件回滚，原地重试同一批人是安全的。
+ * 指数退避（2s→30s，带抖动）最多 6 轮 ≈ 90s，仍失败才把检查判死；409（认领冲突，提示语
+ * 本身就是 retry）与网络层失败同样值得原地重试，400/403/404 这类确定性失败照旧即死。
+ */
+const BATCH_BACKOFF = [2_000, 4_000, 8_000, 16_000, 30_000, 30_000];
+const getBatch = async (url) => {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { headers: authHeaders() }).catch(() => null);
+    const data = (await res?.json().catch(() => undefined)) ?? {};
+    if (res?.ok) return data;
+    const code = res?.status ?? 0; // 0 = 网络/浏览器层失败，同样值得原地重试
+    const retryable = code === 0 || code === 409 || code === 429 || code >= 500;
+    if (!retryable || attempt >= BATCH_BACKOFF.length) {
+      throw new Error(data?.error ?? res?.statusText ?? 'network error');
+    }
+    status(`Jev 通道限流，${BATCH_BACKOFF[attempt] / 1000}s 后重试同一批（第 ${attempt + 1}/${BATCH_BACKOFF.length} 轮）`);
+    await new Promise((resolve) => setTimeout(resolve, BATCH_BACKOFF[attempt] * (0.8 + Math.random() / 2.5)));
+  }
 };
 
 const postJSON = async (url, body) => {
@@ -380,7 +395,7 @@ $('form').addEventListener('submit', async (event) => {
     let done = false;
     while (!done) {
       for (;;) {
-        const batch = await getJSON(`/api/batch?post=${current.post}&v=${current.version}`);
+        const batch = await getBatch(`/api/batch?post=${current.post}&v=${current.version}`);
         if (batch.done) break;
         paintBatch(batch);
         status(`第 ${batch.wave + 1} 波：Jev 已判定 ${batch.answered} / ${batch.total} 人`, batch.answered / Math.max(1, batch.total));
