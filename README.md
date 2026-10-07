@@ -32,10 +32,9 @@ npm run dev        # 应用本地 D1 迁移并启动 → http://localhost:5191
 2. 粘贴你的 key（TypeSafe 的 `apikey_…`、OpenRouter 的 `sk-or-…`，或 Zen 的 API key）
 3. 保存后顶栏出现 `BYOK · typesafe` 徽章，下一次检查就走你的通道；选 `mock` 则回到离线假答案
 
-- key 只存在**本浏览器 localStorage**，随每个 API 请求头发给本 Worker 使用，不落库不打日志；不填或选 mock 时走离线假答案（按文本特征 + 人格属性算出的确定性概率，小镇样貌真实但不花钱）。
-- Zen 免费档（`jev-1.13-free`）限时零成本：花费记 0，tokens 照常上报；付费档与 TypeSafe/OpenRouter 的花费口径不变。
-- 正式部署请改用 Worker secret（`npx wrangler secret put TYPESAFE_API_KEY`），页面上就不用填了。
-- 真实花费量级：单波 600 人约 $0.01–0.02，全城 1 万人约 $0.10–0.15（实测记录见 [docs/research/real-api-report.md](./docs/research/real-api-report.md)）。
+- key 只存在**本浏览器 localStorage**，随每个 API 请求头发给本 Worker 使用，不落库不打日志；清空选择则回到站点默认的匿名免费通道，选 `mock` 是离线假答案。
+- **站点零 secret**：站方不持有任何 key，所有真实通道的 key 都由访客在自己的浏览器里配置。
+- 付费通道（TypeSafe / OpenRouter）的真实花费量级：单波 600 人约 $0.01–0.02，全城 1 万人约 $0.10–0.15（实测记录见 [docs/research/real-api-report.md](./docs/research/real-api-report.md)）；Zen 免费档花费恒 $0。
 
 ### 终端直跑（不经过站点）
 

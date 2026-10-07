@@ -12,14 +12,13 @@ npx wrangler secret put TYPESAFE_API_KEY            # 站方兜底 key（正常�
 npx wrangler deploy                   # → https://jevtown-cn.xd04040212.workers.dev
 ```
 
-- **计费模型（R28 决策 + 2026-10-07 更新）**：默认通道 = OpenCode Zen 免费档
-  （`jev-1.13-free`，**匿名可用、零花费**）——访客不填 key 就有真实 Jev；也可自填 BYOK key
-  （TypeSafe / OpenRouter / Zen，只进浏览器）。站方 key 变为可选：
-  `npx wrangler secret put OPENCODE_API_KEY` 把匿名流量升级为认证流量（限流更稳），不配也
-  照常工作。R28 拆闸拆的是付费 key 的钱包风险，免费通道无钱包可烧；滥用面由每 IP 日闸
-  （`CHECK_DAILY_LIMIT`，2026-10-06 回归）接管。请求一律从 Worker 侧发——Zen 不开 CORS，
-  浏览器直发不可行（2026-10-07 实测），Worker 出口是 Cloudflare 共享 IP 池。匿名通道撞 429
-  时前端自动退避重试（2–30s × 6 轮），检查不会因此中断；认证 secret 是降低限流概率的主力。
+- **计费模型（R28 决策 + 2026-10-07 两次更新）**：**站方零 secret**——真实通道的 key 全部
+  由访客自带（BYOK，三条通道任选、只存访客自己的浏览器）；访客不填 key 时兜底走
+  OpenCode Zen 匿名免费档（`jev-1.13-free`，匿名可用、零花费，**不需要站方任何配置**）。
+  mock 是显式选择的离线演示。R28 拆闸拆的是付费 key 的钱包风险；滥用面由每 IP 日闸
+  （`CHECK_DAILY_LIMIT`，2026-10-06 回归）接管。请求一律从 Worker 侧发——Zen 不开 CORS
+  （实测），Worker 出口是 Cloudflare 共享 IP 池；匿名通道撞 429 时前端自动退避重试
+  （2–30s × 6 轮）。想分散限流：访客各领一个免费的 Zen key 走 BYOK，per-key 额度天然分散。
 - `TYPESAFE_API_KEY` secret 仅作兜底（`JEV_PROVIDER=mock` 时实际不消费）；撤销它
   不影响 BYOK 用户。
 
@@ -37,12 +36,12 @@ npx wrangler deploy                   # → https://jevtown-cn.xd04040212.worker
 
 | 方式 | 位置 | 适用 |
 |---|---|---|
-| 访客 BYOK | 浏览器 localStorage（页面 Key… 弹窗） | **线上真实检查的唯一路径** |
+| 访客 BYOK | 浏览器 localStorage（页面 Key… 弹窗） | **全部真实通道的唯一 key 来源（三条通道任选，含 opencode）** |
 | 本地 CLI | `.env.local` 放 `TYPESAFE_API_KEY` / `OPENROUTER_API_KEY` / `OPENCODE_API_KEY`（gitignored） | `npm run check` |
-| 站方免费档 secret（可选） | `npx wrangler secret put OPENCODE_API_KEY` | 把默认通道的匿名流量升级为认证流量，更稳；不配也照常工作 |
-| 站方兜底 secret | `npx wrangler secret put TYPESAFE_API_KEY` | 已设置；仅 `JEV_PROVIDER=typesafe` 时消费 |
+| ~~站方 secret~~ | — | **零 secret**：TYPESAFE_API_KEY 已于 2026-10-07 删除（`wrangler secret list` = []），站方不再持有任何 key |
 
-- BYOK key 只存浏览器 localStorage，随请求头发给本 Worker，不落库不打日志。
+- BYOK key 只存浏览器 localStorage，随请求头发给本 Worker，不落库不打日志；站方零 secret，
+  没有任何 key 需要在 Cloudflare 侧配置。
 
 ## 上线后检查清单（每次重大变更后）
 

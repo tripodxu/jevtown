@@ -8,6 +8,22 @@
 
 ---
 
+## 2026-10-07 · 站方零 secret 落地：真实通道的 key 全部由访客自带，线上 secret 清零
+
+**决策**：站方不持有任何 key。访客 BYOK（typesafe / openrouter / **opencode** 任一，只存
+访客自己的浏览器）承担所有真实通道；无 key 兜底 = Zen 匿名免费档（本就不需要 secret）；
+mock 为显式选择的离线演示。昨轮"secret put OPENCODE_API_KEY 降限流"的建议作废——降限流
+的正路是访客各领各的免费 Zen key 走 BYOK（per-key 额度天然分散），站方不代持。
+
+**执行与验证**：线上的 TYPESAFE_API_KEY 已实删（`npx wrangler secret delete`；删除前部署
+的是 R28 后代码、该 secret 本就不消费，零影响），`wrangler secret list` = []。BYOK
+opencode 头路径用真 key 实测打通：`.dev.vars` 强制 mock 的本地 Worker 上，带
+`x-jev-provider: opencode + x-jev-key` 的开局请求 2.2s 返回 running、provider=opencode——
+访客 key 正确穿透优先级链覆盖默认通道。最终优先级链（worker-api.md 已记）：访客显式 mock 头
+→ 访客 BYOK 头 → 站方 env key（零 secret 下恒空，仅为自托管保留）→ Zen 匿名免费档 → mock。
+
+---
+
 ## 2026-10-07 · 限流对策：从访客 IP 发出核实为不可行，改为客户端退避重试
 
 **「让 Jev 请求从访客 IP 发出以分散限流」不可行，两条路都堵死**：① 浏览器直发被 CORS 挡死

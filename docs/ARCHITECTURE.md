@@ -84,10 +84,11 @@ GET  /api/post/:id      报告与图谱的数据源（含调用报告与决策�
 | `JEV_PROVIDER` | opencode | mock / typesafe / openrouter / opencode；无 key 时兜底到 Zen 匿名免费档（openAccess） |
 
 **默认通道即真实模型**（2026-10-07 起）：Zen 的 systemone 匿名开放，访客不填 key 也有真实
-Jev、零花费；BYOK 头与站方 secret（`OPENCODE_API_KEY`，可选）优先于匿名兜底。请求一律从
+Jev、零花费；访客 BYOK 头（三通道任一，含 opencode）优先于匿名兜底，**站方零 secret**——
+所有 key 都在访客自己的浏览器里。请求一律从
 Worker（服务器侧）发出：Zen 不开 CORS（2026-10-07 实测 OPTIONS 404、响应无 ACAO 头），
-浏览器直发不可行；站方 key 也绝不能进访客浏览器。R28 拆闸拆的是站方付费 key 的钱包风险——
-免费匿名通道没有钱包可烧，滥用面由每 IP 日闸（`CHECK_DAILY_LIMIT`）接管，见
+浏览器直发不可行；Worker 出口是 Cloudflare 共享 IP 池。R28 拆闸拆的是站方付费 key 的钱包
+风险——免费匿名通道没有钱包可烧，滥用面由每 IP 日闸（`CHECK_DAILY_LIMIT`）接管，见
 [worker-api.md](modules/worker-api.md)。
 
 ## 关键设计约束

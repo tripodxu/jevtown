@@ -50,9 +50,13 @@
    0——站点低报花费约 3 倍、日预算闸失明（2026-09-30 实地测试抓到，mock 全 0 抓不到）。
    显示口径不受影响（toFixed(3/4)）。
    ⚠️ 历史坑：收尾提问花费曾漏记进 `versions.usd`（已修复，见 [MEMORY.md](../MEMORY.md)）。
-5. **BYOK**：`providerOf(env, request)` 按请求头 `x-je-*`（页面 key）优先于 env；
-   key 只透传，不落库不打日志。**所有计费路由（含收波的 follow-up/收尾提问）都透传
-   request**——曾出现 settleWave 丢头导致收波段静默落 mock 的计费口径事故，已修复。
+5. **通道优先级（`providerOf`）**：访客显式 mock 头（`x-jev-provider: mock`，无 key）→
+   访客 BYOK 头（`x-jev-provider` + `x-jev-key`，typesafe / openrouter / opencode 任一）→
+   站方 env key（**零 secret 设计下恒空**，仅为自托管保留）→ Zen 匿名免费档（openAccess，
+   无 key 兜底）→ `JEV_PROVIDER=mock`（本地/测试直达）。key 只透传，不落库不打日志；
+   **所有计费路由（含收波的 follow-up/收尾提问）都透传 request**——曾出现 settleWave 丢头
+   导致收波段静默落 mock 的计费口径事故，已修复。BYOK opencode 已用真 key 实测打通
+   （2026-10-07）：`JEV_PROVIDER=mock` 的本地 Worker 上，访客头正确覆盖默认通道。
 6. **人群缓存**：`crowdOf(pool)` isolate 级缓存 10,000 人格，避免每次检查重建。
 7. **地形缓存**（R7）：`terrainFor(..., frozen)` 按 `post.v` 缓存 `crowdTerrain` 结果——
    反应只在 running 期间增长，**只对非 running（closing/done）的版本写缓存**；running 中的
