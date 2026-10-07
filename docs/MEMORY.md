@@ -8,6 +8,23 @@
 
 ---
 
+## 2026-10-07 · 上线即撞墙：Zen 对 Cloudflare Worker 共享出口持续 429，按 IP 判与 key 无关
+
+**部署后冒烟**：首页/feed 200；无 key 开局 14s 后 500（Worker 5 连重试耗尽）。排查三步定位：
+① 本机裸打带 key/无 key 均 200（3s）；② Worker 出口连打 4 发（间隔 15s）全部 429→503；
+③ **BYOK opencode 带 key 经 Worker 同样 429**——判据闭环：限流按来源 IP/网段，Worker 的
+共享出口段被 Zen 拉黑式限流，key 和匿名都救不了；今早本地 workerd 的"成功"走的是本机网络，
+不能代表线上出口。**三种真实可用性**：CLI 无 key 畅通（住宅 IP）；站点免费通道尽力而为
+（退避 6 轮≈90s 后失败，已给「填自己的 key」出路提示）；BYOK opencode 经 Worker 与匿名同
+命运（TypeSafe/OpenRouter 是独立限流方，未测）。
+
+**连带修掉的两个工程缺口**：开局/版本请求此前没有退避（只有批次有）——现在统一走
+`retrying()`，且 409 语义按路由区分（批次=认领冲突可重试，开局=上一版在跑的确定性冲突
+不重试）；Worker 把上游限流从 500 诚实化为 **503**（500 留给真 bug；`error.throttled` 是
+ask() 重试耗尽后带的标记）。根治需要干净出口（VPS 小代理等），未实施、未承诺。
+
+---
+
 ## 2026-10-07 · 站方零 secret 落地：真实通道的 key 全部由访客自带，线上 secret 清零
 
 **决策**：站方不持有任何 key。访客 BYOK（typesafe / openrouter / **opencode** 任一，只存

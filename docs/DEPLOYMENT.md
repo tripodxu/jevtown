@@ -17,8 +17,16 @@ npx wrangler deploy                   # → https://jevtown-cn.xd04040212.worker
   OpenCode Zen 匿名免费档（`jev-1.13-free`，匿名可用、零花费，**不需要站方任何配置**）。
   mock 是显式选择的离线演示。R28 拆闸拆的是付费 key 的钱包风险；滥用面由每 IP 日闸
   （`CHECK_DAILY_LIMIT`，2026-10-06 回归）接管。请求一律从 Worker 侧发——Zen 不开 CORS
-  （实测），Worker 出口是 Cloudflare 共享 IP 池；匿名通道撞 429 时前端自动退避重试
-  （2–30s × 6 轮）。想分散限流：访客各领一个免费的 Zen key 走 BYOK，per-key 额度天然分散。
+  （实测），Worker 出口是 Cloudflare 共享 IP 池。
+
+⚠️ **出口限流约束（2026-10-07 上线实测，改架构前先读）**：Zen 对 Cloudflare Worker 的
+**共享出口 IP 段持续 429**（Worker 侧 5 连重试 + 客户端 6 轮退避都打不穿），而同一时刻
+本机/住宅 IP 带 key、不带 key 都是 200——限流按来源 IP/网段判，与 key 无关（BYOK opencode
+经 Worker 同被拦）。当前真实可用性：**免费默认通道 = 尽力而为**（时段好时能通，失败时
+前端退避 90s 后给出「填自己的 key」出路提示）；**终端 CLI 无 key 可用**（`npm run check`
+走本机网络，畅通）；**BYOK TypeSafe/OpenRouter 未测**（它们是独立限流方，可能不受此影响，
+访客自助验证）；BYOK opencode 经 Worker 与匿名通道同命运。根治需要干净出口（独立小代理/
+VPS 中转），未实施。
 - `TYPESAFE_API_KEY` secret 仅作兜底（`JEV_PROVIDER=mock` 时实际不消费）；撤销它
   不影响 BYOK 用户。
 

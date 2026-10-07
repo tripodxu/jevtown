@@ -431,9 +431,15 @@ $('form').addEventListener('submit', async (event) => {
     announce('检查完成，报告已生成');
     await loadFeed();
   } catch (error) {
-    $('statusLine').innerHTML = `<span class="error">${esc(error.message)}</span>`;
+    // 免费通道走 Worker 共享出口，被上游按 IP 限流是常态（2026-10-07 线上实测：本机畅通、
+    // Worker 出口持续 429）——退避 6 轮仍失败时给访客一条真正能走的路，而不是一句裸报错。
+    const limited = /rate limit|限流/i.test(error.message);
+    const message = limited
+      ? `${error.message}——免费通道此刻繁忙。在 Key… 里填自己的 key（如 OpenCode Zen 免费领取）可立即走专用额度。`
+      : error.message;
+    $('statusLine').innerHTML = `<span class="error">${esc(message)}</span>`;
     $('statusBar').style.transform = 'scaleX(0)';
-    announce(`检查失败：${error.message}`);
+    announce(`检查失败：${message}`);
   } finally {
     $('go').disabled = false;
   }
