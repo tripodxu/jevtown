@@ -13,8 +13,9 @@ npx wrangler deploy                   # → https://jevtown-cn.xd04040212.worker
 ```
 
 - **计费模型（R28 决策）**：站点不提供站方 key、无站内额度。真实检查一律走访客
-  自填的 BYOK key（花自己的钱）；无 key 即 mock。曾经的每 IP 每日限额与全站日预算
-  闸已整体退役——线上没有全局 429。
+  自填的 BYOK key（花自己的钱，或零成本走 OpenCode Zen 免费档 `jev-1.13-free`，限时）；
+  无 key 即 mock。曾经的每 IP 每日限额与全站日预算闸已整体退役——但 D1 写入配额那半的
+  保护由每 IP 日闸（`CHECK_DAILY_LIMIT`，2026-10-06 回归）接管，线上有按 IP 的 429。
 - `TYPESAFE_API_KEY` secret 仅作兜底（`JEV_PROVIDER=mock` 时实际不消费）；撤销它
   不影响 BYOK 用户。
 
@@ -32,7 +33,7 @@ npx wrangler deploy                   # → https://jevtown-cn.xd04040212.worker
 | 方式 | 位置 | 适用 |
 |---|---|---|
 | 访客 BYOK | 浏览器 localStorage（页面 Key… 弹窗） | **线上真实检查的唯一路径** |
-| 本地 CLI | `.env.local` 放 `TYPESAFE_API_KEY`（gitignored） | `npm run check` |
+| 本地 CLI | `.env.local` 放 `TYPESAFE_API_KEY` / `OPENROUTER_API_KEY` / `OPENCODE_API_KEY`（gitignored） | `npm run check` |
 | 站方兜底 secret | `npx wrangler secret put TYPESAFE_API_KEY` | 已设置；`JEV_PROVIDER=mock` 下不消费 |
 
 - BYOK key 只存浏览器 localStorage，随请求头发给本 Worker，不落库不打日志。

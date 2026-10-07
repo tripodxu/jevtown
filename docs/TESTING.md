@@ -49,7 +49,7 @@ npm run bench   # 实时监控增量统计的一次性对拍（旧全量重扫 v
 
 1. 引擎新函数 → 纯函数单测（同目录 `test/` 加文件或并入现有文件）。
 2. Worker 新行为 → 进 `test/worker.test.js`，用 `unstable_dev`，断言状态码 + JSON 形状。
-3. **不接真实 Jev**：任何测试不得调用 typesafe/openrouter；需要"真实概率形状"时用
+3. **不接真实 Jev**：任何测试不得调用 typesafe/openrouter/opencode；需要"真实概率形状"时用
    `shared/mock.js` 或手写夹具。
 4. 限额/记账类改动必须带回归用例（这两类都出过只修一边的事故）。
 

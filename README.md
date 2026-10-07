@@ -8,7 +8,8 @@
 
 > **当前状态：已上线（预览域）→ https://jevtown-cn.xd04040212.workers.dev 。**
 > 站点不提供站方 key：不填 key 全流程可玩（mock 模式，零花费）；填自己的 TypeSafe /
-> OpenRouter key（BYOK，只存本浏览器）即刻切真实模型，花自己的钱，不受任何额度限制。
+> OpenRouter key（BYOK，只存本浏览器）即刻切真实模型，花自己的钱，不受任何额度限制；
+> 也可选 OpenCode Zen 免费档（`jev-1.13-free`，限时免费，零成本）。
 
 ---
 
@@ -27,11 +28,12 @@ npm run dev        # 应用本地 D1 迁移并启动 → http://localhost:5191
 
 页面右上角 **"Key…" 按钮**：
 
-1. 通道选 `TypeSafe 官方 API` 或 `OpenRouter Decisions API`
-2. 粘贴你的 key（TypeSafe 的 `apikey_…` 或 OpenRouter 的 `sk-or-…`）
+1. 通道选 `TypeSafe 官方 API`、`OpenRouter Decisions API` 或 `OpenCode Zen 免费档`
+2. 粘贴你的 key（TypeSafe 的 `apikey_…`、OpenRouter 的 `sk-or-…`，或 Zen 的 API key）
 3. 保存后顶栏出现 `BYOK · typesafe` 徽章，下一次检查就走真实模型
 
 - key 只存在**本浏览器 localStorage**，随每个 API 请求头发给本 Worker 使用，不落库不打日志；不填或选 mock 时走离线假答案（按文本特征 + 人格属性算出的确定性概率，小镇样貌真实但不花钱）。
+- Zen 免费档（`jev-1.13-free`）限时零成本，调用报告里花费记 0、tokens 不可得记 0；付费档与 TypeSafe/OpenRouter 的花费口径不变。
 - 正式部署请改用 Worker secret（`npx wrangler secret put TYPESAFE_API_KEY`），页面上就不用填了。
 - 真实花费量级：单波 600 人约 $0.01–0.02，全城 1 万人约 $0.10–0.15（实测记录见 [docs/research/real-api-report.md](./docs/research/real-api-report.md)）。
 

@@ -85,7 +85,7 @@
         <textarea id="text" rows="5" maxlength="2000"
           placeholder="写下你想发的内容……&#10;试试：一条二手手机转让、一句朋友圈观点、一个商品卖点。"></textarea>
         <div class="row between">
-          <span class="hint" id="hint">mock 模式答案确定、不花钱；接真实 key 后按次计费。</span>
+          <span class="hint" id="hint">mock 模式答案确定、不花钱；接真实 key 走真实模型——OpenCode Zen 免费档限时零成本，其余按次计费。</span>
           <button id="go" type="submit">让小镇来读</button>
         </div>
 
@@ -190,11 +190,12 @@
         <option value="mock">mock（离线假答案，不花钱）</option>
         <option value="typesafe">TypeSafe 官方 API（api.typesafe.ai）</option>
         <option value="openrouter">OpenRouter Decisions API</option>
+        <option value="opencode">OpenCode Zen（jev-1.13-free，限时免费）</option>
       </select>
     </div>
     <div class="row">
       <label for="keyInput">API Key</label>
-      <input id="keyInput" type="password" placeholder="apikey_… / sk-or-…" autocomplete="off">
+      <input id="keyInput" type="password" placeholder="apikey_… / sk-or-… / Zen 的 key" autocomplete="off">
     </div>
     <div class="row between">
       <button class="ghost" id="clearKey" type="button">清除</button>

@@ -1,6 +1,6 @@
-// Talking to Jev. Two ways in: TypeSafe's own API and OpenRouter's Decisions API. Both take the
-// same { state, questions } and answer in the same shape; they differ in the address, the model id
-// and in who reports the price.
+// Talking to Jev. Three ways in: TypeSafe's own API, OpenRouter's Decisions API and OpenCode
+// Zen's System One gateway. All take the same { state, questions } and answer in the same shape;
+// they differ in the address, the model id and in who reports the price.
 
 const TIMEOUT_MS = 30_000;
 const MAX_ATTEMPTS = 5;
@@ -21,6 +21,16 @@ export const PROVIDERS = {
     url: 'https://openrouter.ai/api/alpha/decisions',
     model: 'typesafe/jev-1.13',
     usd: (usage) => usage?.cost ?? 0,
+  },
+  // 免费档（限时），2026-10 实测口径：响应是顶层 { answers, cost: "0" }，没有 usage 对象——
+  // tokens 记 0、账面成本恒 0。排在本表末位：env 兜底只在显式 JEV_PROVIDER=opencode 或
+  // 唯一有它的 key 时才启用，别让免费档默默吃下全站流量（它有限额）。
+  opencode: {
+    label: 'OpenCode Zen',
+    keyName: 'OPENCODE_API_KEY',
+    url: 'https://opencode.ai/zen/v1/systemone',
+    model: 'jev-1.13-free',
+    usd: () => 0,
   },
 };
 

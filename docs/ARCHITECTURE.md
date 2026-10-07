@@ -10,7 +10,7 @@
 浏览器（public/ 无框架前端）
   │  POST /api/check · POST /api/version · GET /api/batch · POST /api/wave · GET /api/post/:id
   ▼
-Cloudflare Worker（worker/index.js）── 调用 ──► Jev（TypeSafe System One / OpenRouter / mock）
+Cloudflare Worker（worker/index.js）── 调用 ──► Jev（TypeSafe System One / OpenRouter / OpenCode Zen / mock）
   │  读写
   ▼
 D1（posts / versions / reactions / batches）
@@ -50,7 +50,7 @@ D1（posts / versions / reactions / batches）
 | `summary.js` | 上游 | 计数、分组分析、提升倍数、需求曲线 |
 | `check.js` | 上游 | `runCheck` 主编排（引擎侧） |
 | `personas.js` | 上游 | 100×100=10,000 人格网格、人格行生成 |
-| `jev.js` | 上游 | provider 定义与 `ask`（typesafe / openrouter） |
+| `jev.js` | 上游 | provider 定义与 `ask`（typesafe / openrouter / opencode） |
 | `vocab.js` | **新写** | 中文词表（兴趣/职业/年龄/性情/预算…） |
 | `labels.js` | **新写** | 全部中文标签单源（界面文案的中枢） |
 | `mock.js` | **新写** | 假 Jev：按文本特征 + 人格属性算确定性概率 |
@@ -81,11 +81,12 @@ GET  /api/post/:id      报告与图谱的数据源（含调用报告与决策�
 | 变量 | 现值 | 含义 |
 |---|---|---|
 | `CROWD_MAX_WAVES` | 4 | 文本最多传几波（1=仅第一波 600 人） |
-| `JEV_PROVIDER` | mock | mock / typesafe / openrouter；留空=有哪个 key 用哪个 |
+| `JEV_PROVIDER` | mock | mock / typesafe / openrouter / opencode；留空=有哪个 key 用哪个（TypeSafe 优先，免费档排末位） |
 
-站点不提供站方 key：**所有真实检查一律走访客自填的 BYOK key**（花自己的钱），无 key 即
-mock。曾经的每 IP 每日限额与全站日预算闸（R28 前）已整体退役——它们保护的站方钱包
-不存在了。
+站点不提供站方 key：**所有真实检查一律走访客自填的 BYOK key**（花自己的钱，或零成本走
+OpenCode Zen 免费档 `jev-1.13-free`），无 key 即 mock。曾经的每 IP 每日限额与全站日预算闸
+（R28 前）已整体退役——但 D1 写入配额那半的保护由每 IP 日闸（`CHECK_DAILY_LIMIT`）接管，
+见 [worker-api.md](modules/worker-api.md)。
 
 ## 关键设计约束
 

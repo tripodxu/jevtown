@@ -8,6 +8,21 @@
 
 ---
 
+## 2026-10-07 · 新通道：OpenCode Zen 免费档的 Jev（jev-1.13-free）
+
+**契约（2026-10 实测 curl 口径）**：`POST https://opencode.ai/zen/v1/systemone`，Bearer 认证，
+请求与 TypeSafe 官方 API 同形状（`{model, state, questions}`），响应顶层 `{answers, cost:"0"}`
+——**没有 usage 对象**：tokens 记 0、账面成本恒 0（免费档限时）。模型 id `jev-1.13-free`
+（付费档 `jev-1.13` 也在 Zen 上，本次未接）。key 是 OpenCode Zen 的 API key：
+env 用 `OPENCODE_API_KEY`，BYOK 请求头 `x-jev-provider=opencode` + `x-jev-key`。
+
+**改动**：`jev.js` 的 PROVIDERS 加 opencode 通道，env 兜底顺序排在 typesafe/openrouter
+**之后**（免费档有限额，仅显式指定或唯一有 key 时启用，别让它默默吃全站流量）；设置弹窗
+加选项、key 占位与首屏提示带上它。`app.js` 零改动——provider 名一路透传，顶栏自动显示
+`BYOK · opencode`。`pickProvider` 的选中顺序与免费档零成本契约补了单测（`test/jev.test.js`）。
+
+---
+
 ## 2026-10-06 · 优化轮：每 IP 日闸回归（CHECK_DAILY_LIMIT）、收波写路径增量快照、首屏 modulepreload
 
 **每 IP 日闸**：审计指出 R28 拆掉的旧闸护的是两样东西——站方钱包（BYOK-only 后确实没了）
