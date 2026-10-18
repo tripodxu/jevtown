@@ -8,6 +8,38 @@
 
 ---
 
+## 2026-10-18 · 优化轮：报告十档不再每次重排全城列行；分档与计数合成一趟
+
+**起点**：`showPost`（worker/index.js:764）每请求现算 `exposureBands` —— 地形早有按版本缓存
+（`terrainFor`），同一份报告里十档却每次重算。剖析（公共存档 `public/examples/iphone-listing-v2.json`，
+真 node 22.21）显示首访报告 ≈12ms，免费档只有 10ms CPU。
+
+**两处改动（`public/shared/feed.js`）**：
+1. **整城列行按人群缓存**：`flatOf` 的 offsets/ids 是「人群自己的形状」（每人兴趣/领域/年龄…的列号），
+   与文本无关；`crowd()` 已备忘且明文约定「返回数组视为不可变」，于是用 `FLAT = [WeakMap, WeakMap]`
+   （按 market 分表）以数组身份缓存。换来的是每个波次与每次报告都少一次 10 000 人的重排。
+   传进来的 `unseen`（`pick` 的 filter）或过滤后的子集是新数组，各自建表、随数组被回收，无失效路径。
+2. **分档与计数合成一趟**：删掉 40KB 的 `slots = new Int32Array(values.length)`，改成局部 `tally`
+   在同一个循环里边定档边计数；`flatTown`（分数全同）分支按 rank 直接计数，**非整除的余数仍落
+   `rows[0]`**，与旧 `slots` 默认值 0 语义一致。
+
+**实测（`scripts/probe-bandcost.js` 新增一节，可复现；探针手写两路与真实实现逐位相等有断言）**：
+整城列行「每次重排 0.64ms → 复用 0.22ms」；十档「先写满 slots 再读一遍 0.248ms → 一趟 0.239ms」，
+**融合本身在噪声内、不是 CPU 收益**，保留它只为少一次 40KB 分配与一趟遍历——注释按实测写，
+不再声称 0.9ms 那类数字。混合场景（交替调用 segments/counters/voices/bands）：`exposureBands`
+4.98 → 2.53ms、`exposureAll` 1.62 → 0.19ms；隔离测 `exposureBands` 0.43ms —— 交替场景剩下的
+主要是分配/GC（`exposureAll` 每次 `new Float64Array(10000)` 80KB）与调用点多态，不是算术。
+
+**验证**：`npm run lint` 48 文件过；`node --test "test/*.test.js"` **202/202 绿**（feed 17/17）；
+`bands` 读数与改动前逐字相同。
+
+**环境坑（本机，不是仓库缺陷）**：PATH 上的 `node` 是 DSH Desktop 的 Electron shim，wrangler 会把
+`cli.js` 当未知参数报 `Unknown arguments: local, …cli.js, d1, migrations, apply, jevtown`，
+`test/helper.js` 的 `execSync('npx wrangler d1 migrations apply … --local')` 随之抛错、worker.test.js
+整文件失败。解法：先 `$env:PATH = 'C:\Program Files\nodejs;' + $env:PATH` 再用真 node（v22.21.0）。
+
+---
+
 ## 2026-10-07 · 上线即撞墙：Zen 对 Cloudflare Worker 共享出口持续 429，按 IP 判与 key 无关
 
 **部署后冒烟**：首页/feed 200；无 key 开局 14s 后 500（Worker 5 连重试耗尽）。排查三步定位：

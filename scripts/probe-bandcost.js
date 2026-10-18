@@ -12,7 +12,7 @@
 //  3. 直方图数分位的写法 `while (seen < want) seen += hist[cuts.length]` 在遇到空桶时**死循环**：
 //     hist 全落在少数桶里时 cuts.length 卡住不动、seen 永远追不上 want。第二版先线性扫一遍累加。
 import { crowd } from '../public/shared/personas.js';
-import { exposure, firstWave } from '../public/shared/feed.js';
+import { exposure, exposureAll, firstWave } from '../public/shared/feed.js';
 import { groupsOf } from '../public/shared/requests.js';
 import { rng, hash32 } from '../public/shared/rng.js';
 
@@ -84,3 +84,83 @@ const wave1 = firstWave(people, scores, 'listing', rng(hash32('waves', 'zh', 'pr
 const h = new Int32Array(10);
 for (const who of wave1) { const e = all[who.id]; let d = 0; while (d < cuts.length && e >= cuts[d]) d += 1; h[d] += 1; }
 console.log(`  第 1 波 ${wave1.length} 人落在十档 ${[...h].join(' / ')}`);
+// -- 报告路径第二版（2026-10-18）：行复用与「分档+计数一趟」 ---------------------------
+// 两处改动都在 feed.js 里，量法与上面同一套，并且先用逐位相等把探针手写的两条路钉在真实
+// 实现上：探针跟实现漂了，这里先红，而不是注释里的数字悄悄过期。
+{
+  const off = new Int32Array(people.length + 1);
+  for (let i = 0; i < people.length; i++) off[i + 1] = off[i] + rows[i].length;
+  const ids = new Int32Array(off[people.length]);
+  { let k = 0; for (let i = 0; i < people.length; i++) for (const v of rows[i]) ids[k++] = v; }
+  const foldInto = (out, cs, offsets, flat) => {
+    for (let i = 0; i < people.length; i++) {
+      let sum = 0;
+      for (let k = offsets[i]; k < offsets[i + 1]; k++) sum += cs[flat[k]];
+      out[i] = sum;
+    }
+    return out.length;
+  };
+  const out2 = new Float64Array(people.length);
+  const batch = exposureAll(people, scores, 'listing');
+  foldInto(out2, cubes, off, ids);
+  let sameDoubles = true;
+  for (let i = 0; i < batch.length; i++) if (batch[i] !== out2[i]) sameDoubles = false;
+  console.log('  批量入口 exposureAll 与探针折法逐位相同：' + sameDoubles);
+  bench('报告：复用排好的行，全城一趟', 50, () => foldInto(out2, cubes, off, ids));
+  bench('报告：每次都重排一次行（改动前）', 20, () => {
+    const o = new Int32Array(people.length + 1);
+    for (let i = 0; i < people.length; i++) o[i + 1] = o[i] + rows[i].length;
+    const f = new Int32Array(o[people.length]);
+    let k = 0;
+    for (let i = 0; i < people.length; i++) for (const v of rows[i]) f[k++] = v;
+    return foldInto(new Float64Array(people.length), cubes, o, f);
+  });
+
+  // 十档：旧写法把每人的档写进 Int32Array（40KB），再走第二趟读回来数；新写法一趟里数完。
+  const nKeys = 6;
+  const toneOf = new Int8Array(nKeys + 1);
+  const stoppedOf = new Uint8Array(nKeys + 1);
+  for (let k = 1; k <= nKeys; k++) { toneOf[k] = k % 3 === 0 ? -1 : 1; stoppedOf[k] = k % 2; }
+  const bytes = Uint8Array.from({ length: people.length }, (_, i) => (i * 7) % (nKeys + 1));
+  const cuts9 = [];
+  for (let k = 1; k <= 9; k++) cuts9.push((hi * k) / 10);
+  const freshRows = () => Array.from({ length: 10 }, () => ({ people: 0, reached: 0, stopped: 0, glad: 0, sorry: 0 }));
+  const twoPass = () => {
+    const slots = new Int32Array(all.length);
+    for (let i = 0; i < all.length; i++) { let d = 0; while (d < cuts9.length && all[i] >= cuts9[d]) d += 1; slots[i] = d; }
+    const rs = freshRows();
+    for (let i = 0; i < all.length; i++) {
+      const row = rs[slots[i]];
+      row.people += 1;
+      const byte = bytes[i];
+      if (!byte) continue;
+      row.reached += 1;
+      const stopped = stoppedOf[byte];
+      row.stopped += stopped;
+      const tone = toneOf[byte];
+      if (tone === 1) row.glad += 1; else if (tone === -1) row.sorry += 1;
+    }
+    return rs;
+  };
+  const onePass = () => {
+    const rs = freshRows();
+    for (let i = 0; i < all.length; i++) {
+      let d = 0;
+      while (d < cuts9.length && all[i] >= cuts9[d]) d += 1;
+      const row = rs[d];
+      row.people += 1;
+      const byte = bytes[i];
+      if (!byte) continue;
+      row.reached += 1;
+      const stopped = stoppedOf[byte];
+      row.stopped += stopped;
+      const tone = toneOf[byte];
+      if (tone === 1) row.glad += 1; else if (tone === -1) row.sorry += 1;
+    }
+    return rs;
+  };
+  const shape = (rs) => rs.map((r) => r.people + ':' + r.reached + ':' + r.stopped + ':' + r.glad + ':' + r.sorry).join(',');
+  console.log('  十档一趟与两趟读数相同：' + (shape(twoPass()) === shape(onePass())));
+  bench('十档：先写满 slots 再读一遍（改动前）', 50, () => twoPass()[0].people);
+  bench('十档：分档与计数一趟（今天）', 50, () => onePass()[0].people);
+}

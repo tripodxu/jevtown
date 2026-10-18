@@ -40,6 +40,12 @@ runCheck({ send, presetId, pool, text, versionId, prices, maxWaves, onWave, bloc
 - `mood` / `travels`：净情绪 ≥ 0.1 才继续传播。
 - `gatherAsked` / `asking` / `whoIsAsked`：收尾提问的加权聚合
   （`ASK_WEIGHT=100`、`SORRY_WHY=40`、`MIN_ASKED=10`）。
+- `exposureAll` / `exposureBands`：Jev 开局那份打分怎么排全城（报告里的「十档对账」）。
+  列号表（`columnsOfPersona`）、整城列行（`flatOf` 的 offsets/ids，WeakMap 按 `people` 数组
+  身份缓存）、折立方表（`cubeTable`）都按人群/打分缓存：整城列行重排一次 0.64ms、复用
+  0.22ms；`exposureAll` 全城一趟 0.19ms（`scripts/probe-bandcost.js` 可复现）。**不变式**：
+  `people` 视为不可变（与 `crowd()` 备忘、`groupTable` 同一约定）；传进来的 `unseen`／
+  过滤后的子集是新数组，各自建表、随数组被 WeakMap 回收。
 
 ## 摘要与图谱数据：`summary.js`
 

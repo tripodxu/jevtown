@@ -95,10 +95,17 @@ function columnsOfPersona(who, market) {
   return row;
 }
 
-// The rows of a whole crowd end to end — one memory walk instead of one map lookup per person. Built
-// once per crowd; `unseen` is a fresh array every wave, so that one is walked into a new row each time
-// (0.3 ms for 10,000, and it replaces 10,000 Map lookups).
+// The rows of a whole crowd end to end — one memory walk instead of one map lookup per person. The
+// rows are the crowd's own shape, not the text's: every wave of a check and every report of it folds
+// the same 10,000, so they are laid out once per crowd and read back (WeakMap on the array, which
+// `crowd()` already memoizes and already hands out as immutable). Rebuilding them per call cost
+// 0.64 ms against 0.22 ms with the rows held (scripts/probe-bandcost.js). A crowd that arrives as a
+// fresh array — `unseen`, a filtered audience — simply builds its own.
+const FLAT = [new WeakMap(), new WeakMap()];
 function flatOf(personas, market) {
+  const cache = FLAT[market ? 1 : 0];
+  const held = cache.get(personas);
+  if (held) return held;
   const offsets = new Int32Array(personas.length + 1);
   for (let i = 0; i < personas.length; i++) offsets[i + 1] = offsets[i] + columnsOfPersona(personas[i], market).length;
   const ids = new Int32Array(offsets[personas.length]);
@@ -107,7 +114,9 @@ function flatOf(personas, market) {
     for (let k = 0; k < row.length; k++) ids[at + k] = row[k];
     at += row.length;
   }
-  return { offsets, ids };
+  const flat = { offsets, ids };
+  cache.set(personas, flat);
+  return flat;
 }
 
 /** `(weight × score)³` per column: the one term a persona's exposure adds up, folded once per check. */
@@ -209,21 +218,6 @@ export function exposureBands(presetId, keys, scores, reactions, people, { bands
   // the whole town would fall into the last band, so the band comes from the rank instead and the
   // bands still hold a tenth of the town each — which is what the reader is shown.
   const flatTown = top <= 0 || cuts.every((cut) => cut >= top);
-  const slots = new Int32Array(values.length);
-  if (flatTown) {
-    const order = Array.from(values, (value, id) => id).sort((a, b) => values[b] - values[a] || a - b);
-    const per = Math.floor(values.length / bands);
-    for (let at = 0, band = 0; band < bands; band++) {
-      const end = Math.min(order.length, (band + 1) * per);
-      for (; at < end; at++) slots[order[at]] = band;
-    }
-  } else {
-    for (let i = 0; i < values.length; i++) {
-      let band = 0;
-      while (band < cuts.length && values[i] >= cuts[band]) band += 1;
-      slots[i] = band;
-    }
-  }
 
   const rows = [];
   for (let band = 0; band < bands; band++) {
@@ -242,11 +236,14 @@ export function exposureBands(presetId, keys, scores, reactions, people, { bands
     stoppedOf[index + 1] = reaction?.stopped ? 1 : 0;
     toneOf[index + 1] = reaction?.tone ?? 0;
   }
-  for (let i = 0; i < values.length; i++) {
-    const row = rows[slots[i]];
+  // A person's band is read once, right where that person is counted. Writing every band into a
+  // 40 KB Int32Array and reading it back by a second walk costs the same arithmetic twice over:
+  // 0.25 ms against 0.24 ms for the whole town (scripts/probe-bandcost.js) — a wash. The single walk
+  // is kept for the allocation and the walk it does not make, not for the clock, and because no
+  // caller outside this function ever wanted one person's band.
+  const tally = (row, byte) => {
     row.people += 1;
-    const byte = reactions[i];
-    if (!byte) continue;
+    if (!byte) return;
     row.reached += 1;
     town.reached += 1;
     const stopped = stoppedOf[byte];
@@ -254,6 +251,25 @@ export function exposureBands(presetId, keys, scores, reactions, people, { bands
     town.stopped += stopped;
     const tone = toneOf[byte];
     if (tone === 1) { row.glad += 1; town.glad += 1; } else if (tone === -1) row.sorry += 1;
+  };
+  if (flatTown) {
+    const order = Array.from(values, (value, id) => id).sort((a, b) => values[b] - values[a] || a - b);
+    const per = Math.floor(values.length / bands);
+    let at = 0;
+    for (let band = 0; band < bands; band++) {
+      const end = Math.min(order.length, (band + 1) * per);
+      for (; at < end; at++) tally(rows[band], reactions[order[at]]);
+    }
+    // A crowd that does not divide by `bands` used to leave its remainder on slot 0 — the array's own
+    // fill value — so those people still land in band 0.
+    for (; at < order.length; at++) tally(rows[0], reactions[order[at]]);
+  } else {
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i];
+      let band = 0;
+      while (band < cuts.length && value >= cuts[band]) band += 1;
+      tally(rows[band], reactions[i]);
+    }
   }
   // Same lift as `segments`: how many times this band's share beats the town's share.
   const lift = (count, sizeOf, total) => (total ? count / sizeOf / (total / people.length) : 0);
