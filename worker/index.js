@@ -76,9 +76,11 @@ function crowdOf(pool) {
 }
 
 /**
- * 地形结果按 post.v 缓存（isolate 内存）：crowdTerrain 每请求约 8ms，是 showPost 纯计算的
- * 大头（R4 剖析）。反应只在 running 期间增长，closing/done 后冻结——只对非 running 的版本
- * 写缓存，同一份报告重复查看（刷新/多人看/对比区回拉 v1）不再重算置换检验。
+ * 地形结果按 post.v 缓存（isolate 内存）：crowdTerrain 是 showPost 纯计算的大头——置换检验
+ * 全城 1 万格判定约 8ms（2026-10-25 邻接折 CSR 后；此前 ~9-10ms，scripts/probe-terrain.js），
+ * 其中 ~3.5ms 是 Fisher-Yates 洗牌，随机序列被确定性锁死、省不得。反应只在 running 期间
+ * 增长，closing/done 后冻结——只对非 running 的版本写缓存，同一份报告重复查看
+ * （刷新/多人看/对比区回拉 v1）不再重算置换检验。
  * 版本号只增不复用 ⇒ 无失效路径，仅限容量防长驻 isolate 泄漏。
  */
 const terrainCache = new Map();

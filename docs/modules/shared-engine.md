@@ -78,6 +78,11 @@ runCheck({ send, presetId, pool, text, versionId, prices, maxWaves, onWave, bloc
   `crowdTerrain` 只是把字节翻成态度场的薄封装。任何"已给值"的场都能复用它——
   `crowdDelta` 就是这么把 Moran's I 套到态度差场上的，统计代码一行没重写。
 - **显著水平** α = 0.05；**置换次数**随判定人数收缩（199 / 99 / 49，`permsFor` 导出可测）。
+- **邻接折一次（CSR，2026-10-25）**：哪几格相邻在整个置换循环里从不变化——判定格的 rook
+  邻接预折成紧凑表（`adjacencyOf`），值场按判定格紧凑排布（`moransCompact`），每轮置换只剩
+  取值读写，不再每格重算坐标与四向边界检查。加项顺序与逐格逐向扫描一致 ⇒ **读数逐位相同**
+  （`scripts/probe-terrain.js` 内联旧实现对拍）。全城 1 万格 ~9-10ms → ~8ms，其中洗牌
+  ~3.5ms 是 seed 序列锁死的地板。`crowdDelta` 同路受益。
 - 局部象限用**原始态度**判（态度 0 的中性格不参与）——离均值看的话，中性多数派会整体
   落在均值下方，造出一块假"成片的反感"。改这段前先读 `test/spatial.test.js`。
 - 确定性：置换用 `hash32('spatial', versionId)` 播种，同 versionId 必得同结果；

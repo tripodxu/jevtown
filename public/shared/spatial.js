@@ -21,38 +21,50 @@ const ALPHA = 0.05;
 /** 置换次数：人越多零分布越窄，少几次也够判显著；199 次时 p 的最小值是 1/200 = 0.005。 */
 export const permsFor = (n) => (n <= 2000 ? 199 : n <= 5000 ? 99 : 49);
 
-/** 一遍扫描算出 I：d 已离均值。相邻只在"两边都被判定到"时才算。 */
-function morans(d, judged, grid, idx) {
-  let degree = 0; // S0：各格判定邻居数之和 = 2E
-  let dot = 0; // Σ d_i·nb_i
-  let sq = 0; // Σ d_i²
-  for (const i of idx) {
+/**
+ * 判定格的 rook 邻接，一次性折成紧凑表：哪几格相邻在置换检验的整个循环里从不变化，
+ * 变的只有格上的取值。原来每一轮 morans 都要为每个格子重算 `i % grid` / `(i / grid) | 0`
+ * 再做四向边界检查与 `judged` 查表——全城 1 万人 × 49 轮就是几十万次重复的地址算术。
+ * 邻居存成 idx 里的位次（左/右/上/下的顺序与原来四个 if 相同），值场随之可以按判定格
+ * 紧凑排布：置换一轮只写 n 个连续 double，不再向 1 万格的散场里散写。
+ */
+function adjacencyOf(idx, judged, grid) {
+  const at = new Int32Array(judged.length); // 格号 → 在 idx 里的位次（只有判定格的槽有效）
+  for (let k = 0; k < idx.length; k++) at[idx[k]] = k;
+  const nbr = new Int32Array(idx.length * 4);
+  const width = new Int32Array(idx.length + 1);
+  let degree = 0; // S0：各格判定邻居数之和 = 2E，与取值无关，置换间不变
+  let slot = 0;
+  for (let k = 0; k < idx.length; k++) {
+    const i = idx[k];
     const x = i % grid;
     const y = (i / grid) | 0;
-    let nb = 0;
-    let deg = 0;
-    if (x > 0 && judged[i - 1]) { nb += d[i - 1]; deg += 1; }
-    if (x < grid - 1 && judged[i + 1]) { nb += d[i + 1]; deg += 1; }
-    if (y > 0 && judged[i - grid]) { nb += d[i - grid]; deg += 1; }
-    if (y < grid - 1 && judged[i + grid]) { nb += d[i + grid]; deg += 1; }
-    degree += deg;
-    dot += d[i] * nb;
-    sq += d[i] * d[i];
+    if (x > 0 && judged[i - 1]) nbr[slot++] = at[i - 1];
+    if (x < grid - 1 && judged[i + 1]) nbr[slot++] = at[i + 1];
+    if (y > 0 && judged[i - grid]) nbr[slot++] = at[i - grid];
+    if (y < grid - 1 && judged[i + grid]) nbr[slot++] = at[i + grid];
+    degree += slot - width[k];
+    width[k + 1] = slot;
   }
-  if (!degree || !sq) return { i: null, edges: 0 };
-  return { i: (idx.length / (degree * 2)) * (dot / sq), edges: degree / 2 };
+  return { nbr, width, degree };
 }
 
-/** 某格判定邻居上的取值之和（d 或原始态度都能传进来）。 */
-function neighbourOf(values, judged, grid, i) {
-  const x = i % grid;
-  const y = (i / grid) | 0;
-  let nb = 0;
-  if (x > 0 && judged[i - 1]) nb += values[i - 1];
-  if (x < grid - 1 && judged[i + 1]) nb += values[i + 1];
-  if (y > 0 && judged[i - grid]) nb += values[i - grid];
-  if (y < grid - 1 && judged[i + grid]) nb += values[i + grid];
-  return nb;
+/**
+ * 紧凑值场上的 I（`vals[k]` = 判定格 idx[k] 的离均值偏差）。逐项加法与改造前的
+ * 逐格逐向扫描同一顺序、同一算术 ⇒ 双精度逐位相同（scripts/probe-terrain.js 对拍钉住）。
+ */
+function moransCompact(vals, { nbr, width, degree }, n) {
+  let dot = 0; // Σ d_i·nb_i
+  let sq = 0; // Σ d_i²
+  for (let k = 0; k < n; k++) {
+    const d = vals[k];
+    let nb = 0;
+    for (let t = width[k]; t < width[k + 1]; t++) nb += vals[nbr[t]];
+    dot += d * nb;
+    sq += d * d;
+  }
+  if (!degree || !sq) return { i: null, edges: 0 };
+  return { i: (n / (degree * 2)) * (dot / sq), edges: degree / 2 };
 }
 
 /** 一组格子在网格上的重心（格坐标）。 */
@@ -97,17 +109,20 @@ export function terrainOf(values, judged, { versionId = '', grid = 100, maxClust
   });
   if (idx.length < MIN_JUDGED) return quiet();
 
+  // 邻接表折一次，观测场与整个置换循环共用；紧凑值场见 adjacencyOf 的注释。
+  const adj = adjacencyOf(idx, judged, grid);
   const mean = idx.reduce((sum, i) => sum + values[i], 0) / idx.length;
-  const d = new Float64Array(judged.length);
-  for (const i of idx) d[i] = values[i] - mean;
-  const observed = morans(d, judged, grid, idx);
+  const obs = new Float64Array(idx.length);
+  for (let k = 0; k < idx.length; k++) obs[k] = values[idx[k]] - mean;
+  const observed = moransCompact(obs, adj, idx.length);
   if (observed.i === null) return quiet({ edges: observed.edges });
 
   // 置换检验：把取值在判定格之间重排，看观测到的 I 在零分布里有多罕见。
   const perms = permsFor(idx.length);
   const random = rng(hash32('spatial', versionId));
-  const shuffled = idx.map((i) => values[i]);
-  const work = new Float64Array(judged.length);
+  const shuffled = new Float64Array(idx.length);
+  for (let k = 0; k < idx.length; k++) shuffled[k] = values[idx[k]];
+  const permVals = new Float64Array(idx.length);
   const span = Math.abs(observed.i);
   let total = 0;
   let totalSq = 0;
@@ -120,8 +135,8 @@ export function terrainOf(values, judged, { versionId = '', grid = 100, maxClust
       shuffled[k] = shuffled[j];
       shuffled[j] = swap;
     }
-    for (let k = 0; k < idx.length; k++) work[idx[k]] = shuffled[k] - mean;
-    const perm = morans(work, judged, grid, idx);
+    for (let k = 0; k < permVals.length; k++) permVals[k] = shuffled[k] - mean;
+    const perm = moransCompact(permVals, adj, idx.length);
     if (perm.i === null) continue;
     used += 1;
     total += perm.i;
@@ -145,13 +160,17 @@ export function terrainOf(values, judged, { versionId = '', grid = 100, maxClust
   // 局部象限：**拿原始取值**（不是离均值偏差）判——自己与邻居同为乐见 = 成片的乐见，
   // 同为反感 = 成片的反感。取值为 0 的中性格不参与，于是"一大片中性"不会被误报成
   // "成片的反感"（离均值看的话，中性多数派会整体落在均值下方，天然构成一块假冷区）。
+  // 邻居求和走同一张 CSR 邻接表（加项顺序与原先的 neighbourOf 逐向扫描一致）。
+  const orig = new Float64Array(idx.length);
+  for (let k = 0; k < idx.length; k++) orig[k] = values[idx[k]];
   const scores = [];
-  for (const i of idx) {
-    const value = values[i];
+  for (let k = 0; k < idx.length; k++) {
+    const value = orig[k];
     if (!value) continue;
-    const around = neighbourOf(values, judged, grid, i);
+    let around = 0;
+    for (let t = adj.width[k]; t < adj.width[k + 1]; t++) around += orig[adj.nbr[t]];
     if (value * around <= 0) continue; // 与邻居反号：孤立点，不标
-    scores.push({ i, l: Math.abs(value * around), hot: value > 0 });
+    scores.push({ i: idx[k], l: Math.abs(value * around), hot: value > 0 });
   }
   const take = (positive) => {
     const pool = scores.filter((s) => s.hot === positive).sort((a, b) => b.l - a.l);
