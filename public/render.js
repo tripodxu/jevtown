@@ -1,6 +1,6 @@
 // 视图渲染：app.js（实时检查）与 showcase.js（示例回放）共用。
 // 输入形状 = GET /api/post/:v 的 payload（replay.js 能从存档 JSON 拼出同一形状）。
-import { PRESETS, lookOf } from './shared/presets.js';
+import { PRESETS, lookOf, LOOKS } from './shared/presets.js';
 import { faceInk } from './inks.js';
 import { drawGrid, attachTooltip, drawDelta, drawReach, reachLegendInk } from './grid.js';
 import { avatarSvg } from './avatar.js';
@@ -241,10 +241,11 @@ export function bandsView(result) {
   const rows = (bands.bands ?? []).map((band) => {
     const share = band.reached ? band.stopped / band.reached : 0;
     const glad = band.reached ? band.glad / band.reached : 0;
+    // lift 的 ?? 是给存档等外部输入的兜底：旧引擎的 NaN 过 JSON 变 null，一个空档不该炸整份报告。
     return `<div class="crow">
     <span class="flabel">第 ${band.band} 档</span>
     <span class="fbar"><i class="fgo" style="width:${Math.max(2, Math.round(share * 100))}%"></i></span>
-    <span class="fnum">${(share * 100).toFixed(1)}% 停下 · 乐见 ${(glad * 100).toFixed(1)}% · ${band.reached.toLocaleString()}/${band.people.toLocaleString()} 人 · ${band.stoppedLift.toFixed(2)}×</span>
+    <span class="fnum">${(share * 100).toFixed(1)}% 停下 · 乐见 ${(glad * 100).toFixed(1)}% · ${band.reached.toLocaleString()}/${band.people.toLocaleString()} 人 · ${(band.stoppedLift ?? 0).toFixed(2)}×</span>
   </div>`;
   });
   const html = [

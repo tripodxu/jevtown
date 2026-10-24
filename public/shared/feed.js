@@ -271,8 +271,12 @@ export function exposureBands(presetId, keys, scores, reactions, people, { bands
       tally(rows[band], reactions[i]);
     }
   }
-  // Same lift as `segments`: how many times this band's share beats the town's share.
-  const lift = (count, sizeOf, total) => (total ? count / sizeOf / (total / people.length) : 0);
+  // Same lift as `segments`: how many times this band's share beats the town's share. An empty band
+  // — quantised scores pile several cut lines into one histogram bucket, and the band between two
+  // equal cuts holds nobody — reads 0×, not NaN: NaN crosses the API as JSON null, and the page's
+  // `band.stoppedLift.toFixed` blows up the whole report on it (caught by a mock end-to-end run,
+  // 2026-10-25).
+  const lift = (count, sizeOf, total) => (total && sizeOf ? count / sizeOf / (total / people.length) : 0);
   for (const row of rows) {
     row.stoppedLift = lift(row.stopped, row.people, town.stopped);
     row.gladLift = lift(row.glad, row.people, town.glad);

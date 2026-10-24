@@ -212,6 +212,26 @@ test('exposureBands：十档的人数加起来是全城，两端对得上口径'
   assert.ok(out.bands[0].reached > out.bands[9].reached * 3, `第 1 波的人该压在档 1：${out.bands[0].reached} vs ${out.bands[9].reached}`);
 });
 
+// 空档回归（2026-10-25，mock 全流程 E2E 抓到的）：量化打分让几条分位线挤进直方图同一个桶，
+// 两个相同切点之间的档一个人都没有——lift 0/0 曾是 NaN，过 JSON 变 null，前端
+// band.stoppedLift.toFixed(2) 把整份报告炸掉。现在空档 lift 读 0×。
+test('exposureBands：分位线挤进同一桶产生的空档，lift 读 0 而不是 NaN', () => {
+  const people = crowd('zh');
+  // 只给两三个组打非零分：全城的 exposure 挤成少数几坨，直方图必然出现「一桶扛多条分位线」。
+  const scores = scoresOf([['interest:games', 1], ['interest:parenting', 0.9], ['field:it', 0.5]]);
+  const keys = Object.keys(PRESETS.post.reactions);
+  const reactions = new Uint8Array(people.length);
+  const wave = firstWave(people, scores, 'post', rng(hash32('empty-band')));
+  wave.forEach((who, at) => { reactions[who.id] = 1 + (at % keys.length); });
+  const out = exposureBands('post', keys, scores, reactions, people);
+  const empty = out.bands.filter((row) => row.people === 0);
+  assert.ok(empty.length >= 1, `这个形状该挤出空档，实际十档人数：${out.bands.map((r) => r.people).join(',')}`);
+  for (const row of out.bands) {
+    assert.ok(Number.isFinite(row.stoppedLift), `档 ${row.band} 的 stoppedLift 不该是 NaN（过 JSON 就是 null）`);
+    assert.ok(Number.isFinite(row.gladLift), `档 ${row.band} 的 gladLift 不该是 NaN（过 JSON 就是 null）`);
+  }
+});
+
 test('exposureBands：真实存档里档 1 的停下率比档 10 高一个数量级（那份预测兑现了）', () => {
   const saved = JSON.parse(fs.readFileSync(new URL('../public/examples/iphone-listing-v1.json', import.meta.url), 'utf8'));
   const people = crowd(saved.pool ?? 'zh');
