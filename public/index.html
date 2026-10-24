@@ -81,9 +81,24 @@
             <option value="headline">标题</option>
           </select>
         </div>
+        <!-- 商品的定价阶梯（可玩性）：需求曲线和「收入最高定价」按它算。留空走默认 9/19/39/79。
+             只在选了商品时出现；校验失败不发检查——用户以为是自己的价格，结果跑了默认档。 -->
+        <div class="row" id="pricesRow" hidden>
+          <label for="pricesInput">定价阶梯</label>
+          <input id="pricesInput" type="text" inputmode="numeric" autocomplete="off" maxlength="80"
+            placeholder="9, 19, 39, 79（逗号隔开，留空用默认）" aria-describedby="pricesHint">
+          <span class="hint" id="pricesHint">报告里的价格需求曲线按它算。</span>
+        </div>
         <label class="sr-only" for="text">想发出去的那段话</label>
         <textarea id="text" rows="5" maxlength="2000"
           placeholder="写下你想发的内容……&#10;试试：一条二手手机转让、一句朋友圈观点、一个商品卖点。"></textarea>
+        <!-- 试一句（可玩性）：没灵感也能立刻玩起来。chip 文案与样例文本来自 labels.js 的
+             COMPOSE_ZH（中文单源），再点同一个 chip 换下一条。 -->
+        <div class="compose-tools">
+          <span class="hint" id="tryLabel">试一句：</span>
+          <div class="sample-chips" id="sampleChips"></div>
+          <span class="hint text-count" id="textCount"></span>
+        </div>
         <div class="row between">
           <span class="hint" id="hint">不填 key 也走真实模型：站点免费通道（OpenCode Zen 免费档，限时零花费）；Key… 里可换自己的通道，mock 是离线假答案。</span>
           <button id="go" type="submit">让小镇来读</button>

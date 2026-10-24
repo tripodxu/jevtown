@@ -88,3 +88,32 @@ test('calibrateSayZh：倍数够陡说押中，方向对但量级不够说押得
   // 三种结论互不相同，且都不是「读不出来」
   assert.equal(new Set([CALIBRATE_ZH.good, CALIBRATE_ZH.mild, CALIBRATE_ZH.flat, CALIBRATE_ZH.thin]).size, 4);
 });
+
+// 发帖框的可玩性文案（试一句样例 / 占位句 / 字数计 / 定价阶梯）：chip 是新访客的第一个
+// 动作，样例缺一个预设就是那个预设没人玩；样例超长会被 maxlength 截断，截出来的
+// 「后半句突然没了」比没有样例更糟。
+import { COMPOSE_ZH } from '../public/shared/labels.js';
+import { PRESETS } from '../public/shared/presets.js';
+import { MAX_TEXT_CHARS } from '../public/shared/requests.js';
+
+test('COMPOSE_ZH：样例、占位句、chip 三张表的键与 PRESETS 一一对应', () => {
+  assert.deepEqual(Object.keys(COMPOSE_ZH.samples), Object.keys(PRESETS));
+  assert.deepEqual(Object.keys(COMPOSE_ZH.placeholders), Object.keys(PRESETS));
+  assert.deepEqual(Object.keys(COMPOSE_ZH.chips), Object.keys(PRESETS));
+});
+
+test('COMPOSE_ZH：每预设至少两条样例，条条非空、不重复、不超长', () => {
+  for (const [presetId, list] of Object.entries(COMPOSE_ZH.samples)) {
+    assert.ok(list.length >= 2, `${presetId} 样例太少，轮换不起来`);
+    assert.equal(new Set(list).size, list.length, `${presetId} 样例有重复`);
+    for (const text of list) {
+      assert.ok(text.trim(), `${presetId} 有空样例`);
+      assert.ok(text.length <= MAX_TEXT_CHARS, `${presetId} 样例超长（${text.length} > ${MAX_TEXT_CHARS}）`);
+    }
+  }
+});
+
+test('COMPOSE_ZH：定价阶梯的报错文案说得清「怎么写才算对」', () => {
+  assert.ok(COMPOSE_ZH.pricesBad.includes('两个正数'));
+  assert.ok(COMPOSE_ZH.pricesBad.includes('9, 19, 39, 79'), '报错要带一个照抄就能过的例子');
+});

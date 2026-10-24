@@ -2,7 +2,7 @@
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
 import { renderCheck, renderDelta, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
-import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed } from './shared/labels.js';
+import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH } from './shared/labels.js';
 import { PRESETS } from './shared/presets.js';
 import { drawGrid, paintDelta } from './grid.js';
 import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
@@ -365,6 +365,71 @@ $('audienceTags').addEventListener('click', (event) => {
   renderAudienceList();
 });
 
+// -- 发帖框的可玩性：试一句样例、按预设换占位句、字数计、Ctrl+Enter、定价阶梯 ----------------
+
+/** 每个预设轮换到第几条样例（chip 再点一次换下一条；起点固定 ⇒ 同起点同序列）。 */
+const sampleAt = { post: 0, listing: 0, product: 0, headline: 0 };
+
+function buildSampleChips() {
+  // chip 文案来自 labels.js 的 COMPOSE_ZH（中文单源），不在这里硬编码。
+  $('sampleChips').innerHTML = Object.keys(COMPOSE_ZH.samples)
+    .map((presetId) => `<button type="button" class="sample-chip" data-sample="${esc(presetId)}" title="${esc(COMPOSE_ZH.tryAgain)}">${esc(COMPOSE_ZH.chips[presetId])}</button>`)
+    .join('');
+}
+
+$('sampleChips').addEventListener('click', (event) => {
+  const chip = event.target.closest('button[data-sample]');
+  if (!chip) return;
+  const presetId = chip.dataset.sample;
+  const list = COMPOSE_ZH.samples[presetId] ?? [];
+  if (!list.length) return;
+  const text = list[sampleAt[presetId] % list.length];
+  sampleAt[presetId] += 1;
+  $('preset').value = presetId;
+  syncComposeForPreset();
+  $('text').value = text;
+  updateTextCount();
+  // 焦点与光标交给输入框尾部：样例只是起点，改两个字才算玩起来。
+  $('text').focus();
+  $('text').setSelectionRange(text.length, text.length);
+});
+
+/** 占位句随预设走 + 商品的定价阶梯行只在商品预设出现。 */
+function syncComposeForPreset() {
+  const presetId = $('preset').value;
+  const placeholder = COMPOSE_ZH.placeholders[presetId];
+  if (placeholder) $('text').placeholder = placeholder;
+  $('pricesRow').hidden = presetId !== 'product';
+}
+
+const updateTextCount = () => {
+  const max = $('text').maxLength;
+  $('textCount').textContent = COMPOSE_ZH.textCount.replace('%1', String($('text').value.length)).replace('%2', String(max));
+};
+
+$('text').addEventListener('input', updateTextCount);
+$('preset').addEventListener('change', syncComposeForPreset);
+
+// 写完顺手一发：Ctrl/Cmd+Enter 直接提交（textarea 里 Enter 仍该换行）。
+$('text').addEventListener('keydown', (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+    event.preventDefault();
+    $('form').requestSubmit();
+  }
+});
+
+/**
+ * 商品的定价阶梯：留空走默认档；填了就按用户的算（API 要求至少两个正数）。
+ * 读不出来返回 null——校验失败绝不能悄悄落回默认档：用户看着报告以为曲线是自己的价格。
+ */
+const parsePrices = () => {
+  if ($('preset').value !== 'product') return undefined;
+  const raw = $('pricesInput').value.trim();
+  if (!raw) return [9, 19, 39, 79];
+  const nums = raw.split(/[,，、;；\s]+/).filter(Boolean).map(Number);
+  return nums.length >= 2 && nums.every((n) => Number.isFinite(n) && n > 0) ? nums : null;
+};
+
 // -- 提交与分步驱动 -------------------------------------------------------------
 
 $('form').addEventListener('submit', async (event) => {
@@ -373,12 +438,19 @@ $('form').addEventListener('submit', async (event) => {
   const preset = $('preset').value;
   const audience = audienceInput();
   if (!text) return;
+  // 定价阶梯先校验后发：读不对就停在表单，绝不带着用户以为的价格跑默认档。
+  const prices = parsePrices();
+  if (prices === null) {
+    status(COMPOSE_ZH.pricesBad, 0);
+    announce(COMPOSE_ZH.pricesBad);
+    return;
+  }
   $('go').disabled = true;
   try {
     status(current.post ? '再发一版：Jev 重新掂量……' : '开局：Jev 正在掂量这段文字是写给谁的……', 0.02);
     const opening = current.post
       ? await postRetry('/api/version', { post: current.post, text, audience })
-      : await postRetry('/api/check', { preset, text, prices: preset === 'product' ? [9, 19, 39, 79] : undefined, audience });
+      : await postRetry('/api/check', { preset, text, prices, audience });
 
     if (opening.author) {
       currentAuthor = opening.author;
@@ -533,6 +605,8 @@ $('revise').addEventListener('click', async () => {
   const view = await readJSON(`/api/post/${current.post}?v=${current.version}`);
   $('text').value = view.post.text;
   $('preset').value = view.post.preset;
+  syncComposeForPreset();
+  updateTextCount();
   $('text').focus();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
@@ -675,6 +749,9 @@ $('clearKey').addEventListener('click', () => {
 });
 
 refreshModeChip();
+buildSampleChips();
+syncComposeForPreset();
+updateTextCount();
 
 initThemeSwitcher();
 loadFeed();
