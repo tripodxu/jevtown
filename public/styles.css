@@ -777,6 +777,12 @@ canvas.grid {
 .aud-list button[aria-pressed='true']:hover { background: transparent; }
 .aud-list .aud-n { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 
+/* 全城广播的行内复选框：整段标签都是可点区（触达目标别只给 13×13 的方框），
+   hint 太长时允许换行，窄屏不溢出。 */
+.inline-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text); font-size: 13px; }
+.inline-check input { width: 15px; height: 15px; accent-color: var(--accent); }
+#broadcastRow { flex-wrap: wrap; row-gap: 2px; }
+
 /* 发帖框的可玩性行：「试一句」样例按钮 + 字数计。样例按钮与 .aud-tag 同气质，
    但它是动作不是标签：没有 ×、默认 muted、hover 才浮起来。字数计靠右，等宽数字不跳。 */
 .compose-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }

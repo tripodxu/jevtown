@@ -2,7 +2,7 @@
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
 import { renderCheck, renderDelta, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
-import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH } from './shared/labels.js';
+import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH, WAVE_ZH } from './shared/labels.js';
 import { PRESETS } from './shared/presets.js';
 import { drawGrid, paintDelta } from './grid.js';
 import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
@@ -128,6 +128,9 @@ function showLive(presetId) {
   };
   $('monitorBody').innerHTML = '';
   $('live').hidden = false;
+  // 点了「让小镇来读」之后最想看的是地图逐批判定点亮——实时区在首屏折叠线下，
+  // 不滚过去的话整段监控都是不可见的（用户盯着发帖框只看得到状态行）。
+  $('live').scrollIntoView({ behavior: 'smooth' });
   drawGrid($('liveMap'), live.tally.bytes, presetId);
   updateLiveStats();
   updateCharts();
@@ -446,11 +449,12 @@ $('form').addEventListener('submit', async (event) => {
     return;
   }
   $('go').disabled = true;
+  const broadcast = $('broadcast').checked;
   try {
     status(current.post ? '再发一版：Jev 重新掂量……' : '开局：Jev 正在掂量这段文字是写给谁的……', 0.02);
     const opening = current.post
-      ? await postRetry('/api/version', { post: current.post, text, audience })
-      : await postRetry('/api/check', { preset, text, prices, audience });
+      ? await postRetry('/api/version', { post: current.post, text, audience, broadcast })
+      : await postRetry('/api/check', { preset, text, prices, audience, broadcast });
 
     if (opening.author) {
       currentAuthor = opening.author;
@@ -486,10 +490,17 @@ $('form').addEventListener('submit', async (event) => {
       if (wave.done) {
         done = true;
         monitorRow(['收尾', `到达 ${wave.reach}`, '', '', ''], 'wave-row');
-        status('收尾完成。', 0.98);
-        announce(`检查收尾，共到达 ${wave.reach} 人`);
+        // 结束原因分两说：gate = 情绪没过线被拦下（告诉作者差在哪、还有广播这条路）；
+        // capacity = 波次跑满或全城都看到了，正常谢幕不用解释。
+        const gateLine = wave.endedBy === 'gate'
+          ? WAVE_ZH.stoppedSay.replace('%1', String(wave.wave.index + 1))
+          : '收尾完成。';
+        status(gateLine, 0.98);
+        announce(gateLine);
       } else {
-        const line = `第 ${wave.wave.index + 1} 波完成，情绪 ${signed(wave.wave.mood, 2)}，文字继续传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`;
+        // 广播模式下情绪不过线也继续推：状态行要把「为什么还在传」说穿，不然读着像矛盾。
+        const push = wave.broadcast && !wave.wave.travels ? `，${WAVE_ZH.broadcastGo}（不看门槛）` : '';
+        const line = `第 ${wave.wave.index + 1} 波完成，情绪 ${signed(wave.wave.mood, 2)}${push}，文字传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`;
         monitorRow([`第 ${wave.wave.index + 1} 波收束`, `情绪 ${signed(wave.wave.mood, 2)}`, `${wave.wave.size} 人`, '', ''], 'wave-row');
         status(line, 0.5);
         announce(line);
@@ -717,7 +728,9 @@ const refreshModeChip = () => {
 };
 
 $('settingsBtn').addEventListener('click', () => {
-  $('providerSel').value = localStorage.getItem('jevtown.provider') ?? 'mock';
+  // 没存过通道就选「站点默认」（第一项，value=''）：打开就落在 mock 上是个陷阱——
+  // 什么都不改点一下「保存」，就把自己静默切到了离线假答案。
+  $('providerSel').value = localStorage.getItem('jevtown.provider') ?? '';
   $('keyInput').value = localStorage.getItem('jevtown.key') ?? '';
   $('settings').showModal();
 });
@@ -725,7 +738,11 @@ $('settingsBtn').addEventListener('click', () => {
 $('saveKey').addEventListener('click', () => {
   const provider = $('providerSel').value;
   const key = $('keyInput').value.trim();
-  if (provider === 'mock') {
+  if (!provider) {
+    // 「站点默认」= 不发任何通道头：清掉旧选择，回到免费通道。
+    localStorage.removeItem('jevtown.provider');
+    localStorage.removeItem('jevtown.key');
+  } else if (provider === 'mock') {
     // 显式 mock：记住这个选择，请求头带 x-jev-provider: mock 让 Worker 回离线假答案
     localStorage.setItem('jevtown.provider', 'mock');
     localStorage.removeItem('jevtown.key');

@@ -89,12 +89,14 @@ export function waveMixChart(mix) {
 }
 
 /** 波次漏斗（DOM）。waves: [{ index, size, asked, mood, travels }]。 */
-export function funnel(waves) {  if (!waves.length) return '';
+export function funnel(waves, { broadcast = false } = {}) {
+  if (!waves.length) return '';
   const max = Math.max(...waves.map((w) => w.size), 1);
   const rows = waves.map((wave) => {
     const tier = wave.mood >= GLAD_ENOUGH ? 'fgo' : wave.mood >= 0 ? 'fhold' : 'fdrop';
     const width = Math.max(6, Math.round((wave.size / max) * 100));
-    const label = wave.index === waves.length - 1 && !wave.travels ? '检查结束' : wave.travels ? '继续传播' : '停在这里';
+    // 广播模式下情绪不过线的中间波不写「停在这里」——它没停，是不看门槛继续推。
+    const label = wave.index === waves.length - 1 && !wave.travels ? '检查结束' : wave.travels ? '继续传播' : broadcast ? '广播继续' : '停在这里';
     return `<div class="frow">
       <span class="flabel">第 ${wave.index + 1} 波</span>
       <span class="fbar"><i class="f${tier}" style="width:${width}%"></i></span>

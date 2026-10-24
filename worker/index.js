@@ -280,10 +280,12 @@ async function runCheck(request, env) {
   }
 
   // 第一波：传播算法认为最该看到的人（打分越高越靠前），掺少量随机。
+  // broadcast（全城广播）：不拿净情绪当闸、把波次跑满——作者想看的是「全镇怎么读」，
+  // 不是「传不传得开」，两个问题分开问。存在 plan 这个 JSON 列里，旧存档没有这个键 = 门槛模式。
   const people = crowdOf(pool);
   const random = rng(hash32('waves', pool, `${id}.1`));
   const wave0 = firstWave(people, opening.scores, presetId, random);
-  const plan = { wave: 0, answered: 0, history: { 0: wave0.map((who) => who.id) } };
+  const plan = { wave: 0, answered: 0, history: { 0: wave0.map((who) => who.id) }, ...(body.broadcast === true ? { broadcast: true } : {}) };
   await env.DB.batch([
     env.DB.prepare('INSERT INTO posts (id, preset, pool, text, state, created_at, day, ip, author) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, presetId, pool, text, 'running', now, day, ip, author),
@@ -346,7 +348,7 @@ async function runVersion(request, env) {
   const people = crowdOf(pool);
   const random = rng(hash32('waves', pool, `${id}.${number}`));
   const wave0 = firstWave(people, opening.scores, post.preset, random);
-  const plan = { wave: 0, answered: 0, history: { 0: wave0.map((who) => who.id) } };
+  const plan = { wave: 0, answered: 0, history: { 0: wave0.map((who) => who.id) }, ...(body.broadcast === true ? { broadcast: true } : {}) };
   await env.DB.batch([
     env.DB.prepare('UPDATE posts SET state = ? WHERE id = ?').bind('running', id),
     env.DB.prepare(
@@ -557,8 +559,9 @@ async function settleWave(env, post, id, v, request, version) {
   const reached = new Map();
   for (let pid = 0; pid < CROWD; pid++) if (bytes[pid]) reached.set(pid, keys[bytes[pid] - 1]);
 
-  // 传播：够 glad，且还有波次与还没看到的人。
-  if (waveTravels && waveIndex + 1 < maxWaves && reached.size < CROWD) {
+  // 传播：够 glad，且还有波次与还没看到的人。广播模式（plan.broadcast）不拿情绪当闸——
+  // 波次照跑、账照记，只是把「传不传得开」和「全镇怎么读」分开问。
+  if ((plan.broadcast || waveTravels) && waveIndex + 1 < maxWaves && reached.size < CROWD) {
     const people = crowdOf(pool);
     const random = rng(hash32('waves', pool, `${id}.${v}.${waveIndex + 1}`));
     const next = nextWave(people, reached, scores, presetId, waveIndex + 1, random);
@@ -570,7 +573,7 @@ async function settleWave(env, post, id, v, request, version) {
       env.DB.prepare('UPDATE versions SET plan = ?, looks = ? WHERE post = ? AND number = ?').bind(JSON.stringify(plan), encodeBytes(bytes), id, v),
       env.DB.prepare("UPDATE posts SET state = 'running' WHERE id = ? AND state = 'closing'").bind(id),
     ]);
-    return json({ wave: waveInfo, travels: true, next: { index: waveIndex + 1, total: next.length } });
+    return json({ wave: waveInfo, travels: true, broadcast: Boolean(plan.broadcast), next: { index: waveIndex + 1, total: next.length } });
   }
 
   // 检查收尾：把收尾提问（为什么划走/什么让他们停下/会评论什么）发给到达过的人。
@@ -628,7 +631,10 @@ async function settleWave(env, post, id, v, request, version) {
       .bind(JSON.stringify(said), encodeBytes(bytes), encodeBytes(snapWave), round4(askUsd), askTokens, id, v),
     env.DB.prepare("UPDATE posts SET state = 'done' WHERE id = ? AND state = 'closing'").bind(id),
   ]);
-  return json({ wave: waveInfo, travels: false, done: true, reach: reached.size, followUp: followUp && { asked: followUp.asked } });
+  // endedBy 给前端一句能说清「为什么结束」的话：gate = 情绪没过线被拦下（可玩性关键反馈），
+  // capacity = 波次跑满或全城都看到了（正常谢幕）。广播模式的情绪不作为结束原因。
+  const endedBy = plan.broadcast || waveIndex + 1 >= maxWaves || reached.size >= CROWD ? 'capacity' : 'gate';
+  return json({ wave: waveInfo, travels: false, broadcast: Boolean(plan.broadcast), endedBy, done: true, reach: reached.size, followUp: followUp && { asked: followUp.asked } });
 }
 
 /** 追问阶段：闲置帖问停下的人"会问卖家什么"；商品帖问价格阶梯。结果存 versions.follow_up。 */
@@ -771,6 +777,8 @@ async function showPost(id, env, url, request = null) {
 
   return json({
     ...base,
+    // 全城广播的标记（plan.broadcast）：报告措辞要区分「传开的」和「推满的」。
+    broadcast: Boolean(plan.broadcast),
     counters: counters(presetId, keys, bytes),
     waves,
     looks: encodeBytes(bytes),

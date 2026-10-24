@@ -121,6 +121,35 @@ test('版本：同一帖可再发一版，两版各有各的计数，versions �
   assert.ok(v2.versions.every((entry) => entry.state === 'done'));
 }, { timeout: 240_000 });
 
+// 全城广播（传播可玩性）：门槛模式里初稿常止步第 1 波，最壮观的逐波点亮根本看不到。
+// 广播模式不拿净情绪当闸：四波跑满、全城判定到、报告带标记、结束原因不是门槛。
+// 对照的门槛模式不做「必然止步」断言：mock 的波次情绪贴着 +0.10 漂（0.07–0.19），
+// 而波次掺样的 seed 是 post id——每次开局随机，同一文本跨运行的行为不固定。
+test('全城广播：不看情绪门槛四波跑满全城；报告带 broadcast 标记与 endedBy', { timeout: 240_000 }, async () => {
+  const text = '我把每周例会砍成了 15 分钟：只报数字、只做决定，讨论全挪进文档。三个月过去，没有一个人怀念那省下的 45 分钟。';
+  const gateOpening = await (await postJSON(worker, '/api/check', { preset: 'post', text })).json();
+  const gateDone = await runToDone(worker, gateOpening.post, 1, authorOf(gateOpening));
+  const bcOpening = await (await postJSON(worker, '/api/check', { preset: 'post', text, broadcast: true })).json();
+  const bcDone = await runToDone(worker, bcOpening.post, 1, authorOf(bcOpening));
+
+  const bc = await (await worker.fetch(`/api/post/${bcOpening.post}?v=1`)).json();
+  assert.equal(bc.broadcast, true, '报告应带广播标记');
+  assert.equal(bc.waves.length, 4, `广播模式应跑满四波，实际 ${bc.waves.length}`);
+  assert.equal(bc.counters.reach, 10000, `广播模式全城都该被判定到，实际 ${bc.counters.reach}`);
+  assert.equal(bcDone.endedBy, 'capacity', '广播模式的结束原因不该是门槛');
+  // 情绪不过线的波 travels 仍如实记 false——读数诚实，推不推是另一回事（有则证明确实绕闸了）。
+  const failed = bc.waves.slice(0, 3).filter((w) => !w.travels);
+  if (failed.length) assert.ok(bc.waves.length > failed[0].index + 1, '情绪不过线的波之后广播仍继续推');
+
+  const gate = await (await worker.fetch(`/api/post/${gateOpening.post}?v=1`)).json();
+  assert.equal(gate.broadcast, false, '不勾广播的检查不带标记');
+  assert.ok(gate.waves.length <= bc.waves.length, `门槛模式不该比广播走得更远：${gate.waves.length} vs ${bc.waves.length}`);
+  if (gateDone.endedBy === 'gate') {
+    assert.ok(gate.waves.length < 4, '被门槛拦下必然不足四波');
+    assert.equal(gate.waves.at(-1).travels, false, '被拦下的最后一波 travels=false');
+  }
+}, { timeout: 240_000 });
+
 test('product 缺 prices → 400；上一版还在跑时再发一版 → 409', async () => {
   const noPrices = await postJSON(worker, '/api/check', { preset: 'product', text: '一款不臭的跑步袜' });
   assert.equal(noPrices.status, 400);

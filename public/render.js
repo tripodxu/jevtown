@@ -5,7 +5,7 @@ import { faceInk } from './inks.js';
 import { drawGrid, attachTooltip, drawDelta, drawReach, reachLegendInk } from './grid.js';
 import { avatarSvg } from './avatar.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount, AUDIENCE_ZH, AUDIENCE_STATE_ZH, audienceSayZh, CALIBRATE_ZH, calibrateSayZh,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount, AUDIENCE_ZH, AUDIENCE_STATE_ZH, audienceSayZh, CALIBRATE_ZH, calibrateSayZh, WAVE_ZH,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart, waveMixChart } from './charts.js';
 import { randomBaseline, moodZ } from './shared/feed.js';
@@ -30,7 +30,9 @@ export function renderCheck(el, result) {
   // 图表的 viewBox 宽度跟着容器走：固定宽度在窄屏会把 11px 的标注缩到 4px。
   const chartWidth = Math.min(940, Math.max(300, el.clientWidth - 56));
   const presetId = result.post.preset;
-  const html = [`<h2 tabindex="-1">${esc(PRESET_NOUN(presetId))} · 检查结果</h2>`];
+  // 广播徽标放在标题行：读者第一眼要知道这份报告的波次是「推满的」不是「传开的」。
+  const badge = result.broadcast ? ` <span class="chip">${esc(WAVE_ZH.broadcastLabel)}</span>` : '';
+  const html = [`<h2 tabindex="-1">${esc(PRESET_NOUN(presetId))} · 检查结果${badge}</h2>`];
 
   html.push(briefView(result));
   html.push('<div class="source-text">');
@@ -101,8 +103,11 @@ function briefView(result) {
   if (!result.counters?.reach || !result.waves?.length) return '';
   const brief = reportBrief(result.counters, result.waves, result.segments ?? {});
   const pct = (v) => Math.round(v * 100);
+  // 广播模式的波次是不看门槛推满的——「传了 N 波」是谎话，得按广播的口径说。
   const lines = [
-    brief.waves > 1
+    result.broadcast
+      ? WAVE_ZH.broadcastBrief.replace('%1', String(brief.waves)).replace('%2', brief.reach.toLocaleString())
+      : brief.waves > 1
       ? `文字传了 <em>${brief.waves} 波</em>，${brief.reach.toLocaleString()} 人读到，在第 ${brief.waves} 波收住。`
       : `文字只传了第 1 波，<em>${brief.reach.toLocaleString()} 人</em>读到。`,
     `乐见 <em>${pct(brief.gladPct)}%</em> · 反感 ${pct(brief.sorryPct)}% · ${pct(brief.stoppedPct)}% 的人停下来。`,
@@ -193,7 +198,16 @@ function terrainView(result) {
 function wavesView(result, width) {
   if (!result.waves?.length) return '';
   const line = moodLine(result.waves.map((w) => w.mood), { width });
-  return `<h3>传播波次与情绪轨迹</h3>${funnel(result.waves)}${line}${baselineView(result)}`;
+  // 门槛的那句话只说给门槛模式听：广播模式不看门槛，说了反而像矛盾。
+  // 波次跑满（4 波上限）或全城都读到 = 正常谢幕，不算「被门槛拦下」。
+  const last = result.waves.at(-1);
+  const fullRun = result.waves.length >= 4 || (result.counters?.reach ?? 0) >= 10000;
+  const gateNote = !result.broadcast && !last?.travels && !fullRun
+    ? `<div class="hint">${esc(WAVE_ZH.gateSay)} ${esc(WAVE_ZH.stoppedSay.replace('%1', String((last?.index ?? 0) + 1)))}</div>`
+    : !result.broadcast
+      ? `<div class="hint">${esc(WAVE_ZH.gateSay)}</div>`
+      : '';
+  return `<h3>传播波次与情绪轨迹</h3>${funnel(result.waves, { broadcast: result.broadcast })}${line}${gateNote}${baselineView(result)}`;
 }
 
 /**

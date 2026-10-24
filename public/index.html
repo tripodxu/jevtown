@@ -89,6 +89,14 @@
             placeholder="9, 19, 39, 79（逗号隔开，留空用默认）" aria-describedby="pricesHint">
           <span class="hint" id="pricesHint">报告里的价格需求曲线按它算。</span>
         </div>
+        <!-- 全城广播（传播可玩性）：真实传播里净情绪 ≥ +0.10 才传下一波，多数初稿止步第 1 波——
+             勾上它不看门槛把波次跑满，「传不传得开」和「全镇怎么读」分开问。 -->
+        <div class="row" id="broadcastRow">
+          <label class="inline-check" for="broadcast">
+            <input type="checkbox" id="broadcast"> 全城广播（不设传播门槛）
+          </label>
+          <span class="hint" id="broadcastHint">真实传播：净情绪 ≥ +0.10 才传下一波。勾上则四波跑满看全城反应，Jev 调用为全程（免费档无感，付费 key 约 $0.10+）。</span>
+        </div>
         <label class="sr-only" for="text">想发出去的那段话</label>
         <textarea id="text" rows="5" maxlength="2000"
           placeholder="写下你想发的内容……&#10;试试：一条二手手机转让、一句朋友圈观点、一个商品卖点。"></textarea>
@@ -202,6 +210,9 @@
     <div class="row">
       <label for="providerSel">通道</label>
       <select id="providerSel">
+        <!-- 第一项 = 不发通道头（站点默认免费通道）。打开设置就默认选中 mock 是个陷阱：
+             什么都不改点一下「保存」，就把自己静默切到了离线假答案。 -->
+        <option value="">站点默认（免费通道，不填 key）</option>
         <option value="mock">mock（离线假答案，不花钱）</option>
         <option value="typesafe">TypeSafe 官方 API（api.typesafe.ai）</option>
         <option value="openrouter">OpenRouter Decisions API</option>
