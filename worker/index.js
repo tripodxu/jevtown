@@ -9,7 +9,7 @@
 import { crowd, persona, personaLine, CROWD } from '../public/shared/personas.js';
 import { PRESETS, CANT_TELL, priceLadder, DEFAULT_PRICES } from '../public/shared/presets.js';
 import { openingRequest, openingAnswers, reactionRequest, questionId, MAX_TEXT_CHARS, followUpRequest } from '../public/shared/requests.js';
-import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered, exposureBands } from '../public/shared/feed.js';
+import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered, exposureBands, WAVES } from '../public/shared/feed.js';
 import { drawReaction } from '../public/shared/draw.js';
 import { askQuestion, mergeSaid, listsOf } from '../public/shared/check.js';
 import { counters, segments, topSegments, voicesOf, reconcileAudience, pickableGroups } from '../public/shared/summary.js';
@@ -22,7 +22,9 @@ import { createMockAsk } from '../public/shared/mock.js';
 import { rng, hash32 } from '../public/shared/rng.js';
 
 const PER_REQUEST = 100;
-const WAVES_MAX = 4;
+// 波次上限的唯一来源是 feed.js 的 WAVES（今天的值是 4）；这里只留 env 覆盖的口子，
+// 不再自造第二份 4——两处常量各写各的，改一处忘一处就是限额事故。
+const WAVES_MAX = WAVES.length;
 /**
  * 免费档一次 Worker 调用最多 50 个外呼，而一次收波要在同一次调用里把追问与收尾问句问完。
  * 追问是 stopped 的全部人（实测两三千 → 十几批），无上限就会撞墙，撞墙的表现是整次收波被
@@ -227,6 +229,32 @@ async function overDailyLimit(env, ip) {
   if (!(limit > 0)) return false;
   const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM posts WHERE ip = ? AND day = ?').bind(ip, today()).first();
   return row.n >= limit;
+}
+
+/**
+ * running 报告的消费闸：冻结报告有快照路径与 isolate 缓存挡着，贵的是 running 版——
+ * 逐行读全部 reactions（最多 1 万行）再全量现算，且没有任何缓存可复用。公开读、无身份，
+ * 一个循环刷新的爬虫就能把 D1 读放大（技术债 B7，2026-10-25 修）。
+ * 轻闸只活在 isolate 内存里（每实例独立、随实例消失）：挡的是单客户端刷屏，不是分布式
+ * 滥用（那个归 Cloudflare 自身的边缘限流管）。键与写闸同源（CF-Connecting-IP；环回豁免
+ * 让本地开发与测试无感）。冻结版不受影响——正常读者刷新已完成的报告永远碰不到这道闸。
+ */
+const READ_WINDOW_MS = 60_000;
+const READ_MAX_RUNNING = 30;
+const readHits = new Map();
+
+function readAllowed(ip) {
+  if (ip === 'local' || ip === '127.0.0.1' || ip === '::1') return true;
+  const now = Date.now();
+  const hits = (readHits.get(ip) ?? []).filter((t) => now - t < READ_WINDOW_MS);
+  if (hits.length >= READ_MAX_RUNNING) {
+    readHits.set(ip, hits);
+    return false;
+  }
+  hits.push(now);
+  readHits.set(ip, hits);
+  if (readHits.size > 1000) readHits.delete(readHits.keys().next().value); // 容量：防长驻实例内存无界
+  return true;
 }
 
 // -- 路由 ----------------------------------------------------------------------
@@ -722,6 +750,11 @@ async function showPost(id, env, url, request = null) {
   }
   const version = await loadVersion(env.DB, id, v);
   if (!version) return fail('no such version', 404);
+  // 消费闸只拦 running 版的逐行现读路径（最贵、无缓存）；冻结报告走快照+缓存，不限。
+  if (!(version.looks && version.said != null)) {
+    const ip = request?.headers.get('CF-Connecting-IP') ?? 'local';
+    if (!readAllowed(ip)) return fail('too many report reads for this IP, retry in a minute', 429);
+  }
   const presetId = post.preset;
   const preset = PRESETS[presetId];
   const keys = Object.keys(preset.reactions);

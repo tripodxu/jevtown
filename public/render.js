@@ -8,11 +8,11 @@ import {
   REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount, AUDIENCE_ZH, AUDIENCE_STATE_ZH, audienceSayZh, CALIBRATE_ZH, calibrateSayZh, WAVE_ZH,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart, waveMixChart } from './charts.js';
-import { randomBaseline, moodZ } from './shared/feed.js';
+import { randomBaseline, moodZ, WAVES } from './shared/feed.js';
 import { rankedAnswers, demandCurve, sliceHeatmap, waveMix, reportBrief } from './shared/summary.js';
 import { decodeBytes } from './shared/bytes.js';
 import { crowdDelta } from './shared/spatial.js';
-import { crowd } from './shared/personas.js';
+import { crowd, CROWD } from './shared/personas.js';
 
 export const PRESET_NOUN = presetNoun;
 export const readCheck = (p) => (p >= 0.7 ? 'yes' : p <= 0.3 ? 'no' : 'unclear');
@@ -201,9 +201,9 @@ export function wavesView(result, width) {
   if (!result.waves?.length) return '';
   const line = moodLine(result.waves.map((w) => w.mood), { width });
   // 门槛的那句话只说给门槛模式听：广播模式不看门槛，说了反而像矛盾。
-  // 波次跑满（4 波上限）或全城都读到 = 正常谢幕，不算「被门槛拦下」。
+  // 波次跑满（WAVES 上限）或全城都读到 = 正常谢幕，不算「被门槛拦下」。
   const last = result.waves.at(-1);
-  const fullRun = result.waves.length >= 4 || (result.counters?.reach ?? 0) >= 10000;
+  const fullRun = result.waves.length >= WAVES.length || (result.counters?.reach ?? 0) >= CROWD;
   const gateNote = !result.broadcast && !last?.travels && !fullRun
     ? `<div class="hint">${esc(WAVE_ZH.gateSay)} ${esc(WAVE_ZH.stoppedSay.replace('%1', String((last?.index ?? 0) + 1)))}</div>`
     : !result.broadcast

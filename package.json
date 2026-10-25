@@ -14,7 +14,7 @@
     "check": "node scripts/check.js",
     "bench": "node scripts/bench-tally.mjs",
     "test": "node --test \"test/*.test.js\"",
-    "lint": "node scripts/lint.mjs"
+    "lint": "node scripts/lint.mjs && node scripts/check-preloads.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.135.0"

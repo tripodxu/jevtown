@@ -769,6 +769,7 @@ async function openPost(id, versionHint = null) {
     announce(`打开失败：${error.message}`);
   }
 }
+// 深链入口挂在 window 上：浏览器调试与 E2E 直达某帖用（生产代码不走它，feed 链接走下方委托）。
 window.openPost = openPost;
 
 // 续跑：把中断的检查从当前波次接着驱动完。种子来自报告的 looks 字节（已判定的人），

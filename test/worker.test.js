@@ -214,6 +214,26 @@ test('商品改版的定价阶梯：v2 不带 prices 沿用 v1，显式传入则
   assert.deepEqual(d3.prices, [29, 59], '显式传入的阶梯该覆盖继承值');
 }, { timeout: 240_000 });
 
+// running 报告的消费闸（技术债 B7）：冻结报告有快照+缓存，贵的是 running 版的逐行现读
+// （最多 1 万行 reactions、无缓存可挡）。单 IP 每分钟最多 30 次，超出 429；
+// 环回豁免（本地与既有测试无感）、冻结版不受影响。
+test('running 报告读闸：单 IP 每分钟 30 次，冻结版与环回不限', { timeout: 120_000 }, async () => {
+  const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '读闸验证：一条普通帖子，故意不跑完' })).json();
+  const ip = `203.0.113.${(Date.now() % 200) + 10}`; // 每轮现取，别被上一轮的计数卡死
+  const headers = { 'CF-Connecting-IP': ip };
+
+  let last = 200;
+  for (let i = 0; i < 32; i++) last = (await worker.fetch(`/api/post/${opening.post}?v=1`, { headers })).status;
+  assert.equal(last, 429, '第 31 次读 running 报告该被拦');
+  // 环回（无头）与冻结版同一个 IP 也不受限
+  assert.equal((await worker.fetch(`/api/post/${opening.post}?v=1`)).status, 200, '环回豁免');
+
+  await runToDone(worker, opening.post, 1, authorOf(opening));
+  for (let i = 0; i < 35; i++) {
+    assert.equal((await worker.fetch(`/api/post/${opening.post}?v=1`, { headers })).status, 200, `冻结版第 ${i + 1} 次读不该被拦`);
+  }
+}, { timeout: 120_000 });
+
 test('blocked 帖的详情页：state=blocked 且没有计数与地图', async () => {
   const opening = await (await postJSON(worker, '/api/check', { preset: 'listing', text: '傻逼东西你去死吧' })).json();
   assert.equal(opening.state, 'blocked');

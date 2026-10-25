@@ -7,10 +7,11 @@
 // 把坏数据写进页面"和"引用了不存在的变量"这两类事故。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { runCheck } from '../public/shared/check.js';
 import { createMockAsk } from '../public/shared/mock.js';
 import { replayToView } from '../public/shared/replay.js';
-import { DEFAULT_PRICES } from '../public/shared/presets.js';
+import { DEFAULT_PRICES, PRESETS } from '../public/shared/presets.js';
 import * as view from '../public/render.js';
 
 /** 跑一次真的 mock 检查（maxWaves 1 = 600 人，快）并回放成报告视图的 payload。 */
@@ -61,22 +62,11 @@ test('视图冒烟（post）：真实 mock 检查 → 全部视图渲染干净',
   for (const name of ['brief', 'waves', 'counts', 'bands', 'voices', 'heatmap']) {
     assert.ok(sections[name].length > 0, `${name} 不该为空`);
   }
-  // 存档回放的两处已知缺席：report 靠 batches 流水聚合（存档不存流水，重建不出来）；
-  // decisions 存档里其实有、但 replayToView 没往下传——首页示例卡因此没有决策现场。
+  // 存档回放的调用报告天然缺席：report 靠 batches 流水聚合，存档不存流水，重建不出来。
   assert.equal(sections.report, '', '回放没有调用报告（存档无 batches）');
-  assert.equal(sections.decisions, '', 'replayToView 今天不传 decisions——记录这一缺席');
-
-  // decisionsView 本身用真实形状直接冒烟：抽两个决策样本。
-  const withDecisions = {
-    ...result,
-    decisions: [
-      { id: 7, line: 'A reader into coding and startups, 28.', ask: 'What is the most this reader does?', probabilities: { liked: 0.62, read: 0.21, scrolled_past: 0.1 }, reaction: 'liked' },
-      { id: 8, line: 'A retiree into gardening, 66.', ask: 'What is the most this reader does?', probabilities: { scrolled_past: 0.7, read: 0.2 }, reaction: 'scrolled_past' },
-    ],
-  };
-  const decisions = view.decisionsView(withDecisions);
-  assertClean('decisions(fixture)', decisions);
-  assert.ok(decisions.includes('决策现场') && decisions.includes('点了赞'));
+  // decisions 曾被 replayToView 丢掉（首页示例卡凭空缺这一节）：现在透传，mock 管线 10 条全在。
+  assert.ok(sections.decisions.includes('决策现场'), '回放该带出决策现场');
+  assert.equal((result.decisions ?? []).length, 10, 'mock 管线的决策样本该有 10 条');
 });
 
 test('视图冒烟（product）：价格阶梯追问与需求曲线的路径', async () => {
@@ -101,4 +91,23 @@ test('away 视图：JS 注释不会漏进渲染输出（曾在模板字符串里
   assertClean('away', html);
   assert.ok(!html.includes('//'), 'JS 注释不该出现在渲染输出里');
   assert.ok(html.includes('第 1 句') && html.includes('第 2 句'));
+});
+
+// 真实旧档回放：两份首页示例存档的决策样本全坏（引擎老 bug 存了答案包装对象、reaction
+// 是垃圾键名）——replayToView 要把它们还原成能渲染的形状，示例卡才有「决策现场」节。
+test('旧存档回放：坏的 decisions 被还原，真实示例 JSON 能渲染出决策现场', () => {
+  for (const file of ['iphone-listing-v1.json', 'iphone-listing-v2.json']) {
+    const saved = JSON.parse(fs.readFileSync(new URL(`../public/examples/${file}`, import.meta.url), 'utf8'));
+    const result = replayToView(saved);
+    assert.equal(result.decisions.length, 10, `${file} 该有 10 条决策样本`);
+    for (const d of result.decisions) {
+      assert.ok(d.probabilities.probabilities === undefined, `${file} 概率表该已解开包装层`);
+      assert.ok(Object.keys(d.probabilities).length >= 2, `${file} 概率表该是真分布`);
+      for (const value of Object.values(d.probabilities)) assert.equal(typeof value, 'number', `${file} 概率该是数字`);
+      assert.ok(PRESETS[saved.presetId].reactions[d.reaction], `${file} reaction 该落在预设词表里：${d.reaction}`);
+    }
+    const html = view.decisionsView(result);
+    assertClean(`decisions(${file})`, html);
+    assert.ok(html.includes('决策现场'), `${file} 该渲染出决策现场节`);
+  }
 });

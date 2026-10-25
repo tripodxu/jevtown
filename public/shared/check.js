@@ -119,7 +119,10 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
   const sampleDecisions = (batch, answers) => {
     for (const who of batch) {
       if (decisions.length >= 10) break;
-      const probabilities = answers[questionId(who)] ?? {};
+      // 与 Worker 的 runBatch 同构：答案在 answers[qid].probabilities 里。
+      // 曾经这里少解一层 .probabilities，CLI 存档的决策样本存成了答案包装对象、
+      // reaction 抽成垃圾键名（首页两份示例存档 10/10 全坏）。
+      const probabilities = answers[questionId(who)]?.probabilities ?? {};
       decisions.push({
         id: who.id,
         line: personaLine(who, preset),

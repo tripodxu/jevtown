@@ -178,6 +178,7 @@ fs.writeFileSync(
       // 终端与站点同构：{said, picked}。null 时不写这个字段，旧存档的回放一字不变。
       audience: audience ?? undefined,
       usd: result.usd,
+      tokens: result.tokens,
     },
     null,
     2,
