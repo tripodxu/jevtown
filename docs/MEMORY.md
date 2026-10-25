@@ -6,6 +6,33 @@
 
 ---
 
+## 2026-10-25 · 技术债偿还轮（续）：B7 读闸、B10 预载校验器、replay 三处旧债、波次常量单源
+
+**接上一轮清单（B7 + B10 + replay 小债 + C16）**：
+
+1. **B10 modulepreload 校验器**（`scripts/check-preloads.mjs`，进 `npm run lint`）：静态解析
+   两入口的 import 闭包与清单比对，缺/多都红。首日即抓到真漂移——replay 新 import draw.js
+   后清单缺项，补进后 23 项一致。手工同步的注释同步作废。
+2. **B7 running 报告读闸**：`readAllowed`（isolate 内存，60s 滑窗 30 次，环回豁免，容量 1000）
+   只拦 running 版的逐行现读路径（最贵、无缓存）；冻结版快照+缓存不受影响。键与写闸同源
+   CF-Connecting-IP；分布式滥用归 Cloudflare 边缘限流，此闸只挡单客户端刷屏。用例：31 次
+   429、环回 200、冻结版连拉 35 次 200。
+3. **replay 三处旧债**：① 存档 decisions 从不透传——首页示例卡一直缺「Jev 的决策现场」；
+   ② 深挖发现**引擎 sampleDecisions 老 bug**（`answers[qid]` 少解 `.probabilities`），
+   两份真实示例存档 10/10 条全坏（probabilities 是答案包装对象、reaction 是垃圾键名
+   "probabilities"）——源头修成与 Worker 同构；replay 对旧档还原（概率表解一层；reaction
+   不在词表时用**引擎同一确定性抽签**重抽——同 pool/versionId 的盐 ⇒ 抽出的就是当年本该
+   判定的那个，非编造）；用例直接吃两份真实示例 JSON。③ 存档回放 tokens 恒 0——CLI 现在
+   存 result.tokens，replay 透传（旧档 0）。
+4. **波次上限单源（C16 的一半）**：worker 的 `WAVES_MAX = 4` 改为 `WAVES.length`（feed.js
+   唯一来源，env 覆盖口子保留）；render 的 fullRun 判据 4/10000 字面量改 `WAVES.length`/
+   `CROWD`。`window.openPost` 加注释（调试/E2E 直达用，非生产路径）。
+
+**验证**：lint 49 文件 + 预载校验 23 项过；`npm test` **215/215 绿**（新增读闸、真实存档
+decisions 还原两用例；render 冒烟从 3→4 例）。
+
+---
+
 ## 2026-10-25 · 技术债偿还轮 A+B：商品改版丢阶梯、away 注释泄漏、CLI 存档 prices、默认阶梯单源、.gitattributes、render 视图冒烟
 
 **全量审计后按清单偿还（A1–A4 + B5 + B9，另顺带消掉 C11 三把尺子）**：
