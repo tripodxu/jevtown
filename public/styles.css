@@ -66,7 +66,7 @@
   --map-well: #0a0d13;
   --shadow: 0 14px 44px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(233, 228, 216, 0.04);
   --grain: 0.05;
-  --font-display: Georgia, "Noto Serif SC", "Songti SC", "STZhongsong", "SimSun", serif;
+  --font-display: Georgia, "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STZhongsong", "SimSun", serif;
 }
 
 /* 普查公报 */
@@ -104,7 +104,7 @@
   --face-sorry: #bc2a2a;
   --shadow: 0 10px 30px rgba(84, 70, 40, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.7);
   --grain: 0.05;
-  --font-display: Georgia, "Noto Serif SC", "Songti SC", "STZhongsong", "SimSun", serif;
+  --font-display: Georgia, "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STZhongsong", "SimSun", serif;
 }
 
 /* 精密仪器 */
@@ -206,10 +206,14 @@ body {
   padding: 0 20px 72px;
   max-width: 1020px;
   min-height: 100%;
+  /* 普查图纸：最上层铺一层 28px 间距的点阵（1px 点、取自文字色 6.5% 透明度），
+     页面留白处变成一张淡淡的坐标纸——呼应 100×100 的小镇网格。两层氛围光垫底。 */
   background:
+    radial-gradient(color-mix(in srgb, var(--text) 6.5%, transparent) 1px, transparent 1.4px),
     radial-gradient(60rem 34rem at 12% -6%, var(--glow-1), transparent 62%),
     radial-gradient(52rem 30rem at 88% 12%, var(--glow-2), transparent 60%),
     var(--bg);
+  background-size: 28px 28px, auto, auto, auto;
   color: var(--text);
   font: 15px/1.7 var(--font-body);
   font-family: var(--font-body);
@@ -390,15 +394,62 @@ dialog#settings input {
 /* ---------- 首屏 ---------- */
 
 .hero {
+  position: relative;
   padding: 38px 2px 30px;
 }
 
+/* 宽屏时首屏右侧的一小块「迷你小镇」：10×10 的点阵代表一格一人，
+   其中一格亮着强调色——整个产品的隐喻缩在一枚印章里。窄屏藏起，不与标题抢地。 */
+.town-mark {
+  display: none;
+}
+
+@media (min-width: 1000px) {
+  .town-mark {
+    display: block;
+    position: absolute;
+    top: 176px;
+    right: 8px;
+    width: 122px;
+    height: 122px;
+    background-image: radial-gradient(color-mix(in srgb, var(--text) 20%, transparent) 1.1px, transparent 1.3px);
+    background-size: 12.2px 12.2px;
+    -webkit-mask-image: radial-gradient(closest-side, #000 62%, transparent);
+    mask-image: radial-gradient(closest-side, #000 62%, transparent);
+  }
+  /* 那一格亮着的「窗」：Jev 判定到的第一个人 */
+  .town-mark::after {
+    content: "";
+    position: absolute;
+    top: 36.6px;   /* 3 格 × 12.2px */
+    left: 61px;    /* 5 格 × 12.2px */
+    width: 5px;
+    height: 5px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent-soft);
+  }
+}
+
 .driver {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin: 0 0 16px;
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.06em;
+}
+
+/* kicker 前的一小段强调色引线：公文页眉的那一笔 */
+.driver::before {
+  content: "";
+  width: 24px;
+  height: 1px;
+  background: var(--accent);
+  opacity: 0.7;
+  flex-shrink: 0;
 }
 
 .driver b { color: var(--accent); }
@@ -426,6 +477,33 @@ dialog#settings input {
   font-size: 16px;
   line-height: 1.75;
   text-wrap: pretty;
+}
+
+/* 普查封面的规模数字条：dt 小字灰、dd 等宽数字，顶上一条发丝线——
+   「这是一台仪器，这是它的量程」。事实全部来自引擎常量，不随版本漂。 */
+.census {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 40px;
+  margin: 28px 0 0;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--hairline);
+  max-width: 42em;
+}
+
+.census-item dt {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.census-item dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.45;
 }
 
 /* ---------- 卡片（仪表板面板） ---------- */
@@ -1272,6 +1350,9 @@ footer a:hover { color: var(--text); }
 /* 窄屏：标签独占一行，条与数字并排在下一行。
    否则 .label(110) + .num(96) 就把可用宽度吃光，比例条只剩一条细缝——等于没有。 */
 @media (max-width: 560px) {
+  /* kicker 的引线在窄屏会把一行字挤成三行怪断——恢复自然行流 */
+  .driver { display: block; }
+  .driver::before { display: none; }
   .seg { flex-wrap: wrap; row-gap: 4px; }
   .seg .label { min-width: 0; flex: 1 1 100%; }
   .seg .bar2 { flex: 1 1 110px; max-width: none; }

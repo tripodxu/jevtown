@@ -34,6 +34,18 @@ app.js  fetch /api/post/:id
 
 ## 视觉打磨（R38）
 
+- **设计方向「普查图纸 × 夜间航拍」**：页面留白铺 28px 间距的点阵（1px 点，文字色 6.5%
+  透明度，`background-size` 分层叠加在两层氛围光之上）——留白处变成一张淡淡的坐标纸，
+  呼应 100×100 的小镇网格。首屏三个新增件：
+  - `.driver` kicker 前一段 24px 强调色引线（560px 以下收起——flex 引线会把窄屏的一行字
+    挤成三行怪断，实测过）；
+  - `.census` 规模数字条（dt 灰小字 / dd 等宽数字，顶上发丝线）：静态产品事实，来自引擎
+    常量，不随版本漂；窄屏自然折行；
+  - `.town-mark` 迷你小镇（≥1000px）：10×10 点阵 + 一格亮着强调色的「窗」，整个产品的
+    隐喻缩成一枚印；absolute 定位在 `.hero` 右侧留白区（曾压到标题右缘，下移避开），
+    mask 径向渐隐，窄屏 display:none。
+- **字体栈**：夜巡/公报的 `--font-display` 补 "Source Han Serif SC" / "Noto Serif CJK SC"
+  （Linux 宋体），Windows 仍落 SimSun、macOS 落 Songti SC。
 - **吸附顶栏**：宽屏（≥721px）`.top` sticky + `backdrop-filter: blur`，半透明底让背景 glow
   透上来；窄屏不吸附（两行高吃纵 space）。配套 `html { scroll-padding-top: 72px }`——
   toc 锚点跳转不被顶栏盖住；`scroll-behavior: smooth` 只在 no-preference 媒体里。
