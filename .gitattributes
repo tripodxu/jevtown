@@ -1,0 +1,3 @@
+# 行尾统一 LF：仓库内本就是 LF，别让各机的 core.autocrlf 在检出时翻成 CRLF、
+# 再在下次提交时 diff 出整文件的行尾噪声（Windows 上每次 git add 都在警告这件事）。
+* text=auto eol=lf

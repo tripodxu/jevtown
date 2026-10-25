@@ -7,7 +7,7 @@
 //   GET  /api/feed      最近的检查
 // 引擎全部来自 public/shared/（上游 gaborishka/jevtown，MIT），Worker 只做编排和存取。
 import { crowd, persona, personaLine, CROWD } from '../public/shared/personas.js';
-import { PRESETS, CANT_TELL, priceLadder } from '../public/shared/presets.js';
+import { PRESETS, CANT_TELL, priceLadder, DEFAULT_PRICES } from '../public/shared/presets.js';
 import { openingRequest, openingAnswers, reactionRequest, questionId, MAX_TEXT_CHARS, followUpRequest } from '../public/shared/requests.js';
 import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered, exposureBands } from '../public/shared/feed.js';
 import { drawReaction } from '../public/shared/draw.js';
@@ -138,6 +138,8 @@ const round2 = (value) => Math.round(value * 100) / 100;
 // （2026-09-30 实测：站点 $0.010 vs CLI $0.033，日预算闸随之失明）。
 // 显示口径不变（toFixed(3/4)），只有存储与累加变准。
 const round4 = (value) => Math.round(value * 10000) / 10000;
+/** body.prices → 干净的价格数组；非法或缺席 null。开局缺了直接 400，改版缺了则沿用上一版的阶梯。 */
+const cleanPrices = (input) => (Array.isArray(input) && input.length >= 2 && input.every((n) => Number.isFinite(n) && n > 0) ? input.map(Number) : null);
 
 /**
  * 这台 Worker 用哪条路到 Jev，优先级：请求头 BYOK（x-jev-provider + x-jev-key，访客在页面设置里填的）
@@ -263,10 +265,8 @@ async function runCheck(request, env) {
   if (!PRESETS[presetId]) return fail('unknown preset');
   if (!text) return fail('text is empty');
   if (text.length > MAX_TEXT_CHARS) return fail(`text is longer than ${MAX_TEXT_CHARS} chars`);
-  const prices = presetId === 'product'
-    ? (Array.isArray(body.prices) && body.prices.every((n) => Number.isFinite(n) && n > 0) && body.prices.length >= 2 ? body.prices.map(Number) : null)
-    : null;
-  if (presetId === 'product' && !prices) return fail('product 需要 prices：至少两个正数的数组，如 [9,19,39,79]');
+  const prices = cleanPrices(body.prices);
+  if (presetId === 'product' && !prices) return fail(`product 需要 prices：至少两个正数的数组，如 ${DEFAULT_PRICES.join(', ')}`);
 
   // posts.ip 供每 IP 日闸计数（R28 退役的旧闸护的是站方钱包；D1 写入配额那半由
   // CHECK_DAILY_LIMIT 接管），两个 INSERT 共用这一次读取。
@@ -348,8 +348,13 @@ async function runVersion(request, env) {
   }
   if (!authorOk(request, post)) return fail('this post is not yours', 403);
 
-  const row = await env.DB.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS number FROM versions WHERE post = ?').bind(id).first();
+  // 版本号与上一版的定价阶梯一趟取回：改版不重报 prices 时沿用（商品的阶梯是帖子的
+  // 属性，不该因为发了个新版本就静默换回默认档——v2 起丢阶梯曾是真 bug）。
+  const row = await env.DB.prepare(
+    'SELECT COALESCE(MAX(number), 0) + 1 AS number, (SELECT prices FROM versions WHERE post = ? ORDER BY number DESC LIMIT 1) AS lastPrices FROM versions WHERE post = ?',
+  ).bind(id, id).first();
   const number = row.number;
+  const prices = cleanPrices(body.prices) ?? (row.lastPrices ? JSON.parse(row.lastPrices) : null);
   const provider = providerOf(env, request);
   const pool = post.pool;
   const audience = cleanAudience(body.audience);
@@ -359,8 +364,8 @@ async function runVersion(request, env) {
   if (opening.blocked.length) {
     await env.DB.batch([
       env.DB.prepare(
-        'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, provider, usd, tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), provider.name, round4(usd), tokens),
+        'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, prices, provider, usd, tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), prices ? JSON.stringify(prices) : null, provider.name, round4(usd), tokens),
       addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, ms, day: today() }),
     ]);
     return json({ post: id, version: number, state: 'blocked', author: post.author, blocked: opening.blocked });
@@ -373,8 +378,8 @@ async function runVersion(request, env) {
   await env.DB.batch([
     env.DB.prepare('UPDATE posts SET state = ? WHERE id = ?').bind('running', id),
     env.DB.prepare(
-      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, provider, usd, tokens, audience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), JSON.stringify(plan), provider.name, round4(usd), tokens, audience ? JSON.stringify(audience) : null),
+      'INSERT INTO versions (post, number, text, scores, checks, unlisted, blocked, plan, prices, provider, usd, tokens, audience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(id, number, text, JSON.stringify(opening.scores), JSON.stringify(opening.checks), JSON.stringify(opening.unlisted), JSON.stringify(opening.blocked), JSON.stringify(plan), prices ? JSON.stringify(prices) : null, provider.name, round4(usd), tokens, audience ? JSON.stringify(audience) : null),
     addSpend(env.DB, { post: id, number, stage: 'opening', usd, tokens, ms, day: today() }),
   ]);
   return json({ post: id, version: number, state: 'running', wave: { index: 0, total: wave0.length } });
@@ -663,7 +668,7 @@ async function runFollowUp(env, post, version, provider, reached, people, number
   const preset = PRESETS[post.preset];
   if (!preset.followUp) return null;
   const prices = version.prices ? JSON.parse(version.prices) : null;
-  const answers = preset.followUp.answers ?? priceLadder(prices ?? [9, 19, 39, 79], '¥');
+  const answers = preset.followUp.answers ?? priceLadder(prices ?? DEFAULT_PRICES, '¥');
   const stopped = [...reached.entries()].filter(([, reaction]) => preset.reactions[reaction]?.stopped).map(([id]) => id);
   const totals = Object.fromEntries(Object.keys(answers).map((id) => [id, 0]));
   // 外呼门：见 FOLLOW_UP_MAX_BATCHES。比例取样本——问过的那些人就是被抽到的那些人，

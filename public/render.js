@@ -99,7 +99,7 @@ function buildToc(el) {
  * 措辞在这里——句式全部是名词短语 + 括号注记（不搭从句，无病句风险），
  * 数字来自 payload 的既有字段，Jev 不写一个字。
  */
-function briefView(result) {
+export function briefView(result) {
   if (!result.counters?.reach || !result.waves?.length) return '';
   const brief = reportBrief(result.counters, result.waves, result.segments ?? {});
   const pct = (v) => Math.round(v * 100);
@@ -118,13 +118,15 @@ function briefView(result) {
   if (brief.best) lines.push(groupNote(brief.best, 'glad', '最买账'));
   if (brief.worst) lines.push(groupNote(brief.worst, 'sorry', '反感最集中'));
   const plain = lines.map((line) => line.replace(/<[^>]+>/g, '')).join('\n');
-  const copy = 'clipboard' in navigator
+  // navigator 在 Node（视图冒烟测试）里不存在：typeof 守卫，别让复制按钮挡住整节渲染。
+  const copy = typeof navigator !== 'undefined' && 'clipboard' in navigator
     ? `<button class="ghost brief-copy" type="button" data-copy-brief="${esc(plain)}">复制</button>`
     : '';
   return `<div class="brief">${copy}${lines.map((line) => `<p class="brief-line">${line}</p>`).join('')}</div>`;
 }
 
-function overview(result) {  const c = result.counters;
+function overview(result) {
+  const c = result.counters;
   return `<h3>总览</h3><div class="stats">` +
     stat(c.reach, 'Jev 逐格判定') +
     stat(c.stopped, '停下来') +
@@ -134,7 +136,7 @@ function overview(result) {  const c = result.counters;
     '</div>';
 }
 
-function reportView(result) {
+export function reportView(result) {
   const report = result.report;
   if (!report?.stages?.length) return '';
   const t = report.totals;
@@ -150,7 +152,7 @@ function reportView(result) {
     ${reportBars(report.stages, reportStageZh)}`;
 }
 
-function decisionsView(result) {
+export function decisionsView(result) {
   const list = result.decisions;
   if (!list?.length) return '';
   const cards = list.map((d) => {
@@ -176,7 +178,7 @@ function decisionsView(result) {
  * 人群地形：这次的反应是连成片的还是零散的（shared/spatial.js 的判定）。
  * 判不出来也照样说"看不出"——不藏，并把统计量与置换次数摆出来，让人自己判断。
  */
-function terrainView(result) {
+export function terrainView(result) {
   const t = result.terrain;
   if (!t || t.morans === null) return '';
   const verdict = TERRAIN_VERDICT_ZH[t.verdict] ?? t.verdict;
@@ -195,7 +197,7 @@ function terrainView(result) {
   </div>`;
 }
 
-function wavesView(result, width) {
+export function wavesView(result, width) {
   if (!result.waves?.length) return '';
   const line = moodLine(result.waves.map((w) => w.mood), { width });
   // 门槛的那句话只说给门槛模式听：广播模式不看门槛，说了反而像矛盾。
@@ -306,8 +308,8 @@ function awayView(result) {
       ? `${esc(awaySayZh(sentence))}：${esc(groupZh(sentence.top.id))} ${signed(top, 3)} ｜ ${esc(groupZh(sentence.bottom.id))} ${signed(bottom, 3)}`
       : esc(awaySayZh(sentence));
     const mean = signed(sentence.mean, 4);
+    // i 在 shared/away.js 里就是 1 起（ablationStats 返回 i + 1），这里直接用。
     return `<div class="arow${sentence.readable ? '' : ' quiet'}">
-      // i 在 shared/away.js 里就是 1 起（ablationStats 返回 i + 1），这里直接用。
 <span class="flabel">第 ${sentence.i} 句</span>
       <span class="apart">${esc(sentence.part)}</span>
       ${sentence.readable ? `<span class="atwin"><i class="adown" style="width:${left}%"></i><i class="aup" style="width:${right}%"></i></span>` : ''}
@@ -332,7 +334,7 @@ function awayView(result) {
  * 按钮不在 runCheck 的主流程里——它要花钱（实测 $0.002–0.003），所以只有点了才算，
  * 也只有作者能算（worker 的 authorOk 兜底；这里按作者令牌决定显不显示）。
  */
-function awayBar(result) {
+export function awayBar(result) {
   if (result.away) return awayView(result);
   if (result.post.state !== 'done' || !result.post.text) return '';
   const author = Boolean(result.awayCallable);
@@ -347,7 +349,7 @@ function awayBar(result) {
  * 每波反应构成：`reach`（第几波看到）× `looks`（什么反应）交叉成堆叠条，
  * 传播稀释（第 1 波乐见、越往后越中性划走）一眼可见。旧存档无 reach → 优雅缺席。
  */
-function waveMixView(result) {
+export function waveMixView(result) {
   if (!result.looks || !result.reach || !result.waves?.length) return '';
   const presetId = result.post.preset;
   const mix = waveMix(presetId, Object.keys(PRESETS[presetId].reactions), decodeBytes(result.looks), decodeBytes(result.reach));
@@ -355,7 +357,7 @@ function waveMixView(result) {
   return `<h3>每一波的人都是什么反应</h3>${waveMixChart(mix)}`;
 }
 
-function countsView(result) {
+export function countsView(result) {
   const presetId = result.post.preset;
   const reach = Math.max(1, result.counters.reach);
   const rows = Object.entries(result.counters.byReaction)
@@ -381,7 +383,7 @@ function liftOf(seg, key) {
  * 边际统计（上面的分组段）答不了"哪个年龄段 × 哪类兴趣一起叫好"的组合效应，这个切面答得了。
  * 数据全在浏览器里算（looks 字节本来就在内存里），不新增 Jev 调用。
  */
-function heatmapView(result, width) {
+export function heatmapView(result, width) {
   if (!result.looks || !result.counters?.reach) return '';
   const presetId = result.post.preset;
   const data = sliceHeatmap(presetId, Object.keys(PRESETS[presetId].reactions), decodeBytes(result.looks), townOf('zh'));
@@ -389,7 +391,7 @@ function heatmapView(result, width) {
   return `<h3>谁在哪儿扎堆（兴趣街区 × 乐见占比）</h3>${sliceChart(data, { width })}`;
 }
 
-function jevReading(result) {
+export function jevReading(result) {
   const ids = Object.keys(result.checks ?? {});
   if (!ids.length) return '';
   const chips = ids.map((id) => {
@@ -430,7 +432,7 @@ export function audienceView(result) {
   return html.join('');
 }
 
-function segmentsView(result) {
+export function segmentsView(result) {
   const groups = [['stopped', '谁停下了'], ['glad', '谁乐见'], ['sorry', '谁反感']];
   const html = [];
   for (const [key, title] of groups) {
@@ -451,7 +453,7 @@ function segmentsView(result) {
   return html.join('');
 }
 
-function saidView(result) {
+export function saidView(result) {
   const said = result.said;
   if (!said?.lists || !Object.keys(said.lists).length) return '';
   const presetId = result.post.preset;
@@ -474,7 +476,7 @@ function saidView(result) {
   return html.join('');
 }
 
-function followUpView(result, width) {
+export function followUpView(result, width) {
   const f = result.followUp;
   if (!f || !f.asked) return '';
   const presetId = result.post.preset;
@@ -496,7 +498,7 @@ function followUpView(result, width) {
   return html.join('');
 }
 
-function voicesView(result) {
+export function voicesView(result) {
   if (!result.voices?.length) return '';
   const pool = result.post.pool ?? 'zh';
   const cards = result.voices.map((voice) =>

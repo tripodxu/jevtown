@@ -3,7 +3,7 @@
 import { renderCheck, renderDelta, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
 import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH, WAVE_ZH, FEED_ZH } from './shared/labels.js';
-import { PRESETS } from './shared/presets.js';
+import { PRESETS, DEFAULT_PRICES } from './shared/presets.js';
 import { drawGrid, paintDelta } from './grid.js';
 import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
 import { newTally, foldBatch } from './tally.js';
@@ -430,13 +430,14 @@ $('text').addEventListener('keydown', (event) => {
 });
 
 /**
- * 商品的定价阶梯：留空走默认档；填了就按用户的算（API 要求至少两个正数）。
- * 读不出来返回 null——校验失败绝不能悄悄落回默认档：用户看着报告以为曲线是自己的价格。
+ * 商品的定价阶梯：**留空 = 不表态**（开局走默认档 DEFAULT_PRICES，改版沿用上一版的阶梯——
+ * 阶梯是帖子的属性，不该因为改版静默换回默认）；填了就按用户的算。
+ * 读不出来返回 null——校验失败绝不能悄悄落回默认档：用户看着报告以为是自己的价格。
  */
 const parsePrices = () => {
   if ($('preset').value !== 'product') return undefined;
   const raw = $('pricesInput').value.trim();
-  if (!raw) return [9, 19, 39, 79];
+  if (!raw) return undefined;
   const nums = raw.split(/[,，、;；\s]+/).filter(Boolean).map(Number);
   return nums.length >= 2 && nums.every((n) => Number.isFinite(n) && n > 0) ? nums : null;
 };
@@ -491,8 +492,8 @@ $('form').addEventListener('submit', async (event) => {
   try {
     status(asVersion ? '再发一版：Jev 重新掂量……' : '开局：Jev 正在掂量这段文字是写给谁的……', 0.02);
     const opening = asVersion
-      ? await postRetry('/api/version', { post: current.post, text, audience, broadcast })
-      : await postRetry('/api/check', { preset, text, prices, audience, broadcast });
+      ? await postRetry('/api/version', { post: current.post, text, audience, broadcast, prices })
+      : await postRetry('/api/check', { preset, text, prices: preset === 'product' ? (prices ?? DEFAULT_PRICES) : undefined, audience, broadcast });
 
     if (opening.author) {
       currentAuthor = opening.author;

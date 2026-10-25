@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCheck } from '../public/shared/check.js';
-import { PRESETS } from '../public/shared/presets.js';
+import { PRESETS, DEFAULT_PRICES } from '../public/shared/presets.js';
 import { crowd } from '../public/shared/personas.js';
 import { exposureBands } from '../public/shared/feed.js';
 import { pickableGroups, reconcileAudience, pickLabelZh, segments } from '../public/shared/summary.js';
@@ -36,7 +36,7 @@ const option = (name) => {
 };
 const positional = args.filter((arg, index) => !arg.startsWith('--') && !/^--(preset|prices|max-waves|audience|picked)$/.test(args[index - 1] ?? ''));
 const presetId = option('preset') ?? 'post';
-const prices = (option('prices') ?? '9,19,39,79').split(',').map(Number);
+const prices = (option('prices') ?? DEFAULT_PRICES.join(',')).split(',').map(Number);
 const maxWaves = Number(option('max-waves') ?? 4);
 const text = positional.join(' ').trim();
 

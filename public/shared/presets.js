@@ -109,6 +109,8 @@ export const PRESETS = {
  * dark = not shown, scrolled, stopped (looked and did nothing), glad, spreads (glad and carries it
  * further), sorry, hollow (can't tell).
  */
+/** The default price ladder of a product check. One source: the Worker, the frontend form, the CLI and the engine's own fallback all read it — separate literals once produced three different "default" ladders. */
+export const DEFAULT_PRICES = [9, 19, 39, 79];
 /** A member of the post's audience the text has not reached: lighter than `dark`, the rest of the town. Outside LOOKS, so legends and pictures of posts without an audience do not change. */
 export const IN_AUDIENCE = '#262e3b';
 

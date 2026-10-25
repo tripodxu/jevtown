@@ -186,6 +186,34 @@ test('冻结报告重复拉取：十档/声音/地形逐字相同（派生缓存
   assert.equal(JSON.stringify(a.terrain), JSON.stringify(b.terrain), '地形两拉不一致');
 });
 
+// 商品的定价阶梯是帖子的属性：改版不重报 prices 时沿用上一版，显式传入才覆盖。
+// 曾经 runVersion 的 INSERT 没有 prices 列——v2 起需求曲线静默落回默认档，作者看着
+// 报告以为是自己的价格（技术债 A1，2026-10-25 修）。
+test('商品改版的定价阶梯：v2 不带 prices 沿用 v1，显式传入则覆盖', { timeout: 240_000 }, async () => {
+  const v1 = await (await postJSON(worker, '/api/check', {
+    preset: 'product',
+    text: '商品阶梯验证：316 不锈钢保温杯，保温 12 小时，89 元。',
+    prices: [19, 39, 99],
+  })).json();
+  await runToDone(worker, v1.post, 1, v1.author);
+  const d1 = await (await worker.fetch(`/api/post/${v1.post}?v=1`)).json();
+  assert.deepEqual(d1.prices, [19, 39, 99]);
+
+  // v2 不带 prices：继承 v1 的阶梯，追问的答案键数 = 阶梯数 + 1（p0 不买）
+  const v2 = await (await postJSON(worker, '/api/version', { post: v1.post, text: '商品阶梯验证二版：保温杯 316 不锈钢，限时 79 元。' }, { 'x-jev-author': v1.author })).json();
+  await runToDone(worker, v1.post, 2, v1.author);
+  const d2 = await (await worker.fetch(`/api/post/${v1.post}?v=2`)).json();
+  assert.deepEqual(d2.prices, [19, 39, 99], 'v2 未带 prices 应沿用 v1 的阶梯');
+  assert.ok(d2.followUp, '商品版收尾该有价格追问');
+  assert.equal(Object.keys(d2.followUp.totals).length, 4, 'p0 + 三档价格 = 4 个答案键');
+
+  // v3 显式换成两档：覆盖继承
+  await postJSON(worker, '/api/version', { post: v1.post, text: '商品阶梯验证三版：保温杯 59 元两件。', prices: [29, 59] }, { 'x-jev-author': v1.author });
+  await runToDone(worker, v1.post, 3, v1.author);
+  const d3 = await (await worker.fetch(`/api/post/${v1.post}?v=3`)).json();
+  assert.deepEqual(d3.prices, [29, 59], '显式传入的阶梯该覆盖继承值');
+}, { timeout: 240_000 });
+
 test('blocked 帖的详情页：state=blocked 且没有计数与地图', async () => {
   const opening = await (await postJSON(worker, '/api/check', { preset: 'listing', text: '傻逼东西你去死吧' })).json();
   assert.equal(opening.state, 'blocked');

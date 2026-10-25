@@ -3,7 +3,7 @@
 // to four questions go to up to 100 of the people it reached. The caller supplies the way to Jev, so
 // the same code runs in the terminal, in tests and, cut into pieces, in the Worker.
 import { crowd, personaLine } from './personas.js';
-import { PRESETS, priceLadder, lookOf, listOf, answersFor, LISTS, NOT_SHOWN, CANT_TELL } from './presets.js';
+import { PRESETS, priceLadder, lookOf, listOf, answersFor, LISTS, NOT_SHOWN, CANT_TELL, DEFAULT_PRICES } from './presets.js';
 import { reactionRequest, followUpRequest, askRequest, openingRequest, openingAnswers, audienceRequest, audienceAnswers, questionId } from './requests.js';
 import { firstWave, nextWave, mood, travels, gatherAsked, asking, emptyGathered, partsOf, audienceOf, audienceMask, MIN_AUDIENCE, WAVES } from './feed.js';
 import { drawReaction, drawAnswer, expectedTone } from './draw.js';
@@ -193,7 +193,7 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
 
   let followUp = null;
   if (preset.followUp && mayFollowUp?.(waves) !== false) {
-    const answers = preset.followUp.answers ?? priceLadder(prices ?? [5, 9, 19, 49], currency);
+    const answers = preset.followUp.answers ?? priceLadder(prices ?? DEFAULT_PRICES, currency);
     const stopped = people.filter((persona) => preset.reactions[reached.get(persona.id)]?.stopped);
     const totals = Object.fromEntries(Object.keys(answers).map((id) => [id, 0]));
     let asked = 0;
@@ -216,5 +216,7 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
   const said = mergeSaid(parts, missing);
 
   const { checks, unlisted, blocked } = opening;
-  return { presetId, pool, keys, scores, reactions, waveOf, waves, reach: reached.size, followUp, said, checks, unlisted, blocked, decisions, audience: reads, ...spent, seconds: (performance.now() - startedAt) / 1000 };
+  // prices 原样回传（商品才有意义）：CLI 存档与站点 versions.prices 同一口径——
+  // 以前不回传，CLI 存档里 `result.prices ?? null` 恒 null，--prices 白传。
+  return { presetId, pool, keys, scores, reactions, waveOf, waves, reach: reached.size, followUp, said, checks, unlisted, blocked, decisions, audience: reads, prices: prices ?? null, ...spent, seconds: (performance.now() - startedAt) / 1000 };
 }
