@@ -2,7 +2,7 @@
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
 import { renderCheck, renderDelta, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
-import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH, WAVE_ZH } from './shared/labels.js';
+import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH, WAVE_ZH, FEED_ZH } from './shared/labels.js';
 import { PRESETS } from './shared/presets.js';
 import { drawGrid, paintDelta } from './grid.js';
 import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
@@ -10,6 +10,7 @@ import { newTally, foldBatch } from './tally.js';
 import { renderShareCard } from './sharecard.js';
 import { crowd, CROWD } from './shared/personas.js';
 import { pickableGroups, filterGroups, pickLabelZh } from './shared/summary.js';
+import { decodeBytes } from './shared/bytes.js';
 
 const $ = (id) => document.getElementById(id);
 // 当前正在做的检查：哪个 post 的哪个版本。
@@ -108,7 +109,7 @@ const announce = (text) => {
 
 let live = null;
 
-function showLive(presetId) {
+function showLive(presetId, seedDrawn = null) {
   const reactions = PRESETS[presetId].reactions;
   const keys = Object.keys(reactions);
   live = {
@@ -126,6 +127,11 @@ function showLive(presetId) {
     shares: [],
     lastSample: null,
   };
+  // 续跑种子：foldBatch 幂等（重折同一个人只改字节不动计数），已判定的人先铺回地图与统计。
+  if (seedDrawn?.length) {
+    foldBatch(live.tally, seedDrawn, (reaction) => keys.indexOf(reaction), (index) => live.tone[index] ?? 0);
+    live.shares.push({ glad: live.tally.glad, sorry: live.tally.sorry, judged: live.tally.judged });
+  }
   $('monitorBody').innerHTML = '';
   $('live').hidden = false;
   // 点了「让小镇来读」之后最想看的是地图逐批判定点亮——实时区在首屏折叠线下，
@@ -247,7 +253,9 @@ function paintBatch(batch) {
   monitorRow([`第 ${batch.wave + 1} 波`, `${batch.answered} / ${batch.total}`, `${batch.ms ?? 0}ms`, `${(batch.tokens ?? 0).toLocaleString()}`, `$${live.usd.toFixed(4)}`]);
 }
 
-const pace = () => new Promise((resolve) => setTimeout(resolve, 180)); // 节奏化：让点亮过程可见
+// 节奏化：让点亮过程可见。第 1 波是揭示（慢一点），之后是量（快一点）——全城广播
+// 130 批全按 180ms 会白等二十多秒，首波之后 90ms 足够看清逐批推进。
+const pace = () => new Promise((resolve) => setTimeout(resolve, live && live.tally.judged >= 600 ? 90 : 180));
 
 // -- 「这段话是给谁的」（R35）：一句自述 + 从清单里挑几组 --------------------------
 
@@ -470,49 +478,11 @@ $('form').addEventListener('submit', async (event) => {
     }
     current.post = opening.post;
     current.version = opening.version;
-    showLive(preset);
-    announce(`检查开始，第 1 波 ${opening.wave?.total ?? ''} 人`);
     if (opening.unlisted?.length) {
       status(`注意：${opening.unlisted.map((id) => BLOCKED_ZH[id] ?? id).join('、')}（仍会照常检查，但不进公共流）`, 0.04);
     }
-
-    // 波次循环：一批批问 Jev（每批 100 人），收波定去留，直到检查结束。
-    let done = false;
-    while (!done) {
-      for (;;) {
-        const batch = await getBatch(`/api/batch?post=${current.post}&v=${current.version}`);
-        if (batch.done) break;
-        paintBatch(batch);
-        status(`第 ${batch.wave + 1} 波：Jev 已判定 ${batch.answered} / ${batch.total} 人`, batch.answered / Math.max(1, batch.total));
-        await pace();
-      }
-      const wave = await postJSON(`/api/wave?post=${current.post}&v=${current.version}`);
-      if (wave.done) {
-        done = true;
-        monitorRow(['收尾', `到达 ${wave.reach}`, '', '', ''], 'wave-row');
-        // 结束原因分两说：gate = 情绪没过线被拦下（告诉作者差在哪、还有广播这条路）；
-        // capacity = 波次跑满或全城都看到了，正常谢幕不用解释。
-        const gateLine = wave.endedBy === 'gate'
-          ? WAVE_ZH.stoppedSay.replace('%1', String(wave.wave.index + 1))
-          : '收尾完成。';
-        status(gateLine, 0.98);
-        announce(gateLine);
-      } else {
-        // 广播模式下情绪不过线也继续推：状态行要把「为什么还在传」说穿，不然读着像矛盾。
-        const push = wave.broadcast && !wave.wave.travels ? `，${WAVE_ZH.broadcastGo}（不看门槛）` : '';
-        const line = `第 ${wave.wave.index + 1} 波完成，情绪 ${signed(wave.wave.mood, 2)}${push}，文字传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`;
-        monitorRow([`第 ${wave.wave.index + 1} 波收束`, `情绪 ${signed(wave.wave.mood, 2)}`, `${wave.wave.size} 人`, '', ''], 'wave-row');
-        status(line, 0.5);
-        announce(line);
-      }
-    }
-
-    const view = await readJSON(`/api/post/${current.post}?v=${current.version}`);
-    $('live').hidden = true;
-    showResult(view);
-    status('完成。', 1);
-    announce('检查完成，报告已生成');
-    await loadFeed();
+    await driveCheck(preset, null, `检查开始，第 1 波 ${opening.wave?.total ?? ''} 人`);
+    await finishCheck();
   } catch (error) {
     // 免费通道走 Worker 共享出口，被上游按 IP 限流是常态（2026-10-07 线上实测：本机畅通、
     // Worker 出口持续 429）——退避 6 轮仍失败时给访客一条真正能走的路，而不是一句裸报错。
@@ -528,6 +498,62 @@ $('form').addEventListener('submit', async (event) => {
   }
 });
 
+/**
+ * 波次驱动：一批批问 Jev（每批 100 人）、收波定去留，直到检查结束；live 监控全程更新。
+ * 新开检查与续跑（页面刷新后从报告回看一个 running 的版本）共用这一段。
+ * `seedDrawn`：续跑时已判定过的人（[{ id, reaction }]，从报告的 looks 字节还原），
+ * 先折进快照把地图铺到当前进度——否则续跑地图从头黑起，前几波的成果全看不见。
+ */
+async function driveCheck(presetId, seedDrawn = null, openingSay = '') {
+  showLive(presetId, seedDrawn);
+  if (openingSay) announce(openingSay);
+  let done = false;
+  while (!done) {
+    for (;;) {
+      const batch = await getBatch(`/api/batch?post=${current.post}&v=${current.version}`);
+      if (batch.done) break;
+      paintBatch(batch);
+      status(`第 ${batch.wave + 1} 波：Jev 已判定 ${batch.answered} / ${batch.total} 人`, batch.answered / Math.max(1, batch.total));
+      await pace();
+    }
+    const wave = await postJSON(`/api/wave?post=${current.post}&v=${current.version}`);
+    if (wave.done) {
+      done = true;
+      monitorRow(['收尾', `到达 ${wave.reach}`, '', '', ''], 'wave-row');
+      // 结束原因分两说：gate = 情绪没过线被拦下（告诉作者差在哪、还有广播这条路）；
+      // capacity = 波次跑满或全城都看到了，正常谢幕不用解释。
+      const gateLine = wave.endedBy === 'gate'
+        ? WAVE_ZH.stoppedSay.replace('%1', String(wave.wave.index + 1))
+        : '收尾完成。';
+      status(gateLine, 0.98);
+      announce(gateLine);
+    } else {
+      // 广播模式下情绪不过线也继续推：状态行要把「为什么还在传」说穿，不然读着像矛盾。
+      const push = wave.broadcast && !wave.wave.travels ? `，${WAVE_ZH.broadcastGo}（不看门槛）` : '';
+      const line = `第 ${wave.wave.index + 1} 波完成，情绪 ${signed(wave.wave.mood, 2)}${push}，文字传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`;
+      monitorRow([`第 ${wave.wave.index + 1} 波收束`, `情绪 ${signed(wave.wave.mood, 2)}`, `${wave.wave.size} 人`, '', ''], 'wave-row');
+      status(line, 0.5);
+      announce(line);
+    }
+  }
+}
+
+/** 检查跑完的收尾：关监控、出报告、版本 ≥2 时自动载入对比（作者刚等完一整轮，他要的下一眼就是对比）、刷新 feed。 */
+async function finishCheck() {
+  const view = await readJSON(`/api/post/${current.post}?v=${current.version}`);
+  $('live').hidden = true;
+  showResult(view);
+  status('完成。', 1);
+  announce('检查完成，报告已生成');
+  if (compareLoader) await compareLoader();
+  await loadFeed();
+}
+
+// 第 1 版对比的装载器：showResult 每次重建（renderCheck 清容器，闭包跟容器走），
+// finishCheck 在作者自己跑完版本 ≥2 时直接调用它——他要的下一眼就是对比，不用再点一次按钮。
+// 深链/他人打开不自动调：那是一份读动作，多拉一整版报告是翻倍负载。
+let compareLoader = null;
+
 function showResult(view) {
   lastView = view;
   renderCheck($('result'), view);
@@ -541,7 +567,7 @@ function showResult(view) {
     slot.innerHTML = '<button class="ghost" type="button" id="loadCompare">载入第 1 版对比</button><span class="hint">完整重放第 1 版（地图、图谱、报告），点击才加载。</span>';
     aside.append(slot);
     aside.hidden = false;
-    slot.querySelector('#loadCompare').addEventListener('click', async () => {
+    compareLoader = async () => {
       slot.textContent = '载入中……';
       try {
         const v1 = await readJSON(`/api/post/${current.post}?v=1`);
@@ -560,8 +586,10 @@ function showResult(view) {
       } catch (error) {
         slot.innerHTML = `<span class="error">${esc(error.message)}</span>`;
       }
-    });
+    };
+    slot.querySelector('#loadCompare').addEventListener('click', compareLoader);
   } else {
+    compareLoader = null;
     aside.hidden = true;
   }
   $('result').scrollIntoView({ behavior: 'smooth' });
@@ -629,12 +657,19 @@ async function loadFeed() {
     const data = await readJSON('/api/feed');
     $('feed').innerHTML = data.posts.length
       ? data.posts
-          .map(
-            (post) =>
-              // 真 URL：报告可分享/刷新/中键新开；点击在本页拦截打开（下方委托）
-              `<li><a href="/?post=${encodeURIComponent(post.id)}" data-post="${esc(post.id)}">${esc(post.excerpt)}</a>` +
-              `<span class="meta">${esc(PRESET_NOUN_OF(post.preset))} · ${post.state === 'blocked' ? '已拒绝' : post.state === 'done' ? '已完成' : '进行中'}</span></li>`,
-          )
+          .map((post) => {
+            // 读数摘要（Worker 侧从 reactions 聚好带回）：feed 不再是光秃秃的摘要行——
+            // 「这条被人发了，小镇这么回应」一眼可见，比「已完成」有吸引力。
+            const state = post.state === 'blocked' ? '已拒绝' : post.state === 'done' ? '已完成' : '进行中';
+            const reading = post.reading
+              ? FEED_ZH.reading
+                  .replace('%1', post.reading.reach.toLocaleString())
+                  .replace('%2', String(Math.round((post.reading.glad / post.reading.reach) * 100)))
+                  .replace('%3', String(Math.round((post.reading.sorry / post.reading.reach) * 100)))
+              : '';
+            return `<li><a href="/?post=${encodeURIComponent(post.id)}" data-post="${esc(post.id)}">${esc(post.excerpt)}</a>` +
+              `<span class="meta">${esc(PRESET_NOUN_OF(post.preset))} · ${state}${reading ? ` · ${esc(reading)}` : ''}</span></li>`;
+          })
           .join('')
       : '<li style="color:var(--muted)">还没有检查。发一段文字试试。</li>';
   } catch {
@@ -661,6 +696,7 @@ window.addEventListener('popstate', () => {
   }
   $('result').replaceChildren();
   $('result').hidden = true;
+  $('resume').hidden = true;
   $('resultActions').hidden = true;
   $('compare').hidden = true;
   current.post = null;
@@ -678,14 +714,41 @@ async function openPost(id, versionHint = null) {
     current.post = id;
     currentAuthor = localStorage.getItem(`jevtown.author.${id}`);
     current.version = versionHint ?? view.versions?.at(-1)?.number ?? 1;
+    // 没跑完的检查 + 本机持有作者令牌：刷新/离开不会回滚服务端的进度，但批次要有人驱动——
+    // 给出续跑入口。没有令牌（别人的进行中检查）不显示：驱动不了，也不该驱动。
+    $('resume').hidden = !(view.post.state === 'running' && currentAuthor);
     showResult(view);
   } catch (error) {
     result.hidden = true; // 骨架不留在原地装样子
+    $('resume').hidden = true;
     status(error.message, 0);
     announce(`打开失败：${error.message}`);
   }
 }
 window.openPost = openPost;
+
+// 续跑：把中断的检查从当前波次接着驱动完。种子来自报告的 looks 字节（已判定的人），
+// 地图从当前进度亮起——不是从头黑屏把前几波重演一遍。失败时横幅回来，可再试。
+$('resumeBtn').addEventListener('click', async () => {
+  const btn = $('resumeBtn');
+  btn.disabled = true;
+  try {
+    const view = await readJSON(`/api/post/${current.post}?v=${current.version}`);
+    const keys = Object.keys(PRESETS[view.post.preset].reactions);
+    const bytes = decodeBytes(view.looks ?? '');
+    const seed = [];
+    for (let pid = 0; pid < bytes.length; pid++) if (bytes[pid]) seed.push({ id: pid, reaction: keys[bytes[pid] - 1] });
+    $('resume').hidden = true;
+    status('续跑：从中断处接着问 Jev……', 0.1);
+    await driveCheck(view.post.preset, seed, '继续这次检查');
+    await finishCheck();
+  } catch (error) {
+    btn.disabled = false;
+    $('resume').hidden = false;
+    $('statusLine').innerHTML = `<span class="error">${esc(error.message)}</span>`;
+    announce(`续跑失败：${error.message}`);
+  }
+});
 
 // 人格声音"看全部"：展开折叠的第 25 张起，按钮自己消失；焦点交给第一张新展开的卡，
 // 键盘用户不被扔回页面顶部。

@@ -176,6 +176,12 @@
       <p class="hint">花费与耗时为实时估算，精确数字以检查完成后的调用报告为准。</p>
     </section>
 
+    <section id="resume" class="plate" hidden>
+      <h2>这次检查还没跑完</h2>
+      <p class="hint">刷新或离开页面不会回滚服务端的进度，但批次要有人驱动。这台浏览器持有这次检查的作者令牌，可以从中断处把剩下的人问完。</p>
+      <button id="resumeBtn" type="button">继续跑完</button>
+    </section>
+
     <section id="result" class="plate" hidden></section>
 
     <div class="row" id="resultActions" hidden>

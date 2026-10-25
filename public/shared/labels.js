@@ -401,6 +401,11 @@ export const COMPOSE_ZH = {
   },
 };
 
+/** feed 列表的读数摘要（Worker 侧从 reactions 聚好带回 reach/glad/sorry）。 */
+export const FEED_ZH = {
+  reading: '%1 人读到 · 乐见 %2% · 反感 %3%',
+};
+
 /**
  * 传播门槛与全城广播的界面中文。门槛是 feed.js 的 GLAD_ENOUGH（实测钉死在那儿，
  * 这里只写显示文案；labels.test.js 钉住文案里的门槛数字与 GLAD_ENOUGH 对得上）。

@@ -843,10 +843,36 @@ async function versionsOf(db, id) {
 
 // -- GET /api/feed --------------------------------------------------------------
 
+/**
+ * 公共流 + 读数摘要。读数（reach/glad/sorry）由 reactions 在 D1 里 GROUP BY 聚好带回：
+ * 一行一条 (post, reaction) 计数，tone 按 post 的 preset 在这里映射——比把每帖 13KB 的
+ * looks 字节搬回 Worker 再各走一万格便宜两个数量级。没有 reactions（blocked / 刚开局）reading 为 null。
+ */
 async function listFeed(env) {
   const { results } = await env.DB.prepare('SELECT id, preset, text, state, created_at FROM posts ORDER BY created_at DESC LIMIT 20').all();
+  const readings = new Map();
+  if (results.length) {
+    const marks = results.map(() => '?').join(',');
+    const { results: counts } = await env.DB.prepare(
+      `SELECT post, reaction, COUNT(*) AS n FROM reactions WHERE post IN (${marks}) GROUP BY post, reaction`,
+    )
+      .bind(...results.map((row) => row.id))
+      .all();
+    const presetOf = new Map(results.map((row) => [row.id, row.preset]));
+    for (const row of counts) {
+      const tone = PRESETS[presetOf.get(row.post)]?.reactions[row.reaction]?.tone ?? 0;
+      const entry = readings.get(row.post) ?? { reach: 0, glad: 0, sorry: 0 };
+      entry.reach += row.n;
+      if (tone === 1) entry.glad += row.n;
+      else if (tone === -1) entry.sorry += row.n;
+      readings.set(row.post, entry);
+    }
+  }
   return json({
-    posts: results.map((row) => ({ ...row, excerpt: row.text.slice(0, 60) })),
+    posts: results.map((row) => {
+      const reading = readings.get(row.id);
+      return { ...row, excerpt: row.text.slice(0, 60), reading: reading && reading.reach ? reading : null };
+    }),
   });
 }
 

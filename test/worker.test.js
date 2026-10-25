@@ -35,6 +35,20 @@ test('product：跑完后有价格阶梯追问，GET /api/post 能拿到 followU
   // priceLadder 的答案键：p0 = 哪档都不买，p1..p4 = 四档价格（与 prices 数组等长）。
   assert.deepEqual(Object.keys(detail.followUp.totals).sort(), ['p0', 'p1', 'p2', 'p3', 'p4']);
   assert.deepEqual(detail.prices, [9, 19, 39, 79]);
+
+  // feed 读数摘要：reach/glad/sorry 由 reactions 在 D1 聚好带回，口径与报告的 counters 一致
+  //（glad+sorry ≤ reach：中性反应不进这两项）。blocked/未开跑的帖子 reading 为 null。
+  const feed = await (await worker.fetch('/api/feed')).json();
+  const mine = feed.posts.find((one) => one.id === opening.post);
+  assert.ok(mine, '刚检查完的帖该在 feed 里');
+  assert.ok(mine.reading, '跑完的帖该带读数');
+  assert.equal(mine.reading.reach, detail.counters.reach, 'feed 的 reach 与报告同口径');
+  assert.equal(mine.reading.glad, detail.counters.glad);
+  assert.equal(mine.reading.sorry, detail.counters.sorry);
+  for (const one of feed.posts) {
+    if (one.state === 'blocked') assert.equal(one.reading, null, 'blocked 帖没有 reactions，reading 该是 null');
+    else if (one.reading) assert.ok(one.reading.glad + one.reading.sorry <= one.reading.reach);
+  }
 }, { timeout: 120_000 });
 
 test('调用报告：分阶段次数/耗时/tokens 齐全，provider 记录在案', async () => {
