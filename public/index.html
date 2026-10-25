@@ -97,6 +97,12 @@
           </label>
           <span class="hint" id="broadcastHint">真实传播：净情绪 ≥ +0.10 才传下一波。勾上则四波跑满看全城反应，Jev 调用为全程（免费档无感，付费 key 约 $0.10+）。</span>
         </div>
+        <!-- 做完一次检查后：表单默认进入「改版」模式——没有这一行，玩家不知道
+             下一次提交会变成同一帖的新版本，也找不到发全新帖的入口。 -->
+        <div class="row between" id="nextPostRow" hidden>
+          <span class="hint" id="nextPostNote"></span>
+          <button class="ghost" id="newPostBtn" type="button">发一条新帖</button>
+        </div>
         <label class="sr-only" for="text">想发出去的那段话</label>
         <textarea id="text" rows="5" maxlength="2000"
           placeholder="写下你想发的内容……&#10;试试：一条二手手机转让、一句朋友圈观点、一个商品卖点。"></textarea>

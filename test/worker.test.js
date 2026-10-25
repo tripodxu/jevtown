@@ -174,6 +174,18 @@ test('product 缺 prices → 400；上一版还在跑时再发一版 → 409', a
   assert.equal(conflict.status, 409);
 });
 
+// 冻结版本的派生读数缓存（derivedFor：十档/声音，同款地形缓存）：缓存命中的第二拉
+// 必须与第一拉逐字相同——缓存改变读数就是正确性事故。running 版不走缓存，不在本例。
+test('冻结报告重复拉取：十档/声音/地形逐字相同（派生缓存不改变读数）', { timeout: 120_000 }, async () => {
+  const opening = await (await postJSON(worker, '/api/check', { preset: 'post', text: '派生缓存验证：一条普通帖子' })).json();
+  await runToDone(worker, opening.post, 1, authorOf(opening));
+  const a = await (await worker.fetch(`/api/post/${opening.post}`)).json();
+  const b = await (await worker.fetch(`/api/post/${opening.post}`)).json();
+  assert.equal(JSON.stringify(a.bands), JSON.stringify(b.bands), '十档两拉不一致');
+  assert.equal(JSON.stringify(a.voices), JSON.stringify(b.voices), '人格声音两拉不一致');
+  assert.equal(JSON.stringify(a.terrain), JSON.stringify(b.terrain), '地形两拉不一致');
+});
+
 test('blocked 帖的详情页：state=blocked 且没有计数与地图', async () => {
   const opening = await (await postJSON(worker, '/api/check', { preset: 'listing', text: '傻逼东西你去死吧' })).json();
   assert.equal(opening.state, 'blocked');

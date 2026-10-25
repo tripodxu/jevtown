@@ -97,6 +97,27 @@ function terrainFor(presetId, keys, bytes, versionId, frozen) {
   return terrain;
 }
 
+/**
+ * 冻结版本的派生读数缓存（isolate 内存，terrainFor 的同款模式）：十档（exposureBands）
+ * 与人格声音（voicesOf）只依赖 scores / bytes / 人群，终笔收波后不再变化——同一份报告
+ * 重复查看（刷新、多人看、对比区回拉所选版本）不再现算。voices 全城一次要对每个反应者
+ * 做 FNV 哈希（约 1–2ms），十档一趟约 2.5ms，是重复访问剩余的大头；首访照算不省。
+ * 缓存对象直接进响应（只读，JSON.stringify 只读不写），版本号只增不复用 ⇒ 无失效路径。
+ */
+const derivedCache = new Map();
+const DERIVED_CACHE_MAX = 200;
+
+function derivedFor(versionId, frozen, make) {
+  if (!frozen) return make();
+  let value = derivedCache.get(versionId);
+  if (!value) {
+    value = make();
+    if (derivedCache.size >= DERIVED_CACHE_MAX) derivedCache.delete(derivedCache.keys().next().value);
+    derivedCache.set(versionId, value);
+  }
+  return value;
+}
+
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8' } });
 const fail = (message, status = 400) => json({ error: message }, status);
@@ -736,8 +757,8 @@ async function showPost(id, env, url, request = null) {
       if (!byWave.has(wave)) byWave.set(wave, []);
       byWave.get(wave).push(keys[bytes[pid] - 1]);
     }
-    versions = await versionsOf(env.DB, id);
-    report = await callReport(env.DB, id, v, version);
+    // 版本列表与调用报告互不依赖，一趟并行省一个 D1 往返（回退路径早已如此）。
+    [versions, report] = await Promise.all([versionsOf(env.DB, id), callReport(env.DB, id, v, version)]);
   } else {
     // 回退路径：running 中的版本（或迁移前的旧帖）没有快照，逐行现读。
     const [{ results: rows }, versions_, report_] = await Promise.all([
@@ -768,12 +789,17 @@ async function showPost(id, env, url, request = null) {
   // 每档看停下/乐见的比例。scores 一直在 versions 里（settleWave 每波都要读它算下一波），
   // 只是今天不过报告——这一节不花钱、不调 Jev，纯把已有的两个数放在一起。
   // 这一栏为空（老存档没写过，或手滑写空串）就 null 不渲染，别让整份报告跟着 500。
+  // 冻结版本的十档与声音走 derivedFor 缓存（同 terrainFor 的模式）；running 版照算。
+  const frozen = post.state !== 'running';
+  const versionId = `${id}.${v}`;
   const scores = readJson(version.scores);
-  const bands = scores ? exposureBands(presetId, keys, scores, bytes, people) : null;
-  const voices = voicesOf(id, presetId, bytes).map((voice) => ({
-    ...voice,
-    who: personView(people[voice.id]),
-  }));
+  const bands = scores ? derivedFor(versionId, frozen, () => exposureBands(presetId, keys, scores, bytes, people)) : null;
+  const voices = derivedFor(versionId, frozen, () =>
+    voicesOf(id, presetId, bytes).map((voice) => ({
+      ...voice,
+      who: personView(people[voice.id]),
+    })),
+  );
 
   return json({
     ...base,
@@ -792,7 +818,7 @@ async function showPost(id, env, url, request = null) {
     // 作者说给谁的 vs 实际停在哪（只做对账，不改分发）。没填就 null，前端整节不渲染。
     audience: base.audience ? { ...base.audience, ...reconcileAudience(all, base.audience.picked, { presetId }) } : null,
     bands,
-    terrain: terrainFor(presetId, keys, bytes, `${id}.${v}`, post.state !== 'running'),
+    terrain: terrainFor(presetId, keys, bytes, versionId, frozen),
     voices,
     decisions: version.decisions ? JSON.parse(version.decisions) : null,
     followUp: version.follow_up ? JSON.parse(version.follow_up) : null,

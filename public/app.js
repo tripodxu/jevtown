@@ -441,6 +441,33 @@ const parsePrices = () => {
   return nums.length >= 2 && nums.every((n) => Number.isFinite(n) && n > 0) ? nums : null;
 };
 
+// -- 改版模式指示与「发一条新帖」--------------------------------------------------
+// 做完一次检查后 current.post 一直挂着，下一次提交静默变成同一帖的新版本——玩家不知道，
+// 也找不到发全新帖的入口。这里把状态说穿（引用上一条的摘要），并给一个出口。
+
+function refreshComposeMode() {
+  const asVersion = Boolean(current.post && currentAuthor);
+  $('nextPostRow').hidden = !asVersion;
+  if (asVersion) {
+    $('nextPostNote').textContent = COMPOSE_ZH.nextVersionNote.replace('%1', current.excerpt ?? current.post);
+  }
+}
+
+$('newPostBtn').addEventListener('click', () => {
+  current.post = null;
+  currentAuthor = null;
+  current.version = 1;
+  // 受众是跟着这次检查走的语境，新帖不该继承上一条的挑组与自述。
+  pickedGroups.clear();
+  renderAudienceTags();
+  $('audienceSaid').value = '';
+  $('text').value = '';
+  updateTextCount();
+  refreshComposeMode();
+  $('text').focus();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
 // -- 提交与分步驱动 -------------------------------------------------------------
 
 $('form').addEventListener('submit', async (event) => {
@@ -458,9 +485,12 @@ $('form').addEventListener('submit', async (event) => {
   }
   $('go').disabled = true;
   const broadcast = $('broadcast').checked;
+  // 只有本机持有这一帖的作者令牌才走改版；看过别人的帖子后 current.post 也挂着，
+  // 那种时候提交该是全新一帖（走 /api/version 只会 403「不是你的帖」）。
+  const asVersion = Boolean(current.post && currentAuthor);
   try {
-    status(current.post ? '再发一版：Jev 重新掂量……' : '开局：Jev 正在掂量这段文字是写给谁的……', 0.02);
-    const opening = current.post
+    status(asVersion ? '再发一版：Jev 重新掂量……' : '开局：Jev 正在掂量这段文字是写给谁的……', 0.02);
+    const opening = asVersion
       ? await postRetry('/api/version', { post: current.post, text, audience, broadcast })
       : await postRetry('/api/check', { preset, text, prices, audience, broadcast });
 
@@ -556,27 +586,34 @@ let compareLoader = null;
 
 function showResult(view) {
   lastView = view;
+  current.excerpt = view.post.text.slice(0, 24) + (view.post.text.length > 24 ? '…' : '');
+  refreshComposeMode();
   renderCheck($('result'), view);
   $('resultActions').hidden = false;
   // 焦点随视线走：键盘/屏幕阅读器从报告标题继续，而不是留在触发处
   $('result').querySelector('h2')?.focus({ preventScroll: true });
-  // 版本 ≥2 时提供对比入口：对比卡懒加载（点按钮才拉第 1 版全量视图，不自动翻倍负载）。
+  // 版本 ≥2 时提供对比入口：对比卡懒加载（点按钮才拉所选版本的全量视图，不自动翻倍负载）。
+  // 对比对象：只有两版时就是第 1 版；三版起给「第 1 版 / 上一版」两个选择——
+  // 改到第三版的人通常想看的是这版相对上一版改了什么，而不是相对初版。
   const aside = $('compare');
   if (current.version > 1) {
     const slot = aside.querySelector('.compare-slot') ?? Object.assign(document.createElement('div'), { className: 'compare-slot' });
-    slot.innerHTML = '<button class="ghost" type="button" id="loadCompare">载入第 1 版对比</button><span class="hint">完整重放第 1 版（地图、图谱、报告），点击才加载。</span>';
+    const prev = current.version - 1;
+    const targets = prev === 1 ? [1] : [1, prev];
+    slot.innerHTML = targets.map((n) => `<button class="ghost" type="button" data-compare="${n}">对比第 ${n} 版</button>`).join('') +
+      `<span class="hint">完整重放所选版本（地图、图谱、报告），点击才加载。</span>`;
     aside.append(slot);
     aside.hidden = false;
-    compareLoader = async () => {
+    const loadInto = async (n) => {
       slot.textContent = '载入中……';
       try {
-        const v1 = await readJSON(`/api/post/${current.post}?v=1`);
-        // renderCheck 会清空容器，所以第 1 版渲染进子节点，差分卡才不会被一起清掉
+        const other = await readJSON(`/api/post/${current.post}?v=${n}`);
+        // renderCheck 会清空容器，所以所选版本渲染进子节点，差分卡才不会被一起清掉
         const diff = document.createElement('div');
-        const v1card = document.createElement('div');
-        slot.replaceChildren(diff, v1card);
-        renderCheck(v1card, v1);
-        renderDelta(diff, view, v1);
+        const card = document.createElement('div');
+        slot.replaceChildren(diff, card);
+        renderCheck(card, other);
+        renderDelta(diff, view, other);
         // 焦点随内容走：载入完成后落在差分卡标题，键盘/SR 用户不被留在已消失的按钮处
         const deltaTitle = diff.querySelector('h3');
         if (deltaTitle) {
@@ -587,7 +624,12 @@ function showResult(view) {
         slot.innerHTML = `<span class="error">${esc(error.message)}</span>`;
       }
     };
-    slot.querySelector('#loadCompare').addEventListener('click', compareLoader);
+    // 自动对比（finishCheck 调用）选上一版：v2 时即第 1 版，与旧行为一致。
+    compareLoader = async () => loadInto(prev);
+    slot.addEventListener('click', (event) => {
+      const btn = event.target.closest('button[data-compare]');
+      if (btn) loadInto(Number(btn.dataset.compare));
+    });
   } else {
     compareLoader = null;
     aside.hidden = true;
@@ -700,6 +742,7 @@ window.addEventListener('popstate', () => {
   $('resultActions').hidden = true;
   $('compare').hidden = true;
   current.post = null;
+  refreshComposeMode();
 });
 
 async function openPost(id, versionHint = null) {
@@ -832,6 +875,7 @@ refreshModeChip();
 buildSampleChips();
 syncComposeForPreset();
 updateTextCount();
+refreshComposeMode();
 
 initThemeSwitcher();
 loadFeed();
