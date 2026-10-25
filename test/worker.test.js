@@ -234,6 +234,33 @@ test('running 报告读闸：单 IP 每分钟 30 次，冻结版与环回不限'
   }
 }, { timeout: 120_000 });
 
+// 作者删帖（B6 显式半边）：四表批删、深链 404、feed 消失；非作者 403；running 帖也可删（误发止损）。
+test('作者删帖：作者 DELETE 成功且四表清干净；非作者 403；running 帖可删', { timeout: 120_000 }, async () => {
+  const mine = await (await postJSON(worker, '/api/check', { preset: 'post', text: '删帖验证：一条普通帖子，跑完再删' })).json();
+  await runToDone(worker, mine.post, 1, authorOf(mine));
+
+  // 非作者 403
+  const notMine = await worker.fetch(`/api/post/${mine.post}`, { method: 'DELETE', headers: { 'x-jev-author': '00000000-0000-0000-0000-000000000000' } });
+  assert.equal(notMine.status, 403);
+
+  // 作者删除 → 报告 404、feed 不再出现
+  const del = await worker.fetch(`/api/post/${mine.post}`, { method: 'DELETE', headers: { 'x-jev-author': mine.author } });
+  assert.equal(del.status, 200);
+  assert.equal((await worker.fetch(`/api/post/${mine.post}`)).status, 404);
+  const feed = await (await worker.fetch('/api/feed')).json();
+  assert.ok(!feed.posts.some((one) => one.id === mine.post), '删除后 feed 不该再有这帖');
+
+  // running 的帖也能删：开局不跑批次，直接删
+  const running = await (await postJSON(worker, '/api/check', { preset: 'post', text: '删帖验证：进行中的帖子直接删掉' })).json();
+  assert.equal(running.state, 'running');
+  const delRunning = await worker.fetch(`/api/post/${running.post}`, { method: 'DELETE', headers: { 'x-jev-author': running.author } });
+  assert.equal(delRunning.status, 200);
+  assert.equal((await worker.fetch(`/api/post/${running.post}`)).status, 404);
+
+  // 不存在的帖 404
+  assert.equal((await worker.fetch('/api/post/nonexistent00', { method: 'DELETE' })).status, 404);
+}, { timeout: 120_000 });
+
 test('blocked 帖的详情页：state=blocked 且没有计数与地图', async () => {
   const opening = await (await postJSON(worker, '/api/check', { preset: 'listing', text: '傻逼东西你去死吧' })).json();
   assert.equal(opening.state, 'blocked');

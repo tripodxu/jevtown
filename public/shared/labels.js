@@ -410,6 +410,14 @@ export const FEED_ZH = {
   reading: '%1 人读到 · 乐见 %2% · 反感 %3%',
 };
 
+/** 作者删帖（DELETE /api/post/:id）的界面文案。 */
+export const DELETE_ZH = {
+  button: '删除这次检查',
+  confirm: '删除后这份报告、地图与全部版本都会消失，深链失效，且无法恢复。确定删除？',
+  done: '已删除。',
+  failed: '删除失败：%1',
+};
+
 /**
  * 传播门槛与全城广播的界面中文。门槛是 feed.js 的 GLAD_ENOUGH（实测钉死在那儿，
  * 这里只写显示文案；labels.test.js 钉住文案里的门槛数字与 GLAD_ENOUGH 对得上）。

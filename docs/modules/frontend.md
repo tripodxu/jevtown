@@ -176,6 +176,16 @@ app.js  fetch /api/post/:id
   hidden 跳过该轮；提交/续跑/导航/回首页先 `stopRunningPoll()`。内嵌后台窗格会节流
   interval——属 E2E 环境限制，生产前台标签不受影响。
 
+## 作者删帖与作者判定
+
+- 报告动作区（#resultActions）的「删除这次检查」只对本机持有作者令牌的帖显示（复用
+  payload 的 `awayCallable`）；原生 `confirm` 二次确认（不可逆动作），删除后清本机令牌、
+  收起报告回首页、feed 刷新。
+- **`awayCallable` 的既有坑（已修）**：它按报告请求是否带作者令牌判定，而 openPost 曾在
+  `await readJSON` **之后**才赋 currentAuthor——深链/分享链接首开时报告永远不带令牌，
+  「逐句承重」与删除按钮全都不出现（用户以为是权限问题）。现在令牌在请求前就位
+  （readJSON 加显式 author 参数）。
+
 ## 等待体验
 
 - 状态行带**本波 ETA**（`etaSay`）：最近 6 批墙钟吞吐估剩余，<5s 或未测出不说，5 秒一档

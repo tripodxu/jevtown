@@ -251,4 +251,24 @@ async function listFeed(env) {
   });
 }
 
+/**
+ * 作者删帖（B6 的显式半边）：一个动作清掉这帖的全部痕迹——posts/versions/reactions/batches
+ * 四表同批删除，深链与 feed 随之消失。running 的帖也能删（误发止损，不必先跑完）。
+ * 只做显式删除，不做自动清理：保留策略的尺度是运营决策，留给 env 再定。
+ * 记账行（batches）一并删——流水对已不存在的帖子没有审计意义，留着只会占配额。
+ */
+export async function runDelete(id, request, env) {
+  if (!id) return fail('post is required');
+  const post = await loadPost(env.DB, id);
+  if (!post) return fail('no such post', 404);
+  if (!authorOk(request, post)) return fail('this post is not yours', 403);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM reactions WHERE post = ?').bind(id),
+    env.DB.prepare('DELETE FROM batches WHERE post = ?').bind(id),
+    env.DB.prepare('DELETE FROM versions WHERE post = ?').bind(id),
+    env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(id),
+  ]);
+  return json({ post: id, deleted: true });
+}
+
 export { runAway, showPost, listFeed };

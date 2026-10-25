@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-10-25 · 删帖轮：作者删帖入口、21 笔补签、awayCallable 深链首开恒 false 的存量 bug
+
+1. **补签**：gpg 恢复后对未推送的 21 笔（origin/main..main）整体 `rebase --exec
+   'commit --amend --no-edit -S'`——全部有效签名（G），未发布历史不触红线。
+2. **作者删帖**（B6 的显式半边）：`DELETE /api/post/:id`（report.js 的 runDelete，作者
+   令牌校验）四表批删（posts/versions/reactions/batches），深链 404、feed 消失；running
+   的帖也能删（误发止损）。前端：动作区「删除这次检查」仅作者显示、原生 confirm 二次
+   确认、删后清本机令牌回首页。文案进 labels.js 的 DELETE_ZH。自动保留策略仍留给运营
+   拍板（worker-api.md 已注明）。
+3. **存量 bug 顺带修净**：`awayCallable`（报告里「本机是作者」）按请求头判定，openPost
+   曾在 await 之后才赋 currentAuthor——**深链/分享首开时报告永远不带令牌**，逐句承重
+   按钮一直 disabled（用户以为没权限）。readJSON 加显式 author 参数、令牌请求前就位。
+
+**验证**：lint 54 文件过；`npm test` **216/216 绿**（新增删帖用例：作者删/非作者 403/
+running 可删/404）。浏览器 E2E：删除按钮出现（顺带 away 按钮活了）→ confirm → 回首页、
+feed 无此帖、深链 404、本机令牌已清。
+
+---
+
 ## 2026-10-25 · 体验审计轮：检查中导航劫持（双重坑）、等待 ETA、进行中报告自动刷新
 
 **全量重读抓到的并发 bug（两层）**：检查进行中点开任何 feed 链接（openPost 改写

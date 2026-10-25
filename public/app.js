@@ -2,7 +2,7 @@
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
 import { renderCheck, renderDelta, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
-import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH, WAVE_ZH, FEED_ZH } from './shared/labels.js';
+import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH, WAVE_ZH, FEED_ZH, DELETE_ZH } from './shared/labels.js';
 import { PRESETS, DEFAULT_PRICES } from './shared/presets.js';
 import { drawGrid, paintDelta } from './grid.js';
 import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
@@ -42,8 +42,8 @@ const authHeaders = (author = currentAuthor) => {
  * /api/wave。纯读路由（/api/post、/api/feed）Worker 一个 Jev 调用也不发，key 没有理由跟过去——
  * 少一条路，key 就少一次出现在别处的机会。
  */
-const readJSON = async (url) => {
-  const res = await fetch(url, { headers: currentAuthor ? { 'x-jev-author': currentAuthor } : {} });
+const readJSON = async (url, author = currentAuthor) => {
+  const res = await fetch(url, { headers: author ? { 'x-jev-author': author } : {} });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? res.statusText);
   return data;
@@ -616,6 +616,9 @@ function showResult(view) {
   refreshComposeMode();
   renderCheck($('result'), view);
   $('resultActions').hidden = false;
+  // 删除入口只给作者（awayCallable 就是「本机持有作者令牌」这个布尔）；放在报告动作区，
+  // 与「改一版再发」同一层——误发的帖子从公开流里撤下来是作者的正当权利。
+  $('deletePost').hidden = !view.awayCallable;
   // 焦点随视线走：键盘/屏幕阅读器从报告标题继续，而不是留在触发处
   $('result').querySelector('h2')?.focus({ preventScroll: true });
   // 版本 ≥2 时提供对比入口：对比卡懒加载（点按钮才拉所选版本的全量视图，不自动翻倍负载）。
@@ -705,6 +708,43 @@ $('saveCard').addEventListener('click', async () => {
   const link = Object.assign(document.createElement('a'), { href: url, download: `jevtown-${lastView.post.id}.png` });
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+});
+
+// 作者删帖：不可逆动作必须有原生的二次确认（键盘与读屏都认）；删完清本机令牌、
+// 收起报告回首页、feed 刷新。删除进行中的检查同样允许——误发止损不必先跑完。
+$('deletePost').addEventListener('click', async () => {
+  if (!current.post || !currentAuthor) return;
+  if (!window.confirm(DELETE_ZH.confirm)) return;
+  const post = current.post;
+  const btn = $('deletePost');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/post/${encodeURIComponent(post)}`, {
+      method: 'DELETE',
+      headers: { 'x-jev-author': currentAuthor },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error ?? res.statusText);
+    localStorage.removeItem(`jevtown.author.${post}`);
+    stopRunningPoll();
+    history.pushState(null, '', '/');
+    $('result').replaceChildren();
+    $('result').hidden = true;
+    $('resume').hidden = true;
+    $('resultActions').hidden = true;
+    $('compare').hidden = true;
+    current.post = null;
+    currentAuthor = null;
+    refreshComposeMode();
+    status(DELETE_ZH.done, 0);
+    announce(DELETE_ZH.done);
+    await loadFeed();
+  } catch (error) {
+    btn.disabled = false;
+    const text = DELETE_ZH.failed.replace('%1', error.message);
+    $('statusLine').innerHTML = `<span class="error">${esc(text)}</span>`;
+    announce(text);
+  }
 });
 
 $('revise').addEventListener('click', async () => {
@@ -815,9 +855,13 @@ async function openPost(id, versionHint = null) {
   result.hidden = false;
   result.innerHTML = '<div class="skeleton" aria-hidden="true"><div class="sk sk-line" style="width:34%"></div><div class="sk sk-line" style="width:88%"></div><div class="sk sk-line" style="width:72%"></div><div class="sk sk-block"></div><div class="sk sk-line" style="width:60%"></div></div>';
   try {
-    const view = await readJSON(`/api/post/${id}${versionHint ? `?v=${versionHint}` : ''}`);
+    // 令牌先于请求就位：awayCallable（报告里「本机是作者」的布尔）按请求头判定，
+    // 以前在 await 之后才赋 currentAuthor——首次打开时报告请求永远不带令牌，删帖/逐句承重
+    // 的作者按钮深链首开全都不出现（存量顺序 bug，删帖入口让它显形）。
+    const author = localStorage.getItem(`jevtown.author.${id}`);
+    const view = await readJSON(`/api/post/${id}${versionHint ? `?v=${versionHint}` : ''}`, author);
     current.post = id;
-    currentAuthor = localStorage.getItem(`jevtown.author.${id}`);
+    currentAuthor = author;
     current.version = versionHint ?? view.versions?.at(-1)?.number ?? 1;
     // 没跑完的检查 + 本机持有作者令牌：刷新/离开不会回滚服务端的进度，但批次要有人驱动——
     // 给出续跑入口。没有令牌（别人的进行中检查）不显示：驱动不了，也不该驱动。

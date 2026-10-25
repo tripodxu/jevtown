@@ -11,7 +11,7 @@ import { fail } from './common.js';
 import { runCheck, runVersion } from './opening.js';
 import { runBatch } from './batch.js';
 import { closeWave } from './wave.js';
-import { runAway, showPost, listFeed } from './report.js';
+import { runAway, showPost, listFeed, runDelete } from './report.js';
 
 // -- 路由 ----------------------------------------------------------------------
 
@@ -27,6 +27,7 @@ export default {
       if (request.method === 'GET' && path === '/api/batch') return await runBatch(url, request, env);
       if (request.method === 'POST' && path === '/api/wave') return await closeWave(url, request, env);
       if (request.method === 'GET' && path.startsWith('/api/post/')) return await showPost(path.slice('/api/post/'.length), env, url, request);
+      if (request.method === 'DELETE' && path.startsWith('/api/post/')) return await runDelete(path.slice('/api/post/'.length), request, env);
       if (request.method === 'POST' && path === '/api/away') return await runAway(url, request, env);
       if (request.method === 'GET' && path === '/api/feed') return await listFeed(env);
       return fail('not found', 404);
@@ -39,8 +40,4 @@ export default {
     }
   },
 };
-
-// -- 工具 -----------------------------------------------------------------------
-
-// Uint8Array → base64 的编解码已移到 shared/bytes.js，Worker 与浏览器/回放共用同一份。
 
