@@ -28,12 +28,12 @@ const byok = () => {
 };
 const mockChosen = () => localStorage.getItem('jevtown.provider') === 'mock';
 let currentAuthor = null; // 当前检查的作者令牌（/api/check 响应带回；刷新页面即失效，需重开检查）
-const authHeaders = () => {
+const authHeaders = (author = currentAuthor) => {
   const picks = byok();
   return {
     ...(picks ? { 'x-jev-provider': picks.provider, 'x-jev-key': picks.key } : {}),
     ...(mockChosen() ? { 'x-jev-provider': 'mock' } : {}),
-    ...(currentAuthor ? { 'x-jev-author': currentAuthor } : {}),
+    ...(author ? { 'x-jev-author': author } : {}),
   };
 };
 
@@ -72,7 +72,7 @@ const retrying = async (label, send, { conflictRetryable }) => {
     await new Promise((resolve) => setTimeout(resolve, BATCH_BACKOFF[attempt] * (0.8 + Math.random() / 2.5)));
   }
 };
-const getBatch = (url) => retrying('批次', () => fetch(url, { headers: authHeaders() }), { conflictRetryable: true });
+const getBatch = (url, author) => retrying('批次', () => fetch(url, { headers: authHeaders(author) }), { conflictRetryable: true });
 const postRetry = (url, body) =>
   retrying('开局', () => fetch(url, {
     method: 'POST',
@@ -80,10 +80,10 @@ const postRetry = (url, body) =>
     body: JSON.stringify(body ?? {}),
   }), { conflictRetryable: false });
 
-const postJSON = async (url, body) => {
+const postJSON = async (url, body, author) => {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...authHeaders() },
+    headers: { 'content-type': 'application/json', ...authHeaders(author) },
     body: JSON.stringify(body ?? {}),
   });
   const data = await res.json().catch(() => ({}));
@@ -489,6 +489,8 @@ $('form').addEventListener('submit', async (event) => {
   // 只有本机持有这一帖的作者令牌才走改版；看过别人的帖子后 current.post 也挂着，
   // 那种时候提交该是全新一帖（走 /api/version 只会 403「不是你的帖」）。
   const asVersion = Boolean(current.post && currentAuthor);
+  // 正看着的 running 帖的自动刷新先停：新检查的报告区归新检查，轮询不许回来抢。
+  stopRunningPoll();
   try {
     status(asVersion ? '再发一版：Jev 重新掂量……' : '开局：Jev 正在掂量这段文字是写给谁的……', 0.02);
     const opening = asVersion
@@ -512,8 +514,8 @@ $('form').addEventListener('submit', async (event) => {
     if (opening.unlisted?.length) {
       status(`注意：${opening.unlisted.map((id) => BLOCKED_ZH[id] ?? id).join('、')}（仍会照常检查，但不进公共流）`, 0.04);
     }
-    await driveCheck(preset, null, `检查开始，第 1 波 ${opening.wave?.total ?? ''} 人`);
-    await finishCheck();
+    await driveCheck(opening.post, opening.version, opening.author ?? currentAuthor, preset, null, `检查开始，第 1 波 ${opening.wave?.total ?? ''} 人`);
+    await finishCheck(opening.post, opening.version);
   } catch (error) {
     // 免费通道走 Worker 共享出口，被上游按 IP 限流是常态（2026-10-07 线上实测：本机畅通、
     // Worker 出口持续 429）——退避 6 轮仍失败时给访客一条真正能走的路，而不是一句裸报错。
@@ -531,23 +533,25 @@ $('form').addEventListener('submit', async (event) => {
 
 /**
  * 波次驱动：一批批问 Jev（每批 100 人）、收波定去留，直到检查结束；live 监控全程更新。
- * 新开检查与续跑（页面刷新后从报告回看一个 running 的版本）共用这一段。
+ * **post/version/author 全部显式传入**：循环里绝不读 current.*——检查进行中用户随时会
+ * 点开别的帖子（openPost 改写 current 与令牌），动态读会把批次打到别人的帖上、或带着
+ * 别人的令牌吃 403（两个坑都实测过）。
  * `seedDrawn`：续跑时已判定过的人（[{ id, reaction }]，从报告的 looks 字节还原），
  * 先折进快照把地图铺到当前进度——否则续跑地图从头黑起，前几波的成果全看不见。
  */
-async function driveCheck(presetId, seedDrawn = null, openingSay = '') {
+async function driveCheck(post, version, author, presetId, seedDrawn = null, openingSay = '') {
   showLive(presetId, seedDrawn);
   if (openingSay) announce(openingSay);
   let done = false;
   while (!done) {
     for (;;) {
-      const batch = await getBatch(`/api/batch?post=${current.post}&v=${current.version}`);
+      const batch = await getBatch(`/api/batch?post=${post}&v=${version}`, author);
       if (batch.done) break;
       paintBatch(batch);
-      status(`第 ${batch.wave + 1} 波：Jev 已判定 ${batch.answered} / ${batch.total} 人`, batch.answered / Math.max(1, batch.total));
+      status(`第 ${batch.wave + 1} 波：Jev 已判定 ${batch.answered} / ${batch.total} 人${etaSay(batch)}`, batch.answered / Math.max(1, batch.total));
       await pace();
     }
-    const wave = await postJSON(`/api/wave?post=${current.post}&v=${current.version}`);
+    const wave = await postJSON(`/api/wave?post=${post}&v=${version}`, {}, author);
     if (wave.done) {
       done = true;
       monitorRow(['收尾', `到达 ${wave.reach}`, '', '', ''], 'wave-row');
@@ -569,9 +573,30 @@ async function driveCheck(presetId, seedDrawn = null, openingSay = '') {
   }
 }
 
+/**
+ * 本波预计还要多久：拿最近几批的墙钟吞吐（含节奏化的 pause——访客等的正是墙钟）估剩余
+ * 人数的时间。少于 5 秒或还测不出速率就不说；只估本波——下一波传不传、追问问多久都
+ * 还是未知数，给个总 ETA 只会是在编数字。5 秒一档取整，数字不跳。
+ */
+function etaSay(batch) {
+  if (!live) return '';
+  const now = performance.now();
+  live.rateWindow ??= [];
+  live.rateWindow.push({ t: now, judged: live.tally.judged });
+  if (live.rateWindow.length > 6) live.rateWindow.shift();
+  const first = live.rateWindow[0];
+  const span = (now - first.t) / 1000;
+  if (span < 2) return '';
+  const rate = (live.tally.judged - first.judged) / span;
+  if (rate <= 0) return '';
+  const eta = (batch.total - batch.answered) / rate;
+  if (eta < 5) return '';
+  return ` · 预计还有 ~${Math.round(eta / 5) * 5}s`;
+}
+
 /** 检查跑完的收尾：关监控、出报告、版本 ≥2 时自动载入对比（作者刚等完一整轮，他要的下一眼就是对比）、刷新 feed。 */
-async function finishCheck() {
-  const view = await readJSON(`/api/post/${current.post}?v=${current.version}`);
+async function finishCheck(post, version) {
+  const view = await readJSON(`/api/post/${post}?v=${version}`);
   $('live').hidden = true;
   showResult(view);
   status('完成。', 1);
@@ -737,6 +762,7 @@ window.addEventListener('popstate', () => {
     openPost(id, Number(params.get('v')) || null);
     return;
   }
+  stopRunningPoll();
   $('result').replaceChildren();
   $('result').hidden = true;
   $('resume').hidden = true;
@@ -746,7 +772,42 @@ window.addEventListener('popstate', () => {
   refreshComposeMode();
 });
 
+/**
+ * 进行中报告的自动刷新：打开一个 running 版本时每 15 秒静默重拉一次——报告的地图与
+ * 计数随服务端进度自己长出来，**任何人**（不止作者）都能看着小镇点亮，而不是盯着一页
+ * 半截的静态数字。跑完自动换上完整报告并停表；tab 不可见时跳过这一轮（省请求，回来
+ * 一次就追上）；离开该帖 / 回首页即停。
+ */
+let runningPoll = null;
+
+function stopRunningPoll() {
+  if (runningPoll) {
+    clearInterval(runningPoll);
+    runningPoll = null;
+  }
+}
+
+function startRunningPoll(id, version) {
+  stopRunningPoll();
+  runningPoll = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const view = await readJSON(`/api/post/${id}?v=${version}`);
+      showResult(view);
+      if (view.post.state !== 'running') {
+        stopRunningPoll();
+        $('resume').hidden = true;
+        announce('这次检查已完成');
+        await loadFeed();
+      }
+    } catch {
+      /* 单轮失败不致命：下一轮还会再试；连续失败由用户手动刷新兜底 */
+    }
+  }, 15_000);
+}
+
 async function openPost(id, versionHint = null) {
+  stopRunningPoll();
   status('正在打开报告……', 0.15);
   announce('正在打开报告');
   // 骨架过渡：匹配报告的布局形状（标题行 + 两行文字 + 一大块），比空白和转圈都诚实
@@ -762,6 +823,10 @@ async function openPost(id, versionHint = null) {
     // 给出续跑入口。没有令牌（别人的进行中检查）不显示：驱动不了，也不该驱动。
     $('resume').hidden = !(view.post.state === 'running' && currentAuthor);
     showResult(view);
+    if (view.post.state === 'running') {
+      status('这次检查还在进行中——页面每 15 秒自动更新，地图会随判定点亮。', 0.2);
+      startRunningPoll(id, current.version);
+    }
   } catch (error) {
     result.hidden = true; // 骨架不留在原地装样子
     $('resume').hidden = true;
@@ -777,16 +842,21 @@ window.openPost = openPost;
 $('resumeBtn').addEventListener('click', async () => {
   const btn = $('resumeBtn');
   btn.disabled = true;
+  // 先停自动刷新：驱动循环自己更新 live 区，报告的轮询与它抢 DOM 只会闪。
+  stopRunningPoll();
   try {
-    const view = await readJSON(`/api/post/${current.post}?v=${current.version}`);
+    const post = current.post;
+    const version = current.version;
+    const author = currentAuthor;
+    const view = await readJSON(`/api/post/${post}?v=${version}`);
     const keys = Object.keys(PRESETS[view.post.preset].reactions);
     const bytes = decodeBytes(view.looks ?? '');
     const seed = [];
     for (let pid = 0; pid < bytes.length; pid++) if (bytes[pid]) seed.push({ id: pid, reaction: keys[bytes[pid] - 1] });
     $('resume').hidden = true;
     status('续跑：从中断处接着问 Jev……', 0.1);
-    await driveCheck(view.post.preset, seed, '继续这次检查');
-    await finishCheck();
+    await driveCheck(post, version, author, view.post.preset, seed, '继续这次检查');
+    await finishCheck(post, version);
   } catch (error) {
     btn.disabled = false;
     $('resume').hidden = false;

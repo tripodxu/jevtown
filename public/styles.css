@@ -982,7 +982,16 @@ canvas.grid {
 /* 运行心电图 */
 .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 720px) { .charts-row { grid-template-columns: 1fr; } }
-.mini { position: relative; border: 1px solid var(--hairline); border-radius: 12px; background: var(--card-2); padding: 10px 12px 6px; }
+.mini {
+  position: relative;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background-color: var(--card-2);
+  /* 监控小卡也是图纸上的仪表：同款点阵，比图例更淡一档 */
+  background-image: radial-gradient(color-mix(in srgb, var(--text) 4%, transparent) 1px, transparent 1.3px);
+  background-size: 16px 16px;
+  padding: 10px 12px 6px;
+}
 #chartShare { position: relative; }
 .mini-head { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; margin-bottom: 2px; }
 .chart.ekg .ekg-now { font-family: var(--font-mono); font-size: 15px; font-weight: 600; }

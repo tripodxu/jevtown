@@ -168,9 +168,19 @@ app.js  fetch /api/post/:id
 - 检查由浏览器分步驱动（batch/wave），刷新或离开**不会回滚服务端进度**，但没人驱动就永远
   停在 running。`openPost` 打开 running 帖且 localStorage 里有该帖作者令牌时显示
   `#resume` 横幅；没有令牌（别人的进行中检查）不显示——驱动不了，也不该驱动。
-- 续跑走与新检查同一条 `driveCheck`（波次驱动已从提交流程抽出共用）；种子 = 报告的
-  `looks` 字节合成的 drawn 列表（`foldBatch` 幂等），地图从当前进度亮起而不是从头黑屏。
+- 续跑走与新检查同一条 `driveCheck`——**post/version/author 全部显式传入**：驱动循环绝不
+  读 current.*，检查中导航（openPost 改写全局）不会再劫持批次或换错令牌（曾两层实测踩坑）。
+  种子 = 报告的 `looks` 字节合成的 drawn 列表（`foldBatch` 幂等），地图从当前进度亮起。
 - 失败时横幅回来可再试；跑完走 `finishCheck`（含版本 ≥2 的自动对比）。
+- **进行中报告 15s 自动刷新**（任何人可见）：地图随服务端进度点亮，done 自动换完整报告；
+  hidden 跳过该轮；提交/续跑/导航/回首页先 `stopRunningPoll()`。内嵌后台窗格会节流
+  interval——属 E2E 环境限制，生产前台标签不受影响。
+
+## 等待体验
+
+- 状态行带**本波 ETA**（`etaSay`）：最近 6 批墙钟吞吐估剩余，<5s 或未测出不说，5 秒一档
+  取整；只估本波——下一波与追问的时长是未知数，总 ETA 是编数字。
+- `showLive` 滚动到实时区；`pace` 第 1 波 180ms、之后 90ms。
 
 ## feed 的读数摘要
 
