@@ -6,6 +6,23 @@
 
 ---
 
+## 2026-10-25 · 前端视觉打磨轮：吸附顶栏、卡片层次、CTA 软光、feed 行整行可点
+
+**不改骨架不动契约，纯 CSS 一轮**（styles.css 单文件，全部走主题令牌 + color-mix，四主题
+零硬编码色自动跟随；截图四主题 + 390px 窄屏逐一过）：
+- **吸附顶栏**（≥721px）：sticky + blur(14px) 半透明底，glow 透上来；窄屏不吸附（两行高吃
+  纵向空间）。配套 `scroll-padding-top: 72px` 修 toc 锚点被盖、`scroll-behavior: smooth`
+  只在 no-preference 内。
+- **层次**：`.plate` 上缘渐沉的纵向渐变（card-2 → card 130px）；`h3::before` 强调色小方块
+  节拍；chip/badge 补 card-2 底；印章渐变 + 软光。
+- **CTA**：#go 加大 + 脚下 `accent-soft` 软光；进度条 fill 同款软光（scaleX 拉伸正是想要的）。
+- **feed 行**：整行 flex（摘要左读数右），hover 出面 + 链接转强调色，读数长自动折行。
+- **微动效**：dialog 轻落入场；标题 `text-wrap: balance`（首屏 h1 窄屏两行平衡）。
+- 窄屏实测 `scrollWidth == clientWidth`（390px 无溢出）；reduced-motion 由既有全局 0.01ms
+  规则兜底；测试 215/215 不动（纯 CSS）。
+
+---
+
 ## 2026-10-25 · 技术债偿还轮（三）：B8 worker 按域拆分、审核提示词语种修正
 
 **B8 拆分**：worker/index.js（945 行）→ `index.js`（fetch 路由 46 行）+ `opening.js`（check/

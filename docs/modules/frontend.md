@@ -32,6 +32,21 @@ app.js  fetch /api/post/:id
 - 颜色一律取 `shared/presets.js` 的 `LOOKS`（地图图例与图表同源）。
 - 中文一律取 `shared/labels.js`，渲染层不硬编码。
 
+## 视觉打磨（R38）
+
+- **吸附顶栏**：宽屏（≥721px）`.top` sticky + `backdrop-filter: blur`，半透明底让背景 glow
+  透上来；窄屏不吸附（两行高吃纵 space）。配套 `html { scroll-padding-top: 72px }`——
+  toc 锚点跳转不被顶栏盖住；`scroll-behavior: smooth` 只在 no-preference 媒体里。
+- **层次**：`.plate` 卡面带一层 `linear-gradient(var(--card-2), var(--card) 130px)` 的纵向
+  渐变（上缘略沉）；`h3::before` 一枚 7px 强调色小方块给长报告视觉节拍；徽章/chip 补
+  `--card-2` 底色；印章 `.seal` 渐变 + 强调色软光。
+- **CTA**：`#go`/`.primary` 加大（12×26、15px），脚下垫 `box-shadow: 0 6px 22px var(--accent-soft)`
+  ——把印章的色彩关系带进按钮；进度条 `.bar-fill` 同理带一圈软光，跑起来自己会亮。
+- **feed 行**：整行 flex（摘要左、读数右、放不下折行），hover 出 `--card-2` 面 + 链接转
+  强调色；替代原「链接自己画下划线」的弱样式。
+- 动效只做入场（dialog 轻）落/既有 rise），`prefers-reduced-motion` 全局压到 0.01ms 的
+  既有规则兜底；所有颜色均来自令牌（`color-mix` 混合），四主题自动跟随、零硬编码色。
+
 ## 主题系统
 
 - 主题 = `styles.css` 里一组 CSS 变量；现有四套：**夜巡**（默认）/ **公报** / **仪器** / **经典**。
