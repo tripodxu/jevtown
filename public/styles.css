@@ -765,7 +765,7 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
 .chip b { font-family: var(--font-mono); font-weight: 600; }
 
 /* 地图 */
-.map-wrap { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.map-wrap { display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap; }
 
 canvas.grid {
   image-rendering: pixelated;
@@ -774,7 +774,11 @@ canvas.grid {
   border: 1px solid var(--hairline-strong);
   border-radius: 12px;
   cursor: crosshair;
-  box-shadow: var(--shadow);
+  /* 装裱式画框：地图外先一圈卡面衬边、再一圈发丝线，像标本册里压裱的一块墨版 */
+  box-shadow:
+    0 0 0 5px var(--card-2),
+    0 0 0 6px var(--hairline),
+    var(--shadow);
 }
 
 .legend {
@@ -785,6 +789,13 @@ canvas.grid {
   gap: 6px 10px;
   align-items: center;
   min-width: 150px;
+  /* 图例是坐标纸小图版：点阵底 + 发丝框，与页面的普查图纸语言同源 */
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background-color: var(--card-2);
+  background-image: radial-gradient(color-mix(in srgb, var(--text) 5%, transparent) 1px, transparent 1.3px);
+  background-size: 14px 14px;
 }
 
 .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
@@ -1097,7 +1108,10 @@ canvas.grid {
 .decision {
   border: 1px solid var(--hairline);
   border-radius: 12px;
-  background: var(--card-2);
+  background-color: var(--card-2);
+  /* 标本卡：Jev 决策现场的一格切片，铺一层比图例更淡的点阵 */
+  background-image: radial-gradient(color-mix(in srgb, var(--text) 4%, transparent) 1px, transparent 1.3px);
+  background-size: 16px 16px;
   padding: 14px 16px;
 }
 
