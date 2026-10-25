@@ -8,7 +8,7 @@
 | 方法 | 路径 | 函数 | 说明 |
 |---|---|---|---|
 | POST | `/api/check` | `runCheck` | 开局：打分 + 审核 + 文本解读；写 posts/versions；签发作者令牌；受每 IP 日闸约束。`body.broadcast: true` 进 `plan.broadcast`（全城广播：收波不拿净情绪当闸，四波跑满） |
-| POST | `/api/version` | `runVersion` | 同帖新版本（版本对比）；受每 IP 日闸 + 作者校验；`body.broadcast` 同上 |
+| POST | `/api/version` | `runVersion` | 同帖新版本（版本对比）；受每 IP 日闸 + 作者校验；`body.broadcast` 同上。**prices 继承**：商品帖改版不带 `prices` 时沿用上一版的定价阶梯（阶梯是帖子的属性，版本号与上一版阶梯一趟 SQL 取回），显式传入（≥2 正数）才覆盖；两条 INSERT 都存 prices 列 |
 | GET | `/api/batch` | `runBatch` | 每批 100 人一道 Choice 题；原子认领制，并发只有一个成功 |
 | POST | `/api/wave` | `closeWave` | 收波：CAS 占位 + 空波门 → `settleWave` 算情绪定去留。收波响应带 `endedBy`（gate=情绪被门槛拦下 / capacity=波次跑满或全城看到）与 `broadcast`；广播模式的中间波 `travels` 照实记 false |
 | POST | `/api/away` | `runAway` | 逐句承重（消融读数，要花钱）：作者按钮触发，只对 done 的版本算，算过缓存进 versions.away |

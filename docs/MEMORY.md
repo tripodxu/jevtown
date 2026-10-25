@@ -6,6 +6,39 @@
 
 ---
 
+## 2026-10-25 · 技术债偿还轮 A+B：商品改版丢阶梯、away 注释泄漏、CLI 存档 prices、默认阶梯单源、.gitattributes、render 视图冒烟
+
+**全量审计后按清单偿还（A1–A4 + B5 + B9，另顺带消掉 C11 三把尺子）**：
+
+1. **商品改版丢定价阶梯（A1，真 bug）**：runVersion 的 INSERT 没有 prices 列、API 不收
+   body.prices——商品帖 v2 起需求曲线静默落回默认档。修法：`cleanPrices` 去重校验；版本号
+   与上一版阶梯一趟 SQL 取回，**改版不重报 prices 沿用上一版**（阶梯是帖子的属性），显式
+   传入才覆盖；blocked/running 两条 INSERT 都存列。前端 `parsePrices` 留空改为「不表态」
+   （开局落 DEFAULT_PRICES、改版让服务端继承），校验失败照旧拦在表单。集成用例：v2 继承、
+   v3 覆盖、追问答案键数 = 阶梯数 + 1。
+2. **away 注释泄漏（A2）**：render.js 模板字符串里一行 `//` 注释，逐句承重每行都渲染出
+   一行注释文本——挪出模板，冒烟测试钉死（输出含 `//` 即红）。
+3. **CLI 存档 prices 恒 null（A3）**：runCheck 从不回传 prices，`--prices` 白传——现在
+   原样回传（与 versions.prices 同口径），引擎兜底阶梯也改从 DEFAULT_PRICES 取。
+4. **DEFAULT_PRICES 单源（C11 顺带）**：presets.js 新增导出，Worker 校验提示 / 引擎兜底 /
+   CLI 默认 / 前端开局默认四处共用（此前 [5,9,19,49] 与 [9,19,39,79] 三把尺子并存）。
+5. **.gitattributes（B5）**：`* text=auto eol=lf`；`git add --renormalize .` 零额外改动
+   （索引本就 LF）——Windows 上每次提交刷的 LF→CRLF 警告与行尾漂移从此根治。
+6. **render 视图冒烟（B9）**：render.js 14 个视图函数导出 + `test/render.test.js`——
+   真实 mock 管线（runCheck → replayToView）产出线上形状的 payload，逐视图断言
+   「不抛异常 / 无 NaN、undefined、[object Object] / 该有内容的有内容」。LOOKS 缺 import
+   与十档 NaN 这类事故从此在 node:test 里就红。briefView 补 `typeof navigator` 守卫
+   （Node 里不存在）。
+
+**审计时新记的两处小债（未修，见下一轮候选）**：replayToView 把存档里**有的** decisions
+ 丢了——首页示例卡没有「Jev 的决策现场」节；存档回放 tokens 恒 0。README 用例数已改为
+不写数字（197 是过期的）。
+
+**验证**：lint 49 文件过；`npm test` **213/213 绿**（新增 render 冒烟 3 例 + worker 阶梯
+继承 1 例）。商品三版继承/覆盖链、CLI `--prices` 存档、注释修复均有用例钉住。
+
+---
+
 ## 2026-10-25 · 收尾轮：发新帖入口、对比可选版本、冻结版本派生缓存、快照路径 D1 并行
 
 **四个点（体验 2 + 性能 2，按评估轮定下的顺序）**：

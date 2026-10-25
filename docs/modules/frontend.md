@@ -178,7 +178,9 @@ app.js  fetch /api/post/:id
   样例是起点，作者接着改才算玩起来。
 - 商品的定价阶梯行只在 `preset=product` 出现；`app.js` 的 `parsePrices` 校验「至少两个
   正数」，读不对**停在表单不发**：用户看着报告以为是自己的价格，结果跑了默认档——
-  这是最糟的静默错。留空走默认 `9/19/39/79`（API 本就收 `body.prices`）。
+  这是最糟的静默错。**留空 = 不表态**：新帖落 `DEFAULT_PRICES`（presets.js 单源，Worker
+  校验提示 / 引擎兜底 / CLI 默认同源），改版则由服务端**沿用上一版的阶梯**——改一版文字
+  不该静默换价格。
 - Ctrl/Cmd+Enter 在 textarea 里直接提交（Enter 仍换行）。
 - `test/labels.test.js` 钉住：三张表（chips/placeholders/samples）键序与 `PRESETS` 一致、
   每预设 ≥2 条样例且不超 `MAX_TEXT_CHARS`、报错文案带可照抄的例子。
