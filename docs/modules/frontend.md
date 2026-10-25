@@ -107,7 +107,9 @@ app.js  fetch /api/post/:id
 
 ## 两版对比区（改一版再发之后）
 
-- `app.js` 的「载入第 1 版对比」：点按钮才拉第 1 版全量视图（懒加载，不自动翻倍负载）。
+- `app.js` 的「载入第 1 版对比」：对比卡懒加载（点按钮才拉第 1 版全量视图，不自动翻倍负载）。
+  **作者自己跑完版本 ≥2 时 `finishCheck` 直接调用装载器**（compareLoader）——他刚等完一整轮
+  检查，要的下一眼就是对比；深链/他人打开仍走按钮（那是读动作，多拉一版是翻倍负载）。
   第 1 版必须渲染进**子节点**——`renderCheck` 会清空整个容器，直接渲染进 `#compare`
   会把差分卡和按钮一起清掉。
 - 差分卡 = `render.js` 的 `renderDelta(el, after, before)`：两版 `looks` 都在内存里，
@@ -120,6 +122,21 @@ app.js  fetch /api/post/:id
 - 差分画布**没有悬停档案**（差分格没有"这个人是谁"可看），但必须能被主题重绘：
   登记进 `grid.js` 的另册 `deltas`，`redrawMaps` 一并重画——曾因漏了这条，切主题后
   差分图留着上一个主题的墨水（回归用例在 `test/grid.test.js`）。
+
+## 续跑（running 的检查刷新后不废）
+
+- 检查由浏览器分步驱动（batch/wave），刷新或离开**不会回滚服务端进度**，但没人驱动就永远
+  停在 running。`openPost` 打开 running 帖且 localStorage 里有该帖作者令牌时显示
+  `#resume` 横幅；没有令牌（别人的进行中检查）不显示——驱动不了，也不该驱动。
+- 续跑走与新检查同一条 `driveCheck`（波次驱动已从提交流程抽出共用）；种子 = 报告的
+  `looks` 字节合成的 drawn 列表（`foldBatch` 幂等），地图从当前进度亮起而不是从头黑屏。
+- 失败时横幅回来可再试；跑完走 `finishCheck`（含版本 ≥2 的自动对比）。
+
+## feed 的读数摘要
+
+- `listFeed` 带回 `reading: { reach, glad, sorry }`（D1 里聚好），前端用 `labels.js` 的
+  `FEED_ZH.reading` 拼成「N 人读到 · 乐见 x% · 反感 y%」——feed 不再是光秃秃的摘要行。
+  口径与报告 `counters` 一致（worker 集成测试钉住）。
 
 ## 已知待修
 

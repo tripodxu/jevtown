@@ -13,7 +13,7 @@
 | POST | `/api/wave` | `closeWave` | 收波：CAS 占位 + 空波门 → `settleWave` 算情绪定去留。收波响应带 `endedBy`（gate=情绪被门槛拦下 / capacity=波次跑满或全城看到）与 `broadcast`；广播模式的中间波 `travels` 照实记 false |
 | POST | `/api/away` | `runAway` | 逐句承重（消融读数，要花钱）：作者按钮触发，只对 done 的版本算，算过缓存进 versions.away |
 | GET | `/api/post/:id` | `showPost` | 报告数据源（reactions + versions + 调用报告 + 决策样本）；**公开读，无身份**；payload 顶层 `broadcast: Boolean(plan.broadcast)` 供报告措辞区分「传开的/推满的」。`looks`/`reach` 为逐人反应/波次字节（base64，0 = 没看到）；终笔收波后走快照路径（门槛 `said != null`），running 版逐行现读 |
-| GET | `/api/feed` | `listFeed` | 公共流列表；**公开读，无身份** |
+| GET | `/api/feed` | `listFeed` | 公共流列表（20 条）+ **读数摘要**：`reading: { reach, glad, sorry }` 由 reactions 在 D1 里 `GROUP BY post, reaction` 聚好、tone 按 preset 在 Worker 映射（不搬 looks 字节回 Worker 数）；无 reactions（blocked/刚开局）为 null。**公开读，无身份** |
 
 非 `/api/*` 请求直接 `env.ASSETS.fetch`——页面/样式/脚本走边缘 assets，**不计 Worker 请求**。
 
