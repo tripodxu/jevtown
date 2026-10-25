@@ -1,7 +1,10 @@
 # modules/worker-api · Worker、API 与 D1
 
 > 适合：改 API、D1、限额、记账、BYOK 的 agent。
-> 路径：`worker/index.js`（单文件约 800 行）+ `migrations/` + `wrangler.jsonc`。
+> 路径：`worker/`（B8 拆分后按域分文件）+ `migrations/` + `wrangler.jsonc`。
+> 结构：`index.js`（fetch 路由，~46 行）→ `opening.js`（check/version 开局）/ `batch.js`（批次认领）/
+> `wave.js`（收波/追问/收尾）/ `report.js`（报告/away/feed）→ `common.js`（响应与 D1 助手、
+> 通道选择、人群与派生缓存、写入日闸与 running 读闸）。
 
 ## 路由表
 

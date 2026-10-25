@@ -110,8 +110,8 @@ export const UNLISTED = {
   violence: 'Does the text threaten somebody or call for violence?',
   private_data: "Does the text reveal a specific private person's phone number, home address or documents?",
   illegal: 'Does the text offer drugs, weapons, stolen goods or forged documents?',
-  insult: 'Is the text itself abuse aimed at a person or at its readers: name-calling, humiliation, obscene swearing at somebody? The text may be in Ukrainian. Harsh criticism of a product, a company or an idea is not abuse, and neither is swearing at a situation.',
-  gibberish: 'Is the text meaningless: random characters, keyboard mashing, or filler a reader could not react to, such as "asdf", "test test", "aaaa"? The text may be in Ukrainian. A short but meaningful text, even one word, is not meaningless.',
+  insult: 'Is the text itself abuse aimed at a person or at its readers: name-calling, humiliation, obscene swearing at somebody? The text may be in Chinese or in any other language. Harsh criticism of a product, a company or an idea is not abuse, and neither is swearing at a situation.',
+  gibberish: 'Is the text meaningless: random characters, keyboard mashing, or filler a reader could not react to, such as "asdf", "test test", "aaaa"? The text may be in Chinese or in any other language. A short but meaningful text, even one word, is not meaningless.',
 };
 export const UNLISTED_FROM = 0.5;
 export const BLOCKED_FROM = 0.85;

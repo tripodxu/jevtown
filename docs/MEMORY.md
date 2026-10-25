@@ -6,6 +6,28 @@
 
 ---
 
+## 2026-10-25 · 技术债偿还轮（三）：B8 worker 按域拆分、审核提示词语种修正
+
+**B8 拆分**：worker/index.js（945 行）→ `index.js`（fetch 路由 46 行）+ `opening.js`（check/
+version——两个互为拷贝的入口**同文件**，看得见该一起改的地方）/ `batch.js` / `wave.js` /
+`report.js`（post/away/feed）/ `common.js`（响应与 D1 助手、providerOf、人群/地形/派生缓存、
+双闸）。正文用切块脚本**逐字搬运**（零手抄），文件尾统一 `export {}` 块。
+
+**拆分过程的两条工程教训**：① 切块锚点先撞上文件头注释里的路由名（每个 banner 都匹到
+第 3–7 行）——区块搜索必须带起点；② `node --check` 只查语法不查链接，漏 import 的名字
+（WAVES/overDailyLimit/loadPost/authorOk/readJson 共 5 处）要到运行才炸，且 unstable_dev
+下表现为**挂死而非报错**。修法：`node -e "import('./worker/index.js')…"` 直导先过链接层，
+再写「逐文件核对 common 导出名被引用却未 import」的小脚本一次找齐——以后再拆文件照此两步。
+
+**审核提示词语种修正（行为变更，未经真实通道实测）**：requests.js 的 insult/gibberish 两道
+审核题残留上游的 "The text may be in Ukrainian."——中文小镇的审核却只给乌克兰语开口。
+改为 "may be in Chinese or in any other language"（语言中立）。mock 不读提示词（命中靠
+正则），全部测试照旧绿；真实通道上的阈值行为未对拍，上线后留意被拒/漏拦的样本。
+
+**验证**：lint 54 文件 + 预载 23 项过；`npm test` **215/215 绿**（worker 集成 21/21）。
+
+---
+
 ## 2026-10-25 · 技术债偿还轮（续）：B7 读闸、B10 预载校验器、replay 三处旧债、波次常量单源
 
 **接上一轮清单（B7 + B10 + replay 小债 + C16）**：
