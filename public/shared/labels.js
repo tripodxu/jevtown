@@ -419,6 +419,40 @@ export const DELETE_ZH = {
 };
 
 /**
+ * Worker 错误串 → 中文。API 契约里的 error 是英文（改动它才是破坏契约），这里只在
+ * 展示层翻译：精确匹配已知短语，前缀匹配带参数的（text is longer than N chars），
+ * 未命中（D1/网关的原始报错）原样返回——技术报错照实给，比假翻译诚实。
+ * 与 worker 各文件的 fail() 串保持同步：worker-api.md 的契约表是核对清单。
+ */
+export const ERROR_ZH = {
+  'unknown preset': '类型不对：帖子 / 闲置转让 / 商品文案 / 标题。',
+  'text is empty': '还没有写内容。',
+  'post is required': '缺少帖子 id。',
+  'no such post': '这份检查不存在（可能已被删除）。',
+  'no such version': '这个版本不存在。',
+  'previous version is still running': '上一版还在跑，等它收尾再发下一版。',
+  'this post is not yours': '这份检查不是这台浏览器发起的。',
+  'this check is not yours': '这次检查不是这台浏览器发起的。',
+  'the check is not running': '这次检查已经不在进行中，刷新页面看看结果。',
+  'the check is already closing': '这一波正在收束，稍等一下再试。',
+  'this wave has no answers yet': '这一波还没有任何判定，先让它跑一会儿。',
+  'the check is not finished yet': '检查还没跑完，跑完才能算逐句承重。',
+  'this batch was already claimed, retry': '这一批被别的请求领走了，正在重试。',
+  'too many report reads for this IP, retry in a minute': '刷新太频繁了，一分钟后再看这份进行中的报告。',
+  'daily check limit for this IP is reached': '今天的检查次数用完了，明天再来。',
+  'not found': '接口不存在。',
+  'worker error': '服务出错了，稍后再试。',
+};
+
+/** 展示层的错误翻译：先查精确表，再按前缀匹配带参数的串；未命中原样返回。 */
+export function errorZh(message) {
+  const text = String(message ?? '');
+  if (ERROR_ZH[text]) return ERROR_ZH[text];
+  if (text.startsWith('text is longer than')) return '内容太长了：一次最多 2000 字。';
+  return text;
+}
+
+/**
  * 传播门槛与全城广播的界面中文。门槛是 feed.js 的 GLAD_ENOUGH（实测钉死在那儿，
  * 这里只写显示文案；labels.test.js 钉住文案里的门槛数字与 GLAD_ENOUGH 对得上）。
  *

@@ -6,6 +6,18 @@
 
 ---
 
+## 2026-10-25 · 错误文案中文化（展示层）与整体推送
+
+- **ERROR_ZH / errorZh（labels.js）**：Worker 的 error 串是 API 契约（英文，改它才破坏
+  契约），翻译只做在展示层——精确表 + `text is longer than` 前缀匹配，未命中（D1/网关
+  原始报错）原样返回（假翻译不如原文诚实）。app.js 四处展示点（提交/openPost/续跑/删除）
+  都过 errorZh；限流出路提示的判定仍用原文 regex（翻译后没有 "rate limit" 字样了）。
+  labels 用例钉「worker 每条 fail 都有中文」「译文不带原文」「未知报错原样返回」。
+  **同步纪律**：worker 新增 fail() 串要补 ERROR_ZH（worker-api.md 契约表为核对清单）。
+- 本地累计 23 笔一次性推送 origin/main（含此前 21 笔补签）。
+
+---
+
 ## 2026-10-25 · 删帖轮：作者删帖入口、21 笔补签、awayCallable 深链首开恒 false 的存量 bug
 
 1. **补签**：gpg 恢复后对未推送的 21 笔（origin/main..main）整体 `rebase --exec

@@ -130,3 +130,20 @@ test('WAVE_ZH：门槛文案里的数字与 GLAD_ENOUGH 对得上，广播措辞
   assert.ok(!WAVE_ZH.broadcastBrief.includes('传了'), '广播模式的波次是不看门槛推满的，不能说「传了」');
   assert.ok(WAVE_ZH.stoppedSay.includes('全城广播'), '止步的那句话要指出广播这条路，不然只报了坏消息');
 });
+
+// 错误文案的展示层翻译：Worker 的 error 串是 API 契约（英文），labels.js 的 ERROR_ZH 只在
+// 展示层翻。两头的同步靠用例钉住：worker 每条 fail() 都该有中文；未命中的技术报错原样返回。
+import { ERROR_ZH, errorZh } from '../public/shared/labels.js';
+
+test('errorZh：已知的 Worker 错误串都有中文，未命中的原样返回', () => {
+  assert.equal(errorZh('no such post'), ERROR_ZH['no such post']);
+  assert.equal(errorZh('this post is not yours'), ERROR_ZH['this post is not yours']);
+  assert.ok(errorZh('text is longer than 2000 chars').includes('2000 字'), '带参数的前缀匹配');
+  const raw = 'D1_ERROR: something weird';
+  assert.equal(errorZh(raw), raw, '未知的技术报错不翻译，照实给');
+  assert.equal(errorZh(undefined), '', '空值不炸、给空串');
+  // 译文不该把原文英文短语留在里面（翻了个寂寞）
+  for (const [en, zh] of Object.entries(ERROR_ZH)) {
+    assert.ok(!zh.includes(en), `${en} 的译文还带着原文`);
+  }
+});

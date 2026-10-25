@@ -2,7 +2,7 @@
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
 import { renderCheck, renderDelta, esc, stat } from './render.js';
 import { initThemeSwitcher } from './theme.js';
-import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH, WAVE_ZH, FEED_ZH, DELETE_ZH } from './shared/labels.js';
+import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH, WAVE_ZH, FEED_ZH, DELETE_ZH, errorZh } from './shared/labels.js';
 import { PRESETS, DEFAULT_PRICES } from './shared/presets.js';
 import { drawGrid, paintDelta } from './grid.js';
 import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
@@ -519,10 +519,11 @@ $('form').addEventListener('submit', async (event) => {
   } catch (error) {
     // 免费通道走 Worker 共享出口，被上游按 IP 限流是常态（2026-10-07 线上实测：本机畅通、
     // Worker 出口持续 429）——退避 6 轮仍失败时给访客一条真正能走的路，而不是一句裸报错。
+    // 限流的判定用原文（errorZh 之后就没有 "rate limit" 字样了）；给访客看的用中文。
     const limited = /rate limit|限流/i.test(error.message);
     const message = limited
-      ? `${error.message}——免费通道此刻繁忙。在 Key… 里填自己的 key（如 OpenCode Zen 免费领取）可立即走专用额度。`
-      : error.message;
+      ? `${errorZh(error.message)}——免费通道此刻繁忙。在 Key… 里填自己的 key（如 OpenCode Zen 免费领取）可立即走专用额度。`
+      : errorZh(error.message);
     $('statusLine').innerHTML = `<span class="error">${esc(message)}</span>`;
     $('statusBar').style.transform = 'scaleX(0)';
     announce(`检查失败：${message}`);
@@ -741,7 +742,7 @@ $('deletePost').addEventListener('click', async () => {
     await loadFeed();
   } catch (error) {
     btn.disabled = false;
-    const text = DELETE_ZH.failed.replace('%1', error.message);
+    const text = DELETE_ZH.failed.replace('%1', errorZh(error.message));
     $('statusLine').innerHTML = `<span class="error">${esc(text)}</span>`;
     announce(text);
   }
@@ -874,8 +875,8 @@ async function openPost(id, versionHint = null) {
   } catch (error) {
     result.hidden = true; // 骨架不留在原地装样子
     $('resume').hidden = true;
-    status(error.message, 0);
-    announce(`打开失败：${error.message}`);
+    status(errorZh(error.message), 0);
+    announce(`打开失败：${errorZh(error.message)}`);
   }
 }
 // 深链入口挂在 window 上：浏览器调试与 E2E 直达某帖用（生产代码不走它，feed 链接走下方委托）。
@@ -904,8 +905,8 @@ $('resumeBtn').addEventListener('click', async () => {
   } catch (error) {
     btn.disabled = false;
     $('resume').hidden = false;
-    $('statusLine').innerHTML = `<span class="error">${esc(error.message)}</span>`;
-    announce(`续跑失败：${error.message}`);
+    $('statusLine').innerHTML = `<span class="error">${esc(errorZh(error.message))}</span>`;
+    announce(`续跑失败：${errorZh(error.message)}`);
   }
 });
 
