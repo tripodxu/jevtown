@@ -14,7 +14,7 @@ function apply(id) {
 
 export function initThemeSwitcher() {
   const saved = localStorage.getItem(KEY);
-  apply(THEMES.includes(saved) ? saved : 'night');
+  apply(THEMES.includes(saved) ? saved : 'instrument');
   for (const btn of document.querySelectorAll('.theme-btn')) {
     btn.addEventListener('click', () => {
       localStorage.setItem(KEY, btn.dataset.theme);

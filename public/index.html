@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="night">
+<html lang="zh-CN" data-theme="instrument">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -16,7 +16,7 @@
     try {
       var saved = localStorage.getItem('jevtown.theme');
       document.documentElement.dataset.theme =
-        ['night', 'bulletin', 'instrument', 'classic'].indexOf(saved) >= 0 ? saved : 'night';
+        ['night', 'bulletin', 'instrument', 'classic'].indexOf(saved) >= 0 ? saved : 'instrument';
     } catch (e) {}
   </script>
   <link rel="stylesheet" href="/styles.css">
@@ -65,9 +65,9 @@
     <div class="top-actions">
       <span class="chip mode-chip" id="modeChip" title="当前 Jev 通道">默认通道</span>
       <nav class="segmented" role="group" aria-label="主题切换">
-        <button class="theme-btn" type="button" data-theme="night" aria-pressed="true">夜巡</button>
+        <button class="theme-btn" type="button" data-theme="instrument" aria-pressed="true">仪器</button>
+        <button class="theme-btn" type="button" data-theme="night" aria-pressed="false">夜巡</button>
         <button class="theme-btn" type="button" data-theme="bulletin" aria-pressed="false">公报</button>
-        <button class="theme-btn" type="button" data-theme="instrument" aria-pressed="false">仪器</button>
         <button class="theme-btn" type="button" data-theme="classic" aria-pressed="false">经典</button>
       </nav>
       <button class="ghost settings-btn" id="settingsBtn" type="button" aria-haspopup="dialog">Key…</button>
@@ -75,11 +75,14 @@
   </header>
 
   <main>
+    <!-- 宽屏：左边讲这台仪器在做什么，右边就是唯一的主操作区（C 方案的首屏构图）；
+         窄屏退回单栏，先读到说明再输入。 -->
+    <div class="opening">
     <section class="hero">
       <div class="town-mark" aria-hidden="true"></div>
       <p class="driver">由 TypeSafe <b>Jev</b> 驱动 · System One 决策模型</p>
-      <h1>一万个 AI 人格，<em>读你写的每一个字</em></h1>
-      <p class="sub">发一段文字进小镇：谁停下、谁点赞、谁反感、谁划走。每一个反应都是 Jev 对类型化问题给出的概率，本页所有数字都出自它的判定。</p>
+      <h1>一句话投进小镇，<em>看见它穿过一万个人。</em></h1>
+      <p class="sub">每个人停下、共鸣、划走或反感，都是 Jev 对同一段文字给出的概率判定——本页所有数字都出自它的判定。</p>
       <!-- 普查封面式的规模数字条：静态产品事实（引擎常量），给首屏一个「这是一台仪器」的锚 -->
       <dl class="census" aria-label="小镇规模">
         <div class="census-item"><dt>小镇人口</dt><dd>10,000</dd></div>
@@ -92,30 +95,19 @@
     <!-- tabindex="-1" 只为让跳过链接能把焦点真正移进来（不加它只滚动、焦点还在顶栏） -->
     <section id="compose" class="plate" tabindex="-1">
       <form id="form">
-        <div class="row">
-          <label for="preset">类型</label>
-          <select id="preset">
-            <option value="post">帖子</option>
-            <option value="listing">闲置转让</option>
-            <option value="product">商品文案</option>
-            <option value="headline">标题</option>
-          </select>
-        </div>
-        <!-- 商品的定价阶梯（可玩性）：需求曲线和「收入最高定价」按它算。留空走默认 9/19/39/79。
-             只在选了商品时出现；校验失败不发检查——用户以为是自己的价格，结果跑了默认档。 -->
-        <div class="row" id="pricesRow" hidden>
-          <label for="pricesInput">定价阶梯</label>
-          <input id="pricesInput" type="text" inputmode="numeric" autocomplete="off" maxlength="80"
-            placeholder="9, 19, 39, 79（逗号隔开；留空：新帖用默认，改版沿用上一版）" aria-describedby="pricesHint">
-          <span class="hint" id="pricesHint">报告里的价格需求曲线按它算。</span>
-        </div>
-        <!-- 全城广播（传播可玩性）：真实传播里净情绪 ≥ +0.10 才传下一波，多数初稿止步第 1 波——
-             勾上它不看门槛把波次跑满，「传不传得开」和「全镇怎么读」分开问。 -->
-        <div class="row" id="broadcastRow">
-          <label class="inline-check" for="broadcast">
-            <input type="checkbox" id="broadcast"> 全城广播（不设传播门槛）
-          </label>
-          <span class="hint" id="broadcastHint">真实传播：净情绪 ≥ +0.10 才传下一波。勾上则四波跑满看全城反应，Jev 调用为全程（免费档无感，付费 key 约 $0.10+）。</span>
+        <!-- 首屏只留一件事：类型 + 正文 + 主按钮。定价、广播、受众都是可选玩法，
+             收进原生 details——不用 JS 管开合，键盘与读屏语义由浏览器负责。 -->
+        <div class="compose-head">
+          <div class="row tight">
+            <label for="preset">类型</label>
+            <select id="preset">
+              <option value="post">帖子</option>
+              <option value="listing">闲置转让</option>
+              <option value="product">商品文案</option>
+              <option value="headline">标题</option>
+            </select>
+          </div>
+          <span class="hint compose-note">INPUT · 一段话进小镇</span>
         </div>
         <!-- 做完一次检查后：表单默认进入「改版」模式——没有这一行，玩家不知道
              下一次提交会变成同一帖的新版本，也找不到发全新帖的入口。 -->
@@ -133,42 +125,68 @@
           <div class="sample-chips" id="sampleChips"></div>
           <span class="hint text-count" id="textCount"></span>
         </div>
-        <div class="row between">
+        <div class="row between compose-submit">
           <span class="hint" id="hint">不填 key 也走真实模型：站点免费通道（OpenCode Zen 免费档，限时零花费）；Key… 里可换自己的通道，mock 是离线假答案。</span>
-          <button id="go" type="submit">让小镇来读</button>
+          <button id="go" type="submit">开始观测
+            <svg class="go-arrow" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path d="M2.5 8h9M8 4.5 11.5 8 8 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </div>
 
-        <!-- 「这段话是给谁的」（R35）：不填也能发，填了报告里多一张对账表。
-             这一行是可选的，所以不做成必填控件，也不拦提交。
-             两个输入框都是可见标签 + aria-describedby 指向说明：placeholder 一打字就没了，
-             不能当标签用；标签与控件之间也不隔容器，读屏软件才认得出谁是谁。 -->
-        <div class="aud-pick" id="audienceRow">
-          <div class="field">
-            <label for="audienceSaid">这段话是给谁的<small>（可不填）</small></label>
-            <input id="audienceSaid" type="text" maxlength="200" autocomplete="off"
-              placeholder="写一句你想找的人，不用准，报告会拿它跟你挑的组对账。"
-              aria-describedby="audienceSaidHint">
+        <details class="advanced-options" id="advancedOptions">
+          <summary>
+            <span>高级选项</span>
+            <span class="hint advanced-hint">定价 · 全城广播 · 受众</span>
+          </summary>
+          <div class="advanced-body">
+            <!-- 商品的定价阶梯（可玩性）：需求曲线和「收入最高定价」按它算。留空走默认 9/19/39/79。
+                 只在选了商品时出现；校验失败不发检查——用户以为是自己的价格，结果跑了默认档。 -->
+            <div class="row" id="pricesRow" hidden>
+              <label for="pricesInput">定价阶梯</label>
+              <input id="pricesInput" type="text" inputmode="numeric" autocomplete="off" maxlength="80"
+                placeholder="9, 19, 39, 79（逗号隔开；留空：新帖用默认，改版沿用上一版）" aria-describedby="pricesHint">
+              <span class="hint" id="pricesHint">报告里的价格需求曲线按它算。</span>
+            </div>
+            <!-- 全城广播（传播可玩性）：真实传播里净情绪 ≥ +0.10 才传下一波，多数初稿止步第 1 波——
+                 勾上它不看门槛把波次跑满，「传不传得开」和「全镇怎么读」分开问。 -->
+            <div class="row" id="broadcastRow">
+              <label class="inline-check" for="broadcast">
+                <input type="checkbox" id="broadcast"> 全城广播（不设传播门槛）
+              </label>
+              <span class="hint" id="broadcastHint">真实传播：净情绪 ≥ +0.10 才传下一波。勾上则四波跑满看全城反应，Jev 调用为全程（免费档无感，付费 key 约 $0.10+）。</span>
+            </div>
+            <!-- 「这段话是给谁的」（R35）：不填也能发，填了报告里多一张对账表。
+                 这一行是可选的，所以不做成必填控件，也不拦提交。
+                 两个输入框都是可见标签 + aria-describedby 指向说明：placeholder 一打字就没了，
+                 不能当标签用；标签与控件之间也不隔容器，读屏软件才认得出谁是谁。 -->
+            <div class="aud-pick" id="audienceRow">
+              <div class="field">
+                <label for="audienceSaid">这段话是给谁的<small>（可不填）</small></label>
+                <input id="audienceSaid" type="text" maxlength="200" autocomplete="off"
+                  placeholder="写一句你想找的人，不用准，报告会拿它跟你挑的组对账。"
+                  aria-describedby="audienceSaidHint">
+              </div>
+              <div class="field">
+                <label for="audienceFilter">加一组人群<small>（词表里有 115 组）</small></label>
+                <input id="audienceFilter" type="text" maxlength="40" autocomplete="off"
+                  placeholder="输入「摄影」「昆明」「岁」……" aria-describedby="audienceHint">
+              </div>
+              <!-- 候选就是一组普通按钮：不套 role="listbox"——listbox 里的子项必须是
+                   role="option"，而 option 不该再是 button，两套语义会打架。 -->
+              <div class="aud-list" id="audienceList" hidden></div>
+              <div class="aud-tags" id="audienceTags"></div>
+              <div class="row between">
+                <span class="hint" id="audienceSaidHint">一句话就能写，不用准——报告会拿它跟你挑的组对账。</span>
+                <span class="hint" id="audienceHint">挑不挑都行；挑了才有一张对账表。</span>
+              </div>
+              <div class="row between">
+                <!-- 挑/摘那一下只有「已选 N 组」这个数字变了，而 #audienceCount 只看得见。
+                     读屏用户听不到变化，所以另开一句只给读屏的播报（视觉上不占地方）。 -->
+                <span class="sr-only" id="audienceLive" role="status" aria-live="polite"></span>
+                <span class="hint" id="audienceCount"></span>
+              </div>
+            </div>
           </div>
-          <div class="field">
-            <label for="audienceFilter">加一组人群<small>（词表里有 115 组）</small></label>
-            <input id="audienceFilter" type="text" maxlength="40" autocomplete="off"
-              placeholder="输入「摄影」「昆明」「岁」……" aria-describedby="audienceHint">
-          </div>
-          <!-- 候选就是一组普通按钮：不套 role="listbox"——listbox 里的子项必须是
-               role="option"，而 option 不该再是 button，两套语义会打架。 -->
-          <div class="aud-list" id="audienceList" hidden></div>
-          <div class="aud-tags" id="audienceTags"></div>
-          <div class="row between">
-            <span class="hint" id="audienceSaidHint">一句话就能写，不用准——报告会拿它跟你挑的组对账。</span>
-            <span class="hint" id="audienceHint">挑不挑都行；挑了才有一张对账表。</span>
-          </div>
-          <div class="row between">
-            <!-- 挑/摘那一下只有「已选 N 组」这个数字变了，而 #audienceCount 只看得见。
-                 读屏用户听不到变化，所以另开一句只给读屏的播报（视觉上不占地方）。 -->
-            <span class="sr-only" id="audienceLive" role="status" aria-live="polite"></span>
-            <span class="hint" id="audienceCount"></span>
-          </div>
-        </div>
+        </details>
       </form>
       <div id="status" hidden>
         <div class="status-line" id="statusLine"></div>
@@ -178,29 +196,40 @@
         <div class="bar"><div class="bar-fill" id="statusBar"></div></div>
       </div>
     </section>
+    </div>
 
     <section id="live" class="plate" hidden>
       <h2>实时监控 · Jev 正在逐格判定</h2>
       <div class="stats" id="liveStats"></div>
-      <h3>运行心电图</h3>
-      <div class="charts-row">
-        <div class="mini"><div class="mini-head">判定吞吐（人/秒）</div><div id="chartTput"></div></div>
-        <div class="mini"><div class="mini-head">模型耗时（ms/请求）</div><div id="chartMs"></div></div>
+      <!-- 先看「判到哪了」和此刻的态度，再看点亮的地图；运行曲线与调用流水是次级分析。 -->
+      <div class="live-observation">
+        <div class="live-panel">
+          <h3>传播地图（Jev 每判完一批点亮一批）</h3>
+          <div class="map-wrap"><canvas class="grid" id="liveMap" role="img" aria-label="实时地图：已判定的格子被点亮"></canvas>
+            <span class="hint">灰色 = 还没轮到；彩色 = Jev 已给出判定。</span></div>
+        </div>
+        <div class="live-panel">
+          <h3>态度占比 · 随时间发展（乐见 / 中性 / 反感，占已判定人数）</h3>
+          <div id="chartShare"></div>
+        </div>
       </div>
-      <h3>态度占比 · 随时间发展（乐见 / 中性 / 反感，占已判定人数）</h3>
-      <div id="chartShare"></div>
-      <h3>传播地图（Jev 每判完一批点亮一批）</h3>
-      <div class="map-wrap"><canvas class="grid" id="liveMap" role="img" aria-label="实时地图：已判定的格子被点亮"></canvas>
-        <span class="hint">灰色 = 还没轮到；彩色 = Jev 已给出判定。</span></div>
-      <h3>调用监控表（随时间滚动追加）</h3>
-      <div class="monitor-wrap">
-        <table class="waves monitor">
-          <caption class="sr-only">Jev 调用流水：每次调用的时刻、阶段、进度、耗时、tokens 与累计花费，随时间滚动追加</caption>
-          <thead><tr><th>时刻</th><th>阶段</th><th>进度</th><th>本次耗时</th><th>tokens</th><th>累计花费</th></tr></thead>
-          <tbody id="monitorBody"></tbody>
-        </table>
-      </div>
-      <p class="hint">花费与耗时为实时估算，精确数字以检查完成后的调用报告为准。</p>
+      <details class="live-log">
+        <summary><span>调用流水 · 运行心电图</span><span class="hint">来自 monitor.js 的 Jev 调用明细</span></summary>
+        <h3>运行心电图</h3>
+        <div class="charts-row">
+          <div class="mini"><div class="mini-head">判定吞吐（人/秒）</div><div id="chartTput"></div></div>
+          <div class="mini"><div class="mini-head">模型耗时（ms/请求）</div><div id="chartMs"></div></div>
+        </div>
+        <h3>调用监控表（随时间滚动追加）</h3>
+        <div class="monitor-wrap">
+          <table class="waves monitor">
+            <caption class="sr-only">Jev 调用流水：每次调用的时刻、阶段、进度、耗时、tokens 与累计花费，随时间滚动追加</caption>
+            <thead><tr><th>时刻</th><th>阶段</th><th>进度</th><th>本次耗时</th><th>tokens</th><th>累计花费</th></tr></thead>
+            <tbody id="monitorBody"></tbody>
+          </table>
+        </div>
+        <p class="hint">花费与耗时为实时估算，精确数字以检查完成后的调用报告为准。</p>
+      </details>
     </section>
 
     <section id="resume" class="plate" hidden>

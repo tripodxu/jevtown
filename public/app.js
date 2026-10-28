@@ -260,7 +260,10 @@ function syncComposeForPreset() {
   const presetId = $('preset').value;
   const placeholder = COMPOSE_ZH.placeholders[presetId];
   if (placeholder) $('text').placeholder = placeholder;
+  // 商品的定价阶梯行只在商品预设出现；它也住在「高级选项」里，选到商品就把抽屉打开，
+  // 否则玩家填了商品却根本看不见定价输入框（UI 上的渐进披露不能挡住这条主路径）。
   $('pricesRow').hidden = presetId !== 'product';
+  if (presetId === 'product' && $('advancedOptions')) $('advancedOptions').open = true;
 }
 
 const updateTextCount = () => {

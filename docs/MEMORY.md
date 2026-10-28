@@ -6,6 +6,41 @@
 
 ---
 
+## 2026-10-28 · 前端现代化第三轮（C 方案「新精密仪器」）开工收口
+
+**结论先行：Worker / API / D1 / 共享引擎 / 检查·续跑·改版·对比·删帖·BYOK 全部零改动，
+四套主题的十六进制配色同样零改动。** 这一轮只动展示层（`index.html` / `styles.css` /
+`render.js` / `labels.js`，以及 `app.js`、`theme.js` 各一处）。
+
+1. **一个会打断整个前端的回归（本轮唯一硬伤，收口时修掉）**：`syncComposeForPreset()`
+   重写时删掉了 `const placeholder = COMPOSE_ZH.placeholders[presetId]`，却把
+   `if (placeholder)` 的引用留着。这个函数在 `app.js` 末尾被顶层调用一次 → `ReferenceError`
+   → 其后的 `updateTextCount / refreshComposeMode / initThemeSwitcher / loadFeed / 深链
+   openPost` 全部不执行；主题按钮、feed、深链、样例 chips、预设切换一起停摆。
+   **lint（只有语法门）与 217 个用例都抓不到**——编排层没有自动化防线，见 TESTING.md 缺口节。
+2. **速览/完整是纯展示折叠**：`buildToc()` 给非核心 h3 及其后面的兄弟节点打
+   `data-report-detail`，由宿主元素的 `data-report-mode` 决定显隐；核心清单在
+   `labels.js` 的 `REPORT_VIEW_ZH.core`，**判定靠 h3 的 `textContent.trim()` 精确匹配**
+   ——两边不同字，那一节就悄悄从速览里消失。新增了静态对拍用例（`<h3>字面</h3>` 是否真在
+   `render.js` 里）。两个已知行为：速览的实际阅读顺序是 DOM 顺序（人群地形排在传播波次之前）；
+   进行中报告每 15s 重渲染会把模式重置回速览。
+3. **渐进披露的边界**：定价/全城广播/受众进 `#advancedOptions`，`syncComposeForPreset()` 在
+   切到商品预设时自动 `open`；**原 DOM id 一个没少**，`parsePrices()` 仍按预设短路，
+   校验失败照旧停在表单不发。
+4. **两处文档口径纠错**：`--grain` 是 0.05→0.03（**不是归零**，纸感还在）；电蓝
+   `--btn-bg:#255bd6` 配白字是 5.9:1，属「过 AA」，CSS 注释原来写成「6.1:1，干不过 AA」
+   自相矛盾，已改。
+5. **折叠区里的图表**：心电图住进收起的 `<details>`，`clientWidth` 为 0 时退回默认 420 宽，
+   全局 `svg { max-width: 100% }` 兜住溢出——只会被等比缩小，不会撑破布局。
+
+**验证**：`npm run lint` 57 文件 + 预载清单 26 项一致；`npm test` **218/218 绿**。
+**文档**：`docs/README.md` 补 `superpowers/specs/` 索引；`docs/TESTING.md` 用例数 87→218
+并补齐 8 个漏记的测试文件；方向文档的「未完成验证」更新为收口后的真实状态。
+**未做**：本机无头浏览器仍被沙箱拦下，四主题与 360/390/768 的目视核对没做；本轮改动
+**未提交、未部署**（线上仍是 3664b921）。
+
+---
+
 ## 2026-10-28 · 前端现代化第二轮：族规则 :where() 化、刻度收敛、JS 三段分层
 
 **结论先行：仍然没有改任何业务逻辑、文案、数据口径与四套主题的配色**（配色受

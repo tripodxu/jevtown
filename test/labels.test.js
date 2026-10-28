@@ -147,3 +147,27 @@ test('errorZh：已知的 Worker 错误串都有中文，未命中的原样返�
     assert.ok(!zh.includes(en), `${en} 的译文还带着原文`);
   }
 });
+
+// 报告「速览」保留哪几节写在 REPORT_VIEW_ZH.core，判定却靠 buildToc 拿 h3 的 textContent
+// 精确匹配 render.js 里写死的字面文案。两边一旦不同字，那一节就从速览里悄悄消失——
+// 页面不报错、视图冒烟也绿。所以这里直接对源文件静态比一遍。
+import { REPORT_VIEW_ZH } from '../public/shared/labels.js';
+import fs from 'node:fs';
+
+test('REPORT_VIEW_ZH：速览保留的小节在 render.js 里都有同字的 <h3>', () => {
+  const source = fs.readFileSync(new URL('../public/render.js', import.meta.url), 'utf8');
+  assert.ok(REPORT_VIEW_ZH.core.length >= 4, '速览至少留四节，别把长报告折成一张卡');
+  assert.equal(new Set(REPORT_VIEW_ZH.core).size, REPORT_VIEW_ZH.core.length, '速览清单不该有重复');
+  for (const heading of REPORT_VIEW_ZH.core) {
+    // buildToc 用的是 textContent.trim()，清单里带首尾空白就会永远失配
+    assert.equal(heading.trim(), heading, `速览清单里的「${heading}」带了首尾空白`);
+    assert.ok(
+      source.includes(`<h3>${heading}</h3>`),
+      `render.js 里没有字面同字的 <h3>${heading}</h3>——那一节会被折进「完整报告」里`,
+    );
+  }
+  for (const key of ['label', 'quick', 'full', 'hint']) {
+    assert.ok(REPORT_VIEW_ZH[key]?.trim(), `REPORT_VIEW_ZH.${key} 不能为空`);
+  }
+  assert.notEqual(REPORT_VIEW_ZH.quick, REPORT_VIEW_ZH.full);
+});

@@ -6,7 +6,7 @@
 npm test    # node --test "test/*.test.js"
 ```
 
-当前 **87 个用例**（README 里若写旧数以本文件为准；数量会随用例增加变化，
+当前 **218 个用例**（README 里若写旧数以本文件为准；数量会随用例增加变化，
 以 `npm test` 输出 `tests N` 行为准）。全部走 mock 通道，**不花真钱、不需要 key**。
 
 ```bash
@@ -26,9 +26,17 @@ npm run bench   # 实时监控增量统计的一次性对拍（旧全量重扫 v
 | `test/grid.test.js` | 地图绘制：全量 `drawGrid`、增量 `paintDelta`、聚集地形描环、差分地图 `drawDelta`（发散配色的四色/半档/底板/主题重画），各画了几格（Node 里用 canvas 桩件记录 `fillRect` / `strokeRect`） |
 | `test/tally.test.js` | 实时监控增量统计：幂等、改判、未知反应，以及与全量重扫的对拍 |
 | `test/spatial.test.js` | 人群地形：成片/零散/无方差/判定不足/确定性/置换收缩/成片格不重叠；两版之差 `crowdDelta`：交集口径、差值计数、不可比编码、差场成片/零散、确定性、100×100 实跑 |
+| `test/away.test.js` | 逐句承重：切句、消融请求形状、噪声门、`runAblation` 的确定性（mock send） |
+| `test/audience.test.js` | 「这段话是给谁的」对账：`pickableGroups` / `reconcileAudience` / `filterGroups`，基数据用真实存档的 10 000 个判定，不用假字节 |
 | `test/bytes.test.js` | base64 小件 |
 | `test/pipeline.test.js` | 引擎编排（mock send 端到端） |
-| `test/worker.test.js` | Worker 集成（`unstable_dev` 起真实本地 Worker）：全链路、版本、blocked、调用报告/决策样本、**每 IP 日闸双路 429（check/version，无 CF 头豁免）**、**作者校验（无头/错令牌 403、带头放行）**、**收波 CAS 不变量**、**批次认领并发不变量** |
+| `test/jev.test.js` | provider 层纯函数：三条通道注册、`pickProvider` 选中顺序、免费档零成本记账（不发真请求） |
+| `test/avatar.test.js` | 人格头像 identicon：确定性、镜像对称、尺寸边界 |
+| `test/render.test.js` | **视图冒烟**：用真实 mock 管线（`runCheck` + `replayToView`）产出与线上同形的 payload，逐视图渲染；断言不抛异常、输出里没有 `NaN`/`undefined`/`[object Object]`、该有内容的视图非空；另含两份真实示例存档的坏 decisions 还原 |
+| `test/theme.test.js` | 四套主题的令牌契约：WCAG 对比度（正文/次要/按钮/信号色）、字号与间距刻度、行宽上限、CSS 结构自检 |
+| `test/labels.test.js` | 中文单源：符号字形、九宫格、押得准三档、样例/占位句与 `PRESETS` 一一对应、错误文案翻译、`REPORT_VIEW_ZH.core` 与 `render.js` 的 h3 字面文案对拍 |
+| `test/sharecard.test.js` | 分享卡片构图：canvas 桩件记录绘制次序（底→卡→快照→文字） |
+| `test/worker.test.js` | Worker 集成（`unstable_dev` 起真实本地 Worker）：全链路、版本、blocked、调用报告/决策样本、删帖、**每 IP 日闸双路 429（check/version，无 CF 头豁免）**、**作者校验（无头/错令牌 403、带头放行）**、**收波 CAS 不变量**、**批次认领并发不变量** |
 | `test/helper.js` | 共享夹具（非测试文件） |
 
 ## Worker 集成测试要点
@@ -62,3 +70,10 @@ npm run bench   # 实时监控增量统计的一次性对拍（旧全量重扫 v
   点击会静默丢失）， Edge profile 每次运行用独立目录（单例锁会让复用 profile 的第二次启动
   连到旧实例）。
 - 无 lint/格式化工具链（约定靠 [CONVENTIONS.md](CONVENTIONS.md) 自律）。
+- **前端编排层（`app.js`）没有自动化防线**：`scripts/lint.mjs` 只做语法门，
+  `test/render.test.js` 只覆盖纯字符串视图，Node 里也没装 DOM。2026-10-28 的未提交改动里
+  `syncComposeForPreset()` 引用了已被删掉的 `placeholder` 变量——lint 绿、217 全绿都抓不到，
+  靠人工读 diff 才发现；后果是模块顶层第一次调用就抛 `ReferenceError`，
+  其后的主题切换、`loadFeed()`、深链 `openPost()` 全部不执行。
+  **改 `app.js` 顶层语句或事件回调后必须人工过一遍初始化路径**；要自动化就按上一条惯例用
+  一次性 DOM 桩件把模块图导入一次（`document`/`fetch`/`localStorage` 全桩，导入不抛即通过）。

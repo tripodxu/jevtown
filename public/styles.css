@@ -189,20 +189,22 @@
 /* 精密仪器 */
 :root[data-theme="instrument"] {
   color-scheme: light;
-  --bg: #eef0f3;
-  --glow-1: rgba(43, 89, 216, 0.05);
+  --bg: #e9edf2;
+  --glow-1: rgba(45, 96, 225, 0.06);
   --glow-2: rgba(20, 40, 90, 0.05);
-  --card: #f8f9fb;
-  --card-2: #eef0f4;
-  --inset: #e3e6ea;
-  --text: #17191d;
-  --muted: #5f646d;
-  --hairline: rgba(23, 25, 29, 0.13);
-  --hairline-strong: rgba(23, 25, 29, 0.28);
-  --accent: #2b59d8;
-  --accent-soft: rgba(43, 89, 216, 0.22);
-  --btn-bg: #17191d;
-  --btn-ink: #eef0f3;
+  --card: #fbfcfe;
+  --card-2: #eff2f7;
+  --inset: #e4e9f0;
+  --text: #121722;
+  --muted: #59636f;
+  --hairline: rgba(18, 23, 34, 0.13);
+  --hairline-strong: rgba(18, 23, 34, 0.28);
+  --accent: #255bd6;
+  --accent-soft: rgba(37, 91, 214, 0.22);
+  /* 电蓝主按钮：这一版唯一的主行动色不再压成近黑，「Instrument」的信号感来自它。
+     白字/蓝底 = 5.9:1，过 WCAG AA（4.5:1）；theme.test.js 也钉住这条，改色先看断言。 */
+  --btn-bg: #255bd6;
+  --btn-ink: #ffffff;
   --ok: #157347;
   --bad: #bc2a2a;
   /* 同公报：浅底板吃掉了亮墨水（spreads 1.09:1）。冷钢灰近黑，4/6 过线，最低 1.55。 */
@@ -1683,3 +1685,287 @@ footer a:hover { color: var(--text); border-bottom-color: var(--text); }
   .examples .card { min-width: 0; }
   .legend { min-width: 0; }
 }
+
+/* ============================================================
+ * 12 Instrument 现代层（C 方案）
+ *
+ * 这一层只做三件事：
+ *   1. 首屏改成「叙事 + 输入控制台」双栏，输入的同时也看得见这台仪器在做什么；
+ *   2. 可选玩法收进原生 details（渐进披露），主路径只剩类型、正文、主按钮；
+ *   3. 实时区与报告改用"Instrument"的信息层级：先看结论，再允许下钻。
+ * 全部是纯展示层改动：不改 DOM 契约里的数据来源，不改 JS 逻辑，动画只碰
+ * transform / opacity（reduced-motion 由本文件末尾的全局兜底压平）。
+ * ============================================================ */
+
+/* ---------- 首屏双栏 ---------- */
+
+.opening {
+  display: grid;
+  gap: var(--s-5);
+}
+
+@media (min-width: 860px) {
+  .opening {
+    grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+    align-items: center;
+    gap: var(--s-7);
+    margin-bottom: var(--s-2);
+  }
+  .opening .hero { padding: var(--s-6) 2px 0; }
+  .opening #compose { margin-bottom: 0; }
+}
+
+:root[data-theme="instrument"] .hero h1 {
+  font-weight: 750;
+  letter-spacing: -0.045em;
+}
+
+/* 仪器主题的页面底纹换成 32px 网格：和 100×100 的人格网格同一个隐喻，
+   不再是普查图纸的点阵。两张渐变各自一层 background-image，成本极低。 */
+:root[data-theme="instrument"] body {
+  background:
+    linear-gradient(to right, color-mix(in srgb, var(--text) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--text) 5%, transparent) 1px, transparent 1px),
+    radial-gradient(60rem 34rem at 12% -6%, var(--glow-1), transparent 62%),
+    radial-gradient(52rem 30rem at 88% 12%, var(--glow-2), transparent 60%),
+    var(--bg);
+  background-size: 32px 32px, 32px 32px, auto, auto, auto;
+  background-repeat: repeat, repeat, no-repeat, no-repeat, no-repeat;
+}
+
+/* 宽屏：人格网格缩到叙事区右下角，一枚亮格代表"正在被判定的那一个人"。 */
+@media (min-width: 860px) {
+  .hero .town-mark {
+    display: block;
+    position: absolute;
+    top: 6px;
+    right: 0;
+    width: 104px;
+    height: 104px;
+    background-image:
+      linear-gradient(to right, color-mix(in srgb, var(--text) 22%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in srgb, var(--text) 22%, transparent) 1px, transparent 1px);
+    background-size: 10.4px 10.4px, 10.4px 10.4px;
+    -webkit-mask-image: radial-gradient(closest-side, #000 62%, transparent);
+    mask-image: radial-gradient(closest-side, #000 62%, transparent);
+  }
+  .hero .town-mark::after {
+    content: "";
+    position: absolute;
+    left: 52%;
+    top: 52%;
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+}
+
+/* ---------- 发帖控制台 ---------- */
+
+#compose {
+  position: relative;
+  overflow: hidden;
+}
+
+/* 上缘一道信号条：面板不再是"又一张卡片"，而是仪器上的一块操作区。 */
+#compose::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 10%, transparent));
+  opacity: 0.9;
+}
+
+.compose-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--s-3);
+}
+
+.compose-head .row {
+  margin: 0;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.compose-head .row label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.compose-note {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.14em;
+}
+
+#compose textarea {
+  min-height: 168px;
+  padding: var(--s-4);
+  border-radius: var(--r-lg);
+  line-height: 1.75;
+}
+
+.compose-submit {
+  align-items: center;
+  gap: var(--s-4);
+  margin-top: var(--s-4);
+}
+
+.compose-submit .hint {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+#go {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 44px;
+  padding: var(--s-3) 22px;
+}
+
+.go-arrow { transition: transform var(--dur-2) var(--ease-out); }
+#go:hover .go-arrow { transform: translateX(3px); }
+#go:disabled .go-arrow { opacity: 0.6; }
+
+/* 移动端输入字号 ≥ 16px：否则 iOS Safari 聚焦时会整页放大（既有防线，这里再兜一次） */
+@media (max-width: 720px) {
+  #compose textarea,
+  #compose input[type="text"] { font-size: 16px; }
+}
+
+/* ---------- 渐进披露：可选玩法收进抽屉 ---------- */
+
+.advanced-options,
+.live-log {
+  border-top: 1px solid var(--hairline);
+}
+
+.advanced-options {
+  margin-top: var(--s-5);
+  padding-top: var(--s-3);
+}
+
+.live-log {
+  margin-top: var(--s-4);
+  padding-top: var(--s-3);
+}
+
+.advanced-options > summary,
+.live-log > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-height: 40px;
+  padding: var(--s-2) 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--fs-ui);
+  color: var(--muted);
+  transition: color var(--dur-2);
+}
+
+.advanced-options > summary::-webkit-details-marker,
+.live-log > summary::-webkit-details-marker { display: none; }
+
+.advanced-options > summary::after,
+.live-log > summary::after {
+  content: "+";
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  line-height: 1;
+  color: var(--accent);
+}
+
+.advanced-options[open] > summary::after,
+.live-log[open] > summary::after { content: "−"; }
+
+.advanced-options > summary:hover,
+.live-log > summary:hover { color: var(--text); }
+
+.advanced-hint { font-size: var(--fs-2xs); }
+
+.advanced-body {
+  padding-top: var(--s-4);
+  animation: instrument-reveal var(--dur-3) var(--ease-out) both;
+}
+
+/* 抽屉里的旧「条形一带的分节」本来自带上边框，放进抽屉会多出一条割裂线。 */
+.advanced-body .aud-pick {
+  border-top: 1px solid var(--hairline);
+  padding-top: var(--s-4);
+  margin-top: var(--s-4);
+}
+
+.advanced-body > .row:first-child { margin-top: 0; }
+
+@keyframes instrument-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- 实时区：先看结论，再看下钻 ---------- */
+
+.live-observation {
+  display: grid;
+  gap: var(--s-5);
+  margin: var(--s-4) 0 var(--s-5);
+}
+
+@media (min-width: 900px) {
+  .live-observation {
+    grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+    align-items: start;
+  }
+}
+
+.live-panel > h3 {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: var(--s-2);
+}
+
+.live-panel .map-wrap { margin: 0; }
+.live-panel canvas.grid { width: 100%; }
+
+.live-log[open] > summary { margin-bottom: var(--s-3); }
+
+/* ---------- 报告：目录工具条 + 速览/完整 ---------- */
+
+.report-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  margin: 0 0 var(--s-3);
+}
+
+.report-toolbar .toc {
+  flex: 1 1 340px;
+  margin: 0;
+  align-items: center;
+}
+
+.report-mode { flex: 0 0 auto; }
+
+@media (max-width: 720px) {
+  .report-toolbar { flex-direction: column; gap: var(--s-3); }
+  .report-mode { order: 1; }
+  .report-toolbar .toc { order: 2; align-self: stretch; }
+}
+
+/* 速览模式下把次级小节连同正文一起收起：一次纯展示切换（数据仍在 DOM 里）。 */
+[data-report-mode="quick"] [data-report-detail] { display: none !important; }

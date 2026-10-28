@@ -6,7 +6,7 @@ import { drawGrid, attachTooltip, drawDelta, drawReach, reachLegendInk } from '.
 import { avatarSvg } from './avatar.js';
 import { esc, stat } from './dom.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount, AUDIENCE_ZH, AUDIENCE_STATE_ZH, audienceSayZh, CALIBRATE_ZH, calibrateSayZh, WAVE_ZH,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount, AUDIENCE_ZH, AUDIENCE_STATE_ZH, audienceSayZh, CALIBRATE_ZH, calibrateSayZh, WAVE_ZH, REPORT_VIEW_ZH,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart, waveMixChart } from './charts.js';
 import { randomBaseline, moodZ, WAVES } from './shared/feed.js';
@@ -81,18 +81,56 @@ export function renderCheck(el, result) {
 
 /** 报告目录：给每个 h3 发一组**本卡独有**的 id，顶部生成锚点 pill 行（长报告一跳直达）。
  *  一页上最多有 4 张报告卡（结果 / 对比 / 两张示例），id 必须逐卡唯一——
- *  否则点目录会跳到另一张卡的同名小节。 */
+ *  否则点目录会跳到另一张卡的同名小节。
+ *
+ *  顺手把长报告折起来：默认只显示速览小节（REPORT_VIEW_ZH.core），其余 h3 连同它后面
+ *  直到下一个 h3 的兄弟节点都打上 data-report-detail，由宿主元素的 data-report-mode
+ *  决定显隐（CSS）。这样「完整报告」是一次纯展示切换：不重新渲染、不重新请求、不改变数据。 */
 let tocSeq = 0;
+const CORE_VIEW_HEADINGS = new Set(REPORT_VIEW_ZH.core);
 function buildToc(el) {
   const headings = [...el.querySelectorAll('h3')];
   if (headings.length < 2) return;
   const uid = `r${(tocSeq += 1)}`;
-  headings.forEach((h, i) => { h.id = `${uid}-sec-${i}`; });
+  el.dataset.reportMode = 'quick';
+  headings.forEach((h, i) => {
+    h.id = `${uid}-sec-${i}`;
+    if (CORE_VIEW_HEADINGS.has(h.textContent.trim())) return;
+    // 这一节本体 + 它下面紧跟的内容节点一起折起来（此处只有同级兄弟，没有嵌套章节）。
+    h.dataset.reportDetail = '';
+    for (let node = h.nextElementSibling; node && node.tagName !== 'H3'; node = node.nextElementSibling) {
+      node.dataset.reportDetail = '';
+    }
+  });
   const nav = document.createElement('nav');
   nav.className = 'toc';
   nav.setAttribute('aria-label', '报告目录');
-  nav.innerHTML = headings.map((h, i) => `<a href="#${uid}-sec-${i}">${esc(h.textContent)}</a>`).join('');
-  el.querySelector('h2').after(nav);
+  nav.innerHTML = headings
+    .map((h, i) => `<a href="#${uid}-sec-${i}"${h.dataset.reportDetail === undefined ? '' : ' data-report-detail'}>${esc(h.textContent)}</a>`)
+    .join('');
+
+  // 速览/完整：一组普通按钮 + aria-pressed，点击只改宿主的 data-report-mode。
+  const toolbar = document.createElement('div');
+  toolbar.className = 'report-toolbar';
+  const switcher = document.createElement('div');
+  switcher.className = 'segmented report-mode';
+  switcher.setAttribute('role', 'group');
+  switcher.setAttribute('aria-label', REPORT_VIEW_ZH.label);
+  switcher.innerHTML = [
+    `<button type="button" data-report-mode="quick" aria-pressed="true">${esc(REPORT_VIEW_ZH.quick)}</button>`,
+    `<button type="button" data-report-mode="full" aria-pressed="false">${esc(REPORT_VIEW_ZH.full)}</button>`,
+  ].join('');
+  switcher.addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-report-mode]');
+    if (!btn) return;
+    const mode = btn.dataset.reportMode;
+    el.dataset.reportMode = mode;
+    for (const b of switcher.querySelectorAll('button[data-report-mode]')) {
+      b.setAttribute('aria-pressed', String(b === btn));
+    }
+  });
+  toolbar.append(nav, switcher);
+  el.querySelector('h2').after(toolbar);
 }
 
 /**

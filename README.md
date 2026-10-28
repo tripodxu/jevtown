@@ -79,7 +79,9 @@ npm test    # 引擎单测 + Worker 集成（unstable_dev）+ 视图冒烟 + 图
 
 ## 主题
 
-顶栏四个分段按钮自由切换视觉世界：**夜巡**（默认，墨色夜城）、**公报**（米纸宋体）、**仪器**（冷灰精密）、**经典**（第一版配色）。选择存 localStorage，地图与图谱随主题重绘；全部由 `public/styles.css` 的 CSS 变量令牌驱动，新增主题 = 加一组令牌 + 顶栏一个按钮。
+顶栏四个分段按钮自由切换视觉世界：**仪器**（默认，冷灰精密 + 电蓝信号色）、**夜巡**（墨色夜城）、**公报**（米纸宋体）、**经典**（第一版配色）。选择存 localStorage，地图与图谱随主题重绘；全部由 `public/styles.css` 的 CSS 变量令牌驱动，新增主题 = 加一组令牌 + 顶栏一个按钮。
+
+这一版前端走「新精密仪器」方向：宽屏首屏是叙事 + 输入控制台双栏，复杂玩法（定价阶梯、全城广播、受众）收进发帖框底部的「高级选项」；实时区把地图与态度占比提到前面，调用流水折叠；报告默认「速览」，点一次「完整报告」展开全部章节——数据不变，只是视觉层级变更聚焦。方向对比与 A/B 备选见 [docs/superpowers/specs/2026-10-28-neo-instrument-modernization-design.md](./docs/superpowers/specs/2026-10-28-neo-instrument-modernization-design.md)，实现细节见 [docs/modules/frontend.md](./docs/modules/frontend.md)。
 
 ## 路线图
 

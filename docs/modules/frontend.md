@@ -7,8 +7,8 @@
 
 | 文件 | 职责 |
 |---|---|
-| `index.html` | 首屏 = 发帖框（选预设 + 写文字 + "让小镇来读"）；示例回放沉在底部 |
-| `styles.css` | 四主题 CSS 变量令牌 + 全部样式（11 节，见下） |
+| `index.html` | 首屏 = 叙事 + 发帖控制台（宽屏双栏）：默认可见「类型 + 正文 + 样例 + 主 CTA」，可选玩法收进 `<details id="advancedOptions">`；示例回放沉在底部 |
+| `styles.css` | 四主题 CSS 变量令牌 + 全部样式（12 节，见下；第 12 节是 C 方案的 Instrument 现代层） |
 | `app.js` | **编排**：发起检查、驱动 batch/wave 轮询、路由与作者令牌、BYOK 设置弹窗 |
 | `monitor.js` | **实时监控**：地图增量点亮、两张心电图、态度占比带、调用流水表、本波 ETA（自带 live 状态，2026-10-28 从 app.js 拆出） |
 | `dom.js` | 渲染层共用的一行函数：`$`（按 id 取元素）/ `esc`（HTML 转义）/ `stat`（统计数字块） |
@@ -71,8 +71,9 @@ app.js  驱动 batch/wave
 
 ## 设计令牌与组件族（2026-10-28 重构轮）
 
-`styles.css` 按 11 节排：`01 令牌 / 02 基础 / 03 顶栏 / 04 首屏 / 05 卡片 / 06 表单 /
-07 数据 / 08 报告 / 09 示例与流 / 10 动效 / 11 响应式`。改样式先读 01 节，不要新造数字。
+`styles.css` 按 12 节排：`01 令牌 / 02 基础 / 03 顶栏 / 04 首屏 / 05 卡片 / 06 表单 /
+07 数据 / 08 报告 / 09 示例与流 / 10 动效 / 11 响应式 / 12 Instrument 现代层`。
+改样式先读 01 节，不要新造数字；纯新增的 C 方案组件样式统一放第 12 节，避免打散既有组件族。
 
 - **刻度**（2026-10-28 第二轮又收了一档）：字号 `--fs-2xs…--fs-hero` 共 9 档
   （11/12/13/14/15/17/19/28/`clamp(34,6vw,56)`——12.5 那一档已并进 13，
@@ -106,9 +107,64 @@ app.js  驱动 batch/wave
   现代浏览器 outline 自己跟随元素圆角。
 - **命中区**：小控件（胶囊、样例、候选、标签）`min-height` 不小于 28px。
 
+## Instrument 现代层（2026-10-28 · C 方案）
+
+方向文档：[`docs/superpowers/specs/2026-10-28-neo-instrument-modernization-design.md`](../superpowers/specs/2026-10-28-neo-instrument-modernization-design.md)。
+A（夜色观测台）与 B（活人公报）只记录在该文档里，暂不在本轮实现。
+
+### 首屏
+
+- `main` 里新增 `.opening`：≥860px 变成「叙事 / 输入控制台」双栏（`0.88fr / 1.12fr`），
+  窄屏退回单栏；主体仍是 1020px（`theme.test.js` 的行长上限）。
+- 发帖区主路径只剩 `#preset`、`#text`、样例 chips、`#go`；**所有原 DOM id 保留**。
+  定价 `#pricesRow`、全城广播 `#broadcastRow`、受众 `#audienceRow` 收进原生
+  `<details id="advancedOptions">`——开合语义由浏览器负责，不新增 JS 状态。
+- `app.js` 的 `syncComposeForPreset()` 在预设切到 `product` 时把抽屉 `open`（定价入口不能
+  被渐进披露挡住）；切回其他预设不强行收起，保留用户自己的状态。
+
+### 实时区
+
+- `#live` 内部结构改为：KPI → `.live-observation`（传播地图 + 态度占比并排，≥900px 双栏）
+  → `<details class="live-log">`（运行心电图 + 调用流水表）。
+- **逻辑零改动**：仍是 `paintDelta` 增量补画、`tally` 增量统计、150 行流水上限。
+  流水默认折叠只影响可见性；`#monitorBody` / `#chartTput` / `#chartMs` 仍在 DOM 里。
+- **已知小让步**：两张心电图在 `details` 收起时 `clientWidth === 0`，`monitor.js` 退回
+  默认宽度 420 绘制；全局 `img, svg, canvas { max-width: 100% }` 兜住溢出，所以只会
+  「画得比容器宽、被等比缩小一点」，不会撑破布局。展开后再来一批就会按真实宽度重画。
+
+### 报告探索
+
+- `render.js` 的 `buildToc()` 现在产出 `.report-toolbar`（目录 + 速览/完整分段控件），
+  默认 `data-report-mode="quick"`：只铺 `labels.js` 的 `REPORT_VIEW_ZH.core`
+  （总览 / 传播波次与情绪轨迹 / 反应分布 / 小镇地图 / 人群地形 / 人格声音）；
+  其余小节连同正文被打上 `data-report-detail`，由 CSS `[data-report-mode="quick"]` 收起。
+- **这是一次纯展示切换**：不重新渲染、不重新请求、不改数据；完整报告仍是一次点击可达。
+- **折叠判定是字面匹配**：`buildToc` 用 `h3.textContent.trim()` 对 `REPORT_VIEW_ZH.core`
+  做全等匹配，所以改 `render.js` 里任何一条 h3 文案都要同步改清单——`labels.test.js`
+  有一条静态对拍用例（`<h3>字面</h3>` 是否真的在源文件里），不同字就红。
+- **速览的阅读顺序是 DOM 顺序，不是清单顺序**：报告里 h3 的物理次序是
+  总览 → 人群地形 → 传播波次与情绪轨迹 → 反应分布 → 小镇地图 → 人格声音。
+  想要「结论 → 传播 → 地形」的读法要改 `renderCheck()` 的拼接顺序（会同时影响完整报告）。
+- **只有 ≥2 个 h3 的卡才有工具条**：`buildToc` 一开头就 `if (headings.length < 2) return`，
+  所以两版对比卡这类单节卡不出现速览/完整，也不出现目录。
+- **进行中报告每 15s 重渲染一次**，每次都会重置回速览；跑完之后的展开状态由用户自己掌握。
+- **首页两张存档示例也走同一套**（`showcase.js` 复用的就是 `renderCheck`），所以默认也是
+  速览。存档示例的看点本来更靠后，若判断「示例该一次看全」，给 `renderCheck` 加一个
+  默认模式参数即可，不必动 `buildToc`。
+
+### 令牌与样式纪律
+
+- 仪器主题成为**默认主题**（`index.html` 内联脚本 + `theme.js` 兜底一致），四主题照旧可切。
+  旧访客的 `localStorage` 里存着 `night` 就仍看夜巡——默认值只影响从没选过的人。
+- 电蓝 `#255bd6` 作为主行动色（`--btn-bg`），白字蓝底 5.9:1（`theme.test.js` 断言 ≥4.5）；
+  页面底纹换成 32px 网格（与 100×100 人格网格同一隐喻），噪声 `--grain` 由 0.05 降到 0.03
+  ——**没有归零**，纸感还在，只是不再当底纹的主角。
+- 新动画只有一个 `instrument-reveal`（opacity + translateY），
+  `prefers-reduced-motion` 仍由既有全局规则压平；没有新增 scroll/resize 监听。
+
 ## 主题系统
 
-- 主题 = `styles.css` 里一组 CSS 变量；现有四套：**夜巡**（默认）/ **公报** / **仪器** / **经典**。
+- 主题 = `styles.css` 里一组 CSS 变量；现有四套：**仪器**（默认）/ **夜巡** / **公报** / **经典**。
 - 新增主题 = 加一组令牌 + `theme.js` 顶栏加一个按钮，组件代码零改动。
 - 主题切换后地图与图表需重绘（`theme.js` 已处理，监听变更即可）。
 

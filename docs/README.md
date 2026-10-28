@@ -18,7 +18,8 @@ docs/
 ├── agent/               多 agent 协同与接力协议 + 任务卡/交接模板
 ├── agent/tasks/         进行中的任务卡与交接记录（完成后删或归档 done/）
 ├── research/            调研报告与真实 API 实测记录
-└── superpowers/plans/   实施计划（按 `YYYY-MM-DD-<轮次>-<主题>` 命名，见下）
+├── superpowers/plans/   实施计划（按 `YYYY-MM-DD-<轮次>-<主题>` 命名，见下）
+└── superpowers/specs/   设计方向文档（多方案对比 + 已实施部分 + 未验证项）
 ```
 
 ## plans/ 怎么读
@@ -51,6 +52,7 @@ docs/
 | [agent/templates/](agent/templates/) | 任务卡与交接模板 | 领任务、交任务时复制 |
 | [research/](research/) | 调研报告、真实 API 实测 | 了解项目来龙去脉 |
 | [superpowers/plans/](superpowers/plans/) | Step 2 实施计划（历史存档） | 复盘历史实现 |
+| [superpowers/specs/](superpowers/specs/) | 设计方向文档：A/B 备选为什么没选、C 方案落地了什么、哪些验证还没做 | 质疑「这版界面为什么这样排」时 |
 
 ## 三条使用规则
 
