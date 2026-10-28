@@ -39,8 +39,14 @@
 （新增 2 条：`REPORT_VIEW_ZH.core` 对拍 + 编排层初始化）。
 **文档**：`docs/README.md` 补 `superpowers/specs/` 索引；`docs/TESTING.md` 用例数 87→219
 并补齐 8 个漏记的测试文件；方向文档的「未完成验证」更新为收口后的真实状态。
-**未做**：本机无头浏览器仍被沙箱拦下，四主题与 360/390/768 的目视核对没做；本轮已提交
-（`ceaaafb`）但**未部署**（线上仍是 3664b921）。
+**未做**：本机无头浏览器仍被沙箱拦下，四主题与 360/390/768 的目视核对没做。
+**上线**：2026-10-28 已部署，worker 版本 `afecbe7e`（提交 `41bf2ea`）；自定义域逐项核对
+14 项全过（首帧 `instrument`、`#advancedOptions`、`.live-observation`、第 12 节样式、
+`report-toolbar`/`REPORT_VIEW_ZH`、`placeholder` 修复行、`/api/feed` 200、26 个预载全 200）。
+**一条部署教训**：这次 wrangler 只报了 2 个新资产，说明 `index.html`/`styles.css`/`render.js`/
+`app.js` 的新内容**早就进过资产桶**——未提交的改动也能被部署上线（带 `ReferenceError` 的那版
+`app.js` 曾就此上线）。资产按内容哈希增量上传，**部署前必须 `git status` 干净、部署后按内容
+核对线上**，别只看 worker 版本号。
 
 ---
 

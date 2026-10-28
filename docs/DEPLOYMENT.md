@@ -1,6 +1,7 @@
 # DEPLOYMENT · 部署指南
 
 > 当前状态：**已上线（2026-09-30）** → https://jevtown-cn.xd04040212.workers.dev
+> 最新部署：**2026-10-28**，worker 版本 `afecbe7e`（提交 `41bf2ea`，C 方案新精密仪器）。
 > 自定义域：**https://jevtown.logicc.top**（2026-10-28 起可用，线上验证一律走它——
 > 本机网络对 `*.workers.dev` 不通，见下文冒烟记录）。
 > 本文记录已执行的步骤与后续运维清单。
@@ -46,6 +47,14 @@ VPS 中转），未实施。
       `/api/feed` 200（返回 `{"posts":[]}`）；新拆出的三个模块 `/dom.js`、`/monitor.js`、
       `/tokens.js` 均 200 且首页 HTML 已引用；线上 `styles.css` 含 9 处 `:where(` 与
       新增的 `--fs-hero` 令牌，确认跑到本次部署。
+- [x] **前端现代化第三轮 C 方案上线验证（2026-10-28，版本 `afecbe7e`，提交 `41bf2ea`）**：
+      自定义域逐项核对 14 项全过——首页 200 且含首帧 `data-theme="instrument"`、
+      `#advancedOptions`、`.live-observation`；`/styles.css` 含第 12 节 Instrument 现代层、
+      `[data-report-mode="quick"] [data-report-detail]` 折叠规则与 `--btn-bg: #255bd6`；
+      `/render.js` 含 `report-toolbar` 与 `REPORT_VIEW_ZH`；`/shared/labels.js` 含
+      `REPORT_VIEW_ZH`；`/theme.js` 兜底 `instrument`；`/app.js` 已含 `placeholder` 修复行；
+      `/api/feed` 200（`{"posts":[]}`）；首屏 26 个 `modulepreload` 全部 200。
+      **仍未验证**：真实检查全流程（默认通道 `opencode` 是否 200、花费 $0）与浏览器目视。
 - [ ] 定期 `npx wrangler d1 export`（D1 无自动备份）。
 
 ## 密钥（按场景）
@@ -61,7 +70,8 @@ VPS 中转），未实施。
 
 ## 上线后检查清单（每次重大变更后）
 
-- [ ] `npm run lint` ✓ 且 `npm test` 全绿（mock 通道，不花钱）。（2026-10-28 ✓，217/217）
+- [x] `npm run lint` ✓ 且 `npm test` 全绿（mock 通道，不花钱）。（2026-10-28 ✓，219/219，
+      lint 58 文件 + 预载 26 项）
 - [x] 线上首页与 `/api/feed` 200（走 jevtown.logicc.top，2026-10-28）。
 - [ ] 用真实 BYOK key 跑一次检查抽查成本口径（预期单波 600 人 $0.01–0.02）；
       默认通道（Zen 免费档）抽查花费应为 $0。（未做）
@@ -76,6 +86,19 @@ VPS 中转），未实施。
 
 明细与观察见 [research/real-api-report.md](research/real-api-report.md)。
 `batches` 表按 day 汇总即当日真实花费（R10 起账面精度 4 位小数）。
+
+## 部署纪律（2026-10-28 实测教训）
+
+`wrangler deploy` 的静态资源是**按内容哈希增量上传**的：第三轮这次部署只报了 2 个新资产
+（`theme.js`、`shared/labels.js`），而 `index.html` / `styles.css` / `render.js` / `app.js`
+明明都改过——说明它们的新内容**此前已进过资产桶**，也就是**未提交的工作区改动也曾经被部署
+上线**（那一版 `app.js` 还带着会打断前端初始化的 `ReferenceError`）。
+
+因此部署前一律：
+
+1. `git status` 必须干净（除 `.workbuddy/`），**只在已提交的工作区上部署**；
+2. 部署后按**内容**核对线上（页面里的关键标记串、CSS 里的规则、JS 里的函数名），
+   不要只看 worker 版本 ID——资产是增量的，版本号变了不代表你要的那份内容变了。
 
 ## 回滚
 
