@@ -4,6 +4,7 @@ import { PRESETS, lookOf, LOOKS } from './shared/presets.js';
 import { faceInk } from './inks.js';
 import { drawGrid, attachTooltip, drawDelta, drawReach, reachLegendInk } from './grid.js';
 import { avatarSvg } from './avatar.js';
+import { esc, stat } from './dom.js';
 import {
   REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount, AUDIENCE_ZH, AUDIENCE_STATE_ZH, audienceSayZh, CALIBRATE_ZH, calibrateSayZh, WAVE_ZH,
 } from './shared/labels.js';
@@ -16,9 +17,9 @@ import { crowd, CROWD } from './shared/personas.js';
 
 export const PRESET_NOUN = presetNoun;
 export const readCheck = (p) => (p >= 0.7 ? 'yes' : p <= 0.3 ? 'no' : 'unclear');
-export const esc = (value) => String(value).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
-const stat = (value, label) => `<div class="stat"><b>${typeof value === 'number' ? value.toLocaleString() : value}</b><span>${label}</span></div>`;
-export { stat };
+// esc / stat 现在住在 dom.js（此前 render.js 与 charts.js 各存一份 esc）——本模块继续
+// 转出它们，调用方不必因为搬家改 import。
+export { esc, stat };
 
 // 切片热力图要拿全城人群（crowd() 约 155ms）：浏览器侧只算一次，页面存活期内复用。
 let townCache = null;
@@ -50,7 +51,7 @@ export function renderCheck(el, result) {
   html.push(countsView(result));
   // 地图三视图：反应（恒有）/ 传播（逐人波次数据在时）/ 聚集地形（有成片格子时）。
   // 数据不在就摘掉对应按钮——旧存档没有 waveOf，传播按钮优雅缺席。
-  html.push('<h3>小镇地图</h3><div class="map-bar"><div class="mapswitch" role="group" aria-label="地图视图">' +
+  html.push('<h3>小镇地图</h3><div class="map-bar"><div class="segmented mapswitch" role="group" aria-label="地图视图">' +
     '<button type="button" data-map-mode="reaction" aria-pressed="true">反应图</button>' +
     (result.reach && result.waves?.length ? '<button type="button" data-map-mode="reach" aria-pressed="false">传播</button>' : '') +
     '<button type="button" data-map-mode="terrain" aria-pressed="false">聚集地形</button>' +
@@ -258,7 +259,9 @@ export function bandsView(result) {
     const share = band.reached ? band.stopped / band.reached : 0;
     const glad = band.reached ? band.glad / band.reached : 0;
     // lift 的 ?? 是给存档等外部输入的兜底：旧引擎的 NaN 过 JSON 变 null，一个空档不该炸整份报告。
-    return `<div class="crow">
+    // 与漏斗/随机对照共用 .frow（此前这里写的是 .crow，样式表里没有这一条规则：
+    // 十档条的标签/条/数字三列全部落空，条在页面上根本画不出来）。
+    return `<div class="frow">
     <span class="flabel">第 ${band.band} 档</span>
     <span class="fbar"><i class="fgo" style="width:${Math.max(2, Math.round(share * 100))}%"></i></span>
     <span class="fnum">${(share * 100).toFixed(1)}% 停下 · 乐见 ${(glad * 100).toFixed(1)}% · ${band.reached.toLocaleString()}/${band.people.toLocaleString()} 人 · ${(band.stoppedLift ?? 0).toFixed(2)}×</span>

@@ -8,8 +8,11 @@
 | 文件 | 职责 |
 |---|---|
 | `index.html` | 首屏 = 发帖框（选预设 + 写文字 + "让小镇来读"）；示例回放沉在底部 |
-| `styles.css` | 四主题 CSS 变量令牌 + 全部样式 |
-| `app.js` | 编排：发起检查、驱动 batch/wave 轮询、BYOK 设置弹窗 |
+| `styles.css` | 四主题 CSS 变量令牌 + 全部样式（11 节，见下） |
+| `app.js` | **编排**：发起检查、驱动 batch/wave 轮询、路由与作者令牌、BYOK 设置弹窗 |
+| `monitor.js` | **实时监控**：地图增量点亮、两张心电图、态度占比带、调用流水表、本波 ETA（自带 live 状态，2026-10-28 从 app.js 拆出） |
+| `dom.js` | 渲染层共用的一行函数：`$`（按 id 取元素）/ `esc`（HTML 转义）/ `stat`（统计数字块） |
+| `tokens.js` | `cssVar()`：把主题令牌取成字面值（canvas 不认 `var()`），grid.js 与 sharecard.js 共用 |
 | `render.js` | 报告渲染 + 锚点目录 + 人群地形段落 + 地图的聚集地形开关 |
 | `charts.js` | 漏斗 / 折线 / 堆叠 / 需求曲线 / 报告条形图 / 切片热力图（canvas→SVG 混合：折线面积用 SVG，漏斗条形用 DOM） |
 | `grid.js` | 100×100 响应式地图（canvas，悬停档案）：`drawGrid` 全量重画、`paintDelta` 按字节快照增量补画、`drawReach` 传播层 |
@@ -26,6 +29,8 @@ app.js  fetch /api/post/:id
    ├─ render.js   报告骨架 + 目录
    ├─ charts.js   图表（数据来自 shared/summary.js 纯函数）
    └─ grid.js     地图（一人一格，悬停出档案 + "Jev 判定"）
+app.js  驱动 batch/wave
+   └─ monitor.js  实时监控（地图增量 + 心电图 + 流水表）
 ```
 
 - 图表数据一律经 `shared/summary.js` 的纯函数计算，**不在渲染层算指标**。
@@ -69,19 +74,31 @@ app.js  fetch /api/post/:id
 `styles.css` 按 11 节排：`01 令牌 / 02 基础 / 03 顶栏 / 04 首屏 / 05 卡片 / 06 表单 /
 07 数据 / 08 报告 / 09 示例与流 / 10 动效 / 11 响应式`。改样式先读 01 节，不要新造数字。
 
-- **刻度**：间距 `--s-1…--s-8`（4px 基准）、字号 `--fs-2xs…--fs-xl`、圆角
-  `--r-xs…--r-xl` + 组件别名 `--r-card(16) / --r-ctrl(10) / --r-chip(pill)`、动效
-  `--dur-1..3` + `--ease-out`。新值先问「能不能落到某一档」，落不上再考虑加档。
-- **硬约束**：尺寸类令牌必须写 px 字面量，**不能**写成 `--r-card: var(--r-xl)`——
+- **刻度**（2026-10-28 第二轮又收了一档）：字号 `--fs-2xs…--fs-hero` 共 9 档
+  （11/12/13/14/15/17/19/28/`clamp(34,6vw,56)`——12.5 那一档已并进 13，
+  11.5/14.5/16/17/18 等孤值全部收回刻度）；间距 `--s-1…--s-10`（4px 基准，
+  全部是 4 的倍数）；圆角 **几何 5 档**（`--r-xs…--r-card`）+ **组件别名 3 个**
+  （`--r-card(16) / --r-ctrl(10) / --r-pill(999)`）——`--r-xl` 与 `--r-chip`
+  是 `--r-card`/`--r-pill` 的同值重复名，已删；控件几何 `--ctrl-h(38) /
+  --track-h(6) / --track-h-lg(14)`；动效 `--dur-1..3` + `--ease-out` / `--ease-in-out`。
+  新值先问「能不能落到某一档」，落不上再考虑加档。
+- **硬约束**：尺寸类令牌必须写 px 字面量，**不能**写成 `--r-card: var(--r-lg)`——
   `theme.test.js` 的 `tokensOf` 会把 `var()` 开头的令牌一路解析到十六进制，尺寸会炸断言。
-- **组件族**（一条声明服务多个组件，改一处全跟上）：
-  - 胶囊：`.toc a / .sample-chip / .aud-list button / .aud-tag / .chip / .badge`
-  - 轨道：`.bar / .seg .bar2 / .frow .fbar / .atwin`
-  - 点阵底纹：`.legend / .mini / .decision`（浓度与格距由 `--dot-ink / --dot-size` 覆盖）
-  - 马克笔下划线：`.hero h1 em / .brief-line em / .terrain-say em`
+- **组件族**（一条声明服务多个组件，改一处全跟上）——族规则一律用 **`:where()`** 包裹：
+  - 按钮基底：`:where(button.primary, button.ghost, #go)`
+  - 胶囊：`:where(.toc a, .sample-chip, .aud-list button, .aud-tag, .chip, .badge)`
+  - 轨道：`:where(.bar, .seg .bar2, .frow .fbar, .atwin)`
+  - 点阵底纹：`:where(.legend, .mini, .decision)`（浓度与格距由 `--dot-ink / --dot-size` 覆盖）
+  - 马克笔下划线：`:where(.hero h1 em, .brief-line em, .terrain-say em)`
+  - 分段控件：`.segmented`（主题切换与地图三视图共用；此前是四组并列选择器各写一遍）
 - **并族的代价**：族规则只给几何，组件的颜色/字号/内边距仍要在**自己的规则**里写全。
   本轮漏过 `.sample-chip`（并族后内边距、颜色、hover 全丢）。重构后必须做
   「重构前后选择器集合 diff」，测试绿不代表样式没丢。
+  **2026-10-28 第二轮把这条从"纪律"变成了"结构"**：族规则全部包进 `:where()`，
+  特异性降为 0，组件规则写在它前面也照样赢——被族吞掉样式这件事从此不可能发生。
+- **样式重构的验证三步**（两轮都是这么过的）：① 选择器集合 diff（13 出 13 进，一一对应）
+  → ② `npm run lint`（语法 + 预载清单漂移）→ ③ `npm test`（`theme.test.js` 的 WCAG 断言
+  与排版纪律）。外加一次样式表结构自检：括号配平 / 注释闭合 / 无空块 / 悬空令牌 0。
 - **输入控件族**：`select / textarea / input[type=text|password|number|search]` 共用外观。
   新增输入框走这条，别再单独手写一份（`#pricesInput` 曾长期裸奔到 UA 默认）。
 - **焦点环**：全站一条 `:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }`。

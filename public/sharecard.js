@@ -2,11 +2,7 @@
 // 颜色取当前主题令牌的 computed 值（卡片随主题）；数据全部来自既有报告 payload，
 // 不做任何新计算、不新增 Jev 调用。命令式 canvas 绘制——与 charts.js 的 SVG 字符串路线不同源。
 import { TERRAIN_VERDICT_ZH } from './shared/labels.js';
-
-const cssVar = (name, fallback) => {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return value || fallback;
-};
+import { cssVar } from './tokens.js';
 
 const FONT_BODY = '"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
 const FONT_MONO = '"Cascadia Mono", Consolas, monospace';

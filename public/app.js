@@ -1,18 +1,20 @@
 // 前端编排：发文本 → 分步驱动检查（batch/wave）→ 交给 render.js 渲染。
 // 支持"改一版再发"（POST /api/version，新版本重跑波次）与两版并排对比。
-import { renderCheck, renderDelta, esc, stat } from './render.js';
+//
+// 分层：本文件只做编排（请求、重试退避、状态行、路由与令牌）；
+//   实时监控（地图点亮 / 心电图 / 流水表）在 monitor.js；
+//   报告渲染在 render.js，图表在 charts.js，地图在 grid.js。
+import { renderCheck, renderDelta } from './render.js';
 import { initThemeSwitcher } from './theme.js';
+import { $, esc } from './dom.js';
+import { startMonitor, stopMonitor, paintBatch, monitorRow, etaSay, pace } from './monitor.js';
 import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH, WAVE_ZH, FEED_ZH, DELETE_ZH, errorZh } from './shared/labels.js';
 import { PRESETS, DEFAULT_PRICES } from './shared/presets.js';
-import { drawGrid, paintDelta } from './grid.js';
-import { fmtMs, rollingChart, shareChart, CHART_PADS } from './charts.js';
-import { newTally, foldBatch } from './tally.js';
 import { renderShareCard } from './sharecard.js';
-import { crowd, CROWD } from './shared/personas.js';
+import { crowd } from './shared/personas.js';
 import { pickableGroups, filterGroups, pickLabelZh } from './shared/summary.js';
 import { decodeBytes } from './shared/bytes.js';
 
-const $ = (id) => document.getElementById(id);
 // 当前正在做的检查：哪个 post 的哪个版本。
 const current = { post: null, version: 1 };
 // 最近一次渲染的报告 payload（分享卡片的数据源）
@@ -104,158 +106,6 @@ const announce = (text) => {
   const live = $('statusLive');
   if (live) live.textContent = text;
 };
-
-// -- 实时监控（检查进行中的动态地图与调用流水） ----------------------------------
-
-let live = null;
-
-function showLive(presetId, seedDrawn = null) {
-  const reactions = PRESETS[presetId].reactions;
-  const keys = Object.keys(reactions);
-  live = {
-    tally: newTally(CROWD),
-    keys,
-    tone: keys.map((id) => reactions[id]?.tone ?? 0), // 序号 → 1/0/-1
-    preset: presetId,
-    start: performance.now(),
-    requests: 0,
-    tokens: 0,
-    usd: 0,
-    ms: 0,
-    tput: [],
-    msSeries: [],
-    shares: [],
-    lastSample: null,
-  };
-  // 续跑种子：foldBatch 幂等（重折同一个人只改字节不动计数），已判定的人先铺回地图与统计。
-  if (seedDrawn?.length) {
-    foldBatch(live.tally, seedDrawn, (reaction) => keys.indexOf(reaction), (index) => live.tone[index] ?? 0);
-    live.shares.push({ glad: live.tally.glad, sorry: live.tally.sorry, judged: live.tally.judged });
-  }
-  $('monitorBody').innerHTML = '';
-  $('live').hidden = false;
-  // 点了「让小镇来读」之后最想看的是地图逐批判定点亮——实时区在首屏折叠线下，
-  // 不滚过去的话整段监控都是不可见的（用户盯着发帖框只看得到状态行）。
-  $('live').scrollIntoView({ behavior: 'smooth' });
-  drawGrid($('liveMap'), live.tally.bytes, presetId);
-  updateLiveStats();
-  updateCharts();
-}
-
-function updateLiveStats() {
-  $('liveStats').innerHTML =
-    stat(`${live.tally.judged.toLocaleString()} / ${CROWD.toLocaleString()}`, 'Jev 已判定') +
-    stat(live.requests, 'Jev 请求') +
-    stat(live.tokens.toLocaleString(), '输入 tokens') +
-    stat(fmtMs(live.ms), '模型耗时') +
-    stat(`$${live.usd.toFixed(4)}`, '累计花费');
-}
-
-function updateCharts() {
-  // 同 render.js：viewBox 跟着容器走，否则窄屏把 11px 的标注缩到看不清。
-  const wide = Math.min(940, Math.max(300, $('chartShare').clientWidth || 900));
-  const narrow = Math.min(420, Math.max(260, $('chartTput').clientWidth || 420));
-  $('chartTput').innerHTML = rollingChart(live.tput, { width: narrow, color: 'var(--accent)', unit: ' 人/s' });
-  $('chartMs').innerHTML = rollingChart(live.msSeries, { width: narrow, color: 'var(--face-spreads)', unit: 'ms', format: (v) => Math.round(v) });
-  $('chartShare').innerHTML = shareChart(live.shares, { width: wide });
-}
-
-// -- 图表悬停读数：容器常驻（svg 每批重建），委托挂容器上不丢 -------------------
-// offsetX 不用 event.offsetX（target 可能是 svg 内部元素），一律按 svg 的 rect 换算；
-// 图表只画最近一个窗口（roll 48 / share 60），读数标注的是"第 N 批"的绝对批次号。
-
-const hoverLine = (svg, x) => {
-  svg?.querySelector('.hover-line')?.remove();
-  if (x == null || !svg) return;
-  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('x1', x);
-  line.setAttribute('x2', x);
-  line.setAttribute('y1', '0');
-  line.setAttribute('y2', '100%');
-  line.setAttribute('class', 'hover-line');
-  svg.append(line);
-};
-
-const hoverReadout = (host, text) => {
-  let el = host.querySelector('.chart-read');
-  if (!text) {
-    el?.remove();
-    return;
-  }
-  if (!el) {
-    el = Object.assign(document.createElement('div'), { className: 'chart-read' });
-    host.append(el);
-  }
-  el.textContent = text;
-};
-
-function wireChartHover(host, kind, readoutOf) {
-  host.addEventListener('pointermove', (event) => {
-    if (!live) return;
-    const svg = host.querySelector('svg[data-chart]');
-    if (!svg) return;
-    const samples = kind === 'share' ? live.shares : kind === 'tput' ? live.tput : live.msSeries;
-    const win = kind === 'share' ? 60 : 48;
-    const data = samples.slice(-win);
-    if (data.length < 2) return;
-    const pad = CHART_PADS[kind === 'share' ? 'share' : 'roll']; // 两张折线图共用 roll 的留白
-    const rect = svg.getBoundingClientRect();
-    const innerW = rect.width - pad.l - pad.r;
-    const frac = (event.clientX - rect.left - pad.l) / innerW;
-    if (frac < 0 || frac > 1) return; // 出了绘图区就不显示读数
-    const i = Math.round(frac * (data.length - 1));
-    const batchNo = samples.length - data.length + i + 1;
-    hoverLine(svg, (pad.l + (i / (data.length - 1)) * innerW).toFixed(1));
-    hoverReadout(host, readoutOf(data[i], batchNo));
-  });
-  host.addEventListener('pointerleave', () => {
-    hoverLine(host.querySelector('svg[data-chart]'), null);
-    hoverReadout(host, '');
-  });
-}
-
-wireChartHover($('chartTput'), 'tput', (v, n) => `第 ${n} 批 · ${Math.round(v)} 人/s`);
-wireChartHover($('chartMs'), 'ms', (v, n) => `第 ${n} 批 · ${Math.round(v)}ms`);
-wireChartHover($('chartShare'), 'share', (v, n) =>
-  v.judged ? `第 ${n} 批 · 乐见 ${Math.round((v.glad / v.judged) * 100)}% · 反感 ${Math.round((v.sorry / v.judged) * 100)}%` : `第 ${n} 批`);
-
-function monitorRow(cells, cls = '') {
-  const tr = document.createElement('tr');
-  if (cls) tr.className = cls;
-  const sec = ((performance.now() - live.start) / 1000).toFixed(1);
-  tr.innerHTML = `<td>${sec}s</td>` + cells.map((c) => `<td>${c}</td>`).join('');
-  const body = $('monitorBody');
-  body.prepend(tr);
-  while (body.children.length > 150) body.lastChild.remove();
-}
-
-function paintBatch(batch) {
-  // 增量：只走本批这 100 人，不再每批把全镇一万格重扫两遍。
-  const { tally, keys, tone } = live;
-  foldBatch(tally, batch.drawn ?? [], (reaction) => keys.indexOf(reaction), (index) => tone[index] ?? 0);
-  paintDelta($('liveMap'), tally.bytes, live.preset);
-  live.requests += 1;
-  live.tokens += batch.tokens ?? 0;
-  live.usd += batch.usd ?? 0;
-  live.ms += batch.ms ?? 0;
-
-  // 心电图采样：吞吐 = 本批判定数 / 距上次采样的墙钟；耗时 = 本批模型 ms
-  const now = performance.now();
-  const wall = live.lastSample ? (now - live.lastSample.t) / 1000 : 0;
-  const judged = tally.judged;
-  live.tput.push(wall > 0.05 ? (judged - live.lastSample.judged) / wall : 0);
-  live.msSeries.push(batch.ms ?? 0);
-  live.shares.push({ glad: tally.glad, sorry: tally.sorry, judged });
-  live.lastSample = { t: now, judged };
-
-  updateLiveStats();
-  updateCharts();
-  monitorRow([`第 ${batch.wave + 1} 波`, `${batch.answered} / ${batch.total}`, `${batch.ms ?? 0}ms`, `${(batch.tokens ?? 0).toLocaleString()}`, `$${live.usd.toFixed(4)}`]);
-}
-
-// 节奏化：让点亮过程可见。第 1 波是揭示（慢一点），之后是量（快一点）——全城广播
-// 130 批全按 180ms 会白等二十多秒，首波之后 90ms 足够看清逐批推进。
-const pace = () => new Promise((resolve) => setTimeout(resolve, live && live.tally.judged >= 600 ? 90 : 180));
 
 // -- 「这段话是给谁的」（R35）：一句自述 + 从清单里挑几组 --------------------------
 
@@ -533,7 +383,7 @@ $('form').addEventListener('submit', async (event) => {
 });
 
 /**
- * 波次驱动：一批批问 Jev（每批 100 人）、收波定去留，直到检查结束；live 监控全程更新。
+ * 波次驱动：一批批问 Jev（每批 100 人）、收波定去留，直到检查结束；monitor.js 的实时监控全程更新。
  * **post/version/author 全部显式传入**：循环里绝不读 current.*——检查进行中用户随时会
  * 点开别的帖子（openPost 改写 current 与令牌），动态读会把批次打到别人的帖上、或带着
  * 别人的令牌吃 403（两个坑都实测过）。
@@ -541,7 +391,7 @@ $('form').addEventListener('submit', async (event) => {
  * 先折进快照把地图铺到当前进度——否则续跑地图从头黑起，前几波的成果全看不见。
  */
 async function driveCheck(post, version, author, presetId, seedDrawn = null, openingSay = '') {
-  showLive(presetId, seedDrawn);
+  startMonitor(presetId, seedDrawn);
   if (openingSay) announce(openingSay);
   let done = false;
   while (!done) {
@@ -574,31 +424,10 @@ async function driveCheck(post, version, author, presetId, seedDrawn = null, ope
   }
 }
 
-/**
- * 本波预计还要多久：拿最近几批的墙钟吞吐（含节奏化的 pause——访客等的正是墙钟）估剩余
- * 人数的时间。少于 5 秒或还测不出速率就不说；只估本波——下一波传不传、追问问多久都
- * 还是未知数，给个总 ETA 只会是在编数字。5 秒一档取整，数字不跳。
- */
-function etaSay(batch) {
-  if (!live) return '';
-  const now = performance.now();
-  live.rateWindow ??= [];
-  live.rateWindow.push({ t: now, judged: live.tally.judged });
-  if (live.rateWindow.length > 6) live.rateWindow.shift();
-  const first = live.rateWindow[0];
-  const span = (now - first.t) / 1000;
-  if (span < 2) return '';
-  const rate = (live.tally.judged - first.judged) / span;
-  if (rate <= 0) return '';
-  const eta = (batch.total - batch.answered) / rate;
-  if (eta < 5) return '';
-  return ` · 预计还有 ~${Math.round(eta / 5) * 5}s`;
-}
-
 /** 检查跑完的收尾：关监控、出报告、版本 ≥2 时自动载入对比（作者刚等完一整轮，他要的下一眼就是对比）、刷新 feed。 */
 async function finishCheck(post, version) {
   const view = await readJSON(`/api/post/${post}?v=${version}`);
-  $('live').hidden = true;
+  stopMonitor();
   showResult(view);
   status('完成。', 1);
   announce('检查完成，报告已生成');
@@ -980,6 +809,10 @@ $('saveKey').addEventListener('click', () => {
   $('settings').close();
   status(`通道已切换：${modeChip.textContent}`, 0);
 });
+
+// 弹窗的三个出口：关闭（什么都不改）、清除（清掉已存的通道）、保存。
+// 原生 dialog 只给 Esc 一个出口，触屏与读屏用户需要一个看得见的关闭按钮。
+$('closeKey').addEventListener('click', () => $('settings').close());
 
 $('clearKey').addEventListener('click', () => {
   localStorage.removeItem('jevtown.provider');

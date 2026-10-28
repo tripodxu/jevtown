@@ -9,6 +9,7 @@ import { persona } from './shared/personas.js';
 import { INTEREST, JOB, TEMPER, BUDGET } from './shared/vocab.js';
 import { REACTIONS_ZH } from './shared/labels.js';
 import { avatarSvg } from './avatar.js';
+import { cssVar } from './tokens.js';
 
 const CELL = 4;
 const GRID = 100;
@@ -20,11 +21,6 @@ const cursorByCanvas = new WeakMap();
 // 差分画布另册登记：它没有悬停档案、不走 drawn 的字节快照与增量逻辑，
 // 但主题切换时 redrawMaps 必须也按新令牌重画它——否则差分图留着上个主题的墨水。
 const deltas = new Map();
-
-const cssVar = (name, fallback) => {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return value || fallback;
-};
 
 export function drawGrid(canvas, bytes, presetId, terrain = null) {
   // 修剪掉已断连的旧画布（反复渲染结果区时防泄漏），再登记新的。

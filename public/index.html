@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>中文小镇 · 一万个人格怎么读你的文字</title>
   <meta name="description" content="发一段文字，一万个 AI 人格来读：谁停下、谁点赞、谁反感、谁划走。基于 Jev（System One 模型）。">
+  <!-- 浏览器 UI（地址栏、表单控件）跟着首帧就定的主题走，不等 CSS 加载 -->
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0d1017" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f4efe4" media="(prefers-color-scheme: light)">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23d8553c'/%3E%3Ctext x='16' y='23' font-size='18' font-family='serif' font-weight='700' text-anchor='middle' fill='%230d1017'%3E镇%3C/text%3E%3C/svg%3E">
   <script>
     // 首帧前定主题，避免闪烁；四选一，localStorage 记忆。
@@ -23,6 +27,9 @@
   <link rel="modulepreload" href="/app.js">
   <link rel="modulepreload" href="/showcase.js">
   <link rel="modulepreload" href="/theme.js">
+  <link rel="modulepreload" href="/monitor.js">
+  <link rel="modulepreload" href="/dom.js">
+  <link rel="modulepreload" href="/tokens.js">
   <link rel="modulepreload" href="/render.js">
   <link rel="modulepreload" href="/charts.js">
   <link rel="modulepreload" href="/grid.js">
@@ -57,7 +64,7 @@
     </a>
     <div class="top-actions">
       <span class="chip mode-chip" id="modeChip" title="当前 Jev 通道">默认通道</span>
-      <nav class="themeswitch" role="group" aria-label="主题切换">
+      <nav class="segmented" role="group" aria-label="主题切换">
         <button class="theme-btn" type="button" data-theme="night" aria-pressed="true">夜巡</button>
         <button class="theme-btn" type="button" data-theme="bulletin" aria-pressed="false">公报</button>
         <button class="theme-btn" type="button" data-theme="instrument" aria-pressed="false">仪器</button>
@@ -188,6 +195,7 @@
       <h3>调用监控表（随时间滚动追加）</h3>
       <div class="monitor-wrap">
         <table class="waves monitor">
+          <caption class="sr-only">Jev 调用流水：每次调用的时刻、阶段、进度、耗时、tokens 与累计花费，随时间滚动追加</caption>
           <thead><tr><th>时刻</th><th>阶段</th><th>进度</th><th>本次耗时</th><th>tokens</th><th>累计花费</th></tr></thead>
           <tbody id="monitorBody"></tbody>
         </table>
@@ -254,8 +262,12 @@
       <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener">OpenRouter</a> ·
       <a href="https://opencode.ai/auth" target="_blank" rel="noopener">OpenCode Zen（免费）</a></p>
     <div class="row between">
-      <button class="ghost" id="clearKey" type="button">清除</button>
-      <button class="primary" id="saveKey" type="button">保存</button>
+      <span class="hint">关闭：Esc 或点「关闭」。改动只在点「保存」后才生效。</span>
+      <span class="row-actions">
+        <button class="ghost" id="closeKey" type="button">关闭</button>
+        <button class="ghost" id="clearKey" type="button">清除</button>
+        <button class="primary" id="saveKey" type="button">保存</button>
+      </span>
     </div>
   </dialog>
 

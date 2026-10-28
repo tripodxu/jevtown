@@ -8,23 +8,27 @@
  *   classic    经典暗色    第一步的原版配色，保留
  *
  * 设计规则（全主题统一）：
- *   圆角体系：卡片 16px / 控件 10px / 徽章与印章 pill 或 6px
+ *   刻度：字号 9 档 / 间距 10 档（4px 基准）/ 圆角 5 档 + 三个组件别名
  *   单一强调色：仅用于印章、下划线强调、焦点环；地图自身的六色是数据墨水，不参与主题
  *   数据一律等宽字，标题按主题用衬线或无衬线展示体
  *   主题锁：整页同一主题，不做局部反色
  *
  * 文件结构（按顺序读，不要跳）：
- *   01 令牌        间距 / 字号 / 圆角 / 动效刻度，四套主题的配色
- *   02 基础        重置、可访问性工具、页面底纹
- *   03 顶栏        品牌、通道、主题分段控件、设置弹窗
+ *   01 令牌        字体 / 字号 / 间距 / 圆角 / 布局 / 动效刻度 + 四套主题配色
+ *   02 基础        重置、可访问性工具、页面底纹、焦点环
+ *   03 顶栏        品牌、通道、分段控件（主题与地图视图共用）、设置弹窗
  *   04 首屏        标题、规模数字条、迷你小镇
  *   05 卡片        面板与分节标题
- *   06 表单        输入控件族、主按钮与幽灵按钮、进度
+ *   06 表单        输入控件族、按钮族、进度、发帖框的可玩性件
  *   07 数据        统计、表格、胶囊、轨道条、地图、图例、档案
  *   08 报告        目录、快报、决策、地形、逐句承重、声音、骨架
  *   09 示例与流    示例卡、feed、页脚
  *   10 动效        入场与弹窗（reduced-motion 兜底）
  *   11 响应式      1080 / 860 / 760 / 720 / 560 五档
+ *
+ * 组件族用 :where() 包裹：族规则特异性为 0，组件自己的规则无论写在前面还是后面都能赢。
+ * 这是 2026-10-28 第二轮重构的收获——上一轮并族时 .sample-chip 的颜色与内边距被族吞掉，
+ * 靠人工 diff 才抓回来；:where() 让这类"并族丢样式"在结构上不可能发生。
  */
 
 /* ============================================================
@@ -35,20 +39,23 @@
   --font-body: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "JetBrains Mono", monospace;
 
-  /* 字号刻度：11 / 12 / 12.5 / 13 / 14 / 15 / 19 / 28。
-     13 是紧凑的元信息（标签、分段条），14 是成句的次级正文（表格、feed、声音卡）；
-     原来那一串 13.5 是半个像素的散值，六处各写一遍，已并进 14 这一档。
+  /* 字号刻度：11 / 12 / 13 / 14 / 15 / 17 / 19 / 28 / 首屏 clamp。
+     13 紧凑（控件、hint、图例），14 次级正文（表格、feed、声音卡），15 正文，
+     17 引言与规模数字，19 分节标题，28 统计大数。
+     上一轮还留着 12.5 这一档（六处半像素散值已并进 13）；本轮把 11.5 / 12.5 / 14.5 /
+     16 / 17 / 18 这些孤值全部收回刻度，字号只从这九档里取。
      正文 15px 写在 body 的 font 简写里（theme.test.js 按 15px/1.7 断言），不在这里。 */
   --fs-2xs: 11px;
   --fs-xs: 12px;
-  --fs-sm: 12.5px;
-  --fs-md: 13px;
+  --fs-sm: 13px;
   --fs-ui: 14px;
   --fs-base: 15px;
+  --fs-lede: 17px;
   --fs-lg: 19px;
   --fs-xl: 28px;
+  --fs-hero: clamp(34px, 6vw, 56px);
 
-  /* 间距刻度：4px 基准。组件只取这几档，避免 11/13/22 这类读不出节奏的孤值。 */
+  /* 间距刻度：4px 基准，全部是 4 的倍数。组件只取这几档。 */
   --s-1: 4px;
   --s-2: 8px;
   --s-3: 12px;
@@ -57,20 +64,29 @@
   --s-6: 24px;
   --s-7: 32px;
   --s-8: 40px;
+  --s-9: 48px;
+  --s-10: 72px;
 
-  /* 圆角刻度 + 三个组件别名（代码与文档一直按"卡 / 控件 / 胶囊"说话，保留旧名） */
+  /* 圆角刻度（几何五档）+ 三个组件别名（代码与文档一直按"卡 / 控件 / 胶囊"说话）。
+     上一轮 --r-xl 与 --r-card 同为 16px、--r-pill 与 --r-chip 同为 999px，是两套重复名字；
+     本轮只留别名，几何档收敛到 xs..card 五档。尺寸令牌必须写 px 字面量——写成
+     var(--r-lg) 会被 theme.test.js 的令牌解析器一路追到十六进制而断言失败。 */
   --r-xs: 4px;
   --r-sm: 6px;
   --r-md: 8px;
   --r-lg: 12px;
-  --r-xl: 16px;
-  --r-pill: 999px;
   --r-card: 16px;
   --r-ctrl: 10px;
-  --r-chip: 999px;
+  --r-pill: 999px;
+
+  /* 控件几何：所有输入框与按钮同一个高度，表单才像一台仪器而不是一堆零件。 */
+  --ctrl-h: 38px;
+  --track-h: 6px;
+  --track-h-lg: 14px;
 
   /* 动效：两条曲线、三档时长；reduced-motion 由文件末尾的全局规则压平到 0.01ms。 */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --dur-1: 0.12s;
   --dur-2: 0.18s;
   --dur-3: 0.26s;
@@ -101,6 +117,8 @@
      scrollbar-width 不继承，滚动容器各自声明（见 .monitor-wrap 与窄屏 .toc）。 */
   scrollbar-width: thin;
   scrollbar-color: var(--hairline-strong) transparent;
+  /* 原生控件（复选框、日期、范围条）的强调色跟主题走，不再各写一遍 accent-color。 */
+  accent-color: var(--accent);
 }
 
 /* 夜巡观测台（默认） */
@@ -270,7 +288,7 @@
   border-radius: var(--r-ctrl);
   background: var(--card);
   color: var(--text);
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
   text-decoration: none;
   box-shadow: var(--shadow);
   transform: translateY(-200%);
@@ -279,7 +297,13 @@
 
 .skip:focus-visible { transform: translateY(0); }
 
-html { height: 100%; scroll-padding-top: 72px; }
+html {
+  height: 100%;
+  /* 顶栏吸附：锚点跳转不被它盖住（--s-10 与页尾留白同一档） */
+  scroll-padding-top: var(--s-10);
+  /* 常驻滚动条槽位：报告由骨架换成正文时不横向抖一下 */
+  scrollbar-gutter: stable;
+}
 
 @media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
@@ -287,7 +311,7 @@ html { height: 100%; scroll-padding-top: 72px; }
 
 body {
   margin: 0 auto;
-  padding: 0 var(--s-5) 72px;
+  padding: 0 var(--s-5) var(--s-10);
   max-width: 1020px;
   min-height: 100%;
   /* 普查图纸：最上层铺一层 28px 间距的点阵（1px 点、取自文字色 6.5% 透明度），
@@ -302,7 +326,8 @@ body {
   font: 15px/1.7 var(--font-body);
   /* R33：等宽字体在主流平台数字恰好等宽，但 --font-mono 的兜底项 monospace 在某些
      Android/旧环境会落到比例数字字体，表格列就左右晃。这页有 17 处数据字体是等宽栈，
-     所以把「数字对齐」从「碰字体运气」改成「由 CSS 兜底」。齐次要对齐，标题才用比例数字。 */
+     所以把「数字对齐」从「碰字体运气」改成「由 CSS 兜底」。齐次要对齐，标题才用比例数字。
+     全站只此一处声明——多写一处就是有人局部改了回去。 */
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -384,6 +409,7 @@ img, svg, canvas { max-width: 100%; }
   text-decoration: none;
 }
 
+/* 印章：40px 见方，字号是"格子里的一个字"而非排版刻度，所以这里保留字面值 */
 .seal {
   display: grid;
   place-items: center;
@@ -424,18 +450,21 @@ img, svg, canvas { max-width: 100%; }
 
 /* 顶栏右侧动作区 */
 .top-actions { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
-.mode-chip { font-size: 11.5px; color: var(--muted); }
-.settings-btn { padding: 5px var(--s-3); font-size: var(--fs-sm); }
+.mode-chip { font-size: var(--fs-2xs); color: var(--muted); }
+.settings-btn { padding: var(--s-1) var(--s-3); font-size: var(--fs-sm); }
 
 dialog#settings {
   background: var(--card);
   color: var(--text);
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-card);
   box-shadow: var(--shadow);
   padding: var(--s-6);
   max-width: 460px;
   width: calc(100vw - 40px);
+  /* 小屏与横屏矮窗：内容比视口高时弹窗自己滚，而不是把"保存"顶出视口外 */
+  max-height: min(88vh, 640px);
+  overflow: auto;
 }
 
 dialog#settings::backdrop {
@@ -446,7 +475,7 @@ dialog#settings::backdrop {
 
 dialog#settings h2 {
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: var(--fs-lg);
   margin-bottom: var(--s-2);
   letter-spacing: 0.01em;
 }
@@ -454,41 +483,39 @@ dialog#settings h2 {
 dialog#settings .row { margin: var(--s-3) 0; }
 dialog#settings .row.between { margin-top: var(--s-5); }
 
-/* 分段控件（主题切换与地图三视图共用一套规则） */
-.themeswitch,
-.mapswitch {
+/* 分段控件：主题切换（顶栏）与地图三视图（报告里）共用一套规则。
+   上一轮是四组并列选择器各写一遍（.themeswitch, .mapswitch / .theme-btn, .mapswitch button …），
+   本轮改成容器挂一个 .segmented，规则只剩一条——新增第三处分段控件不用再改样式表。 */
+.segmented {
   display: flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: var(--r-chip);
+  gap: var(--s-1);
+  padding: var(--s-1);
+  border-radius: var(--r-pill);
   background: var(--card-2);
   border: 1px solid var(--hairline);
 }
 
-.theme-btn,
-.mapswitch button {
+.segmented button {
   border: 0;
   background: transparent;
   color: var(--muted);
-  border-radius: var(--r-chip);
-  padding: 5px 13px;
+  border-radius: var(--r-pill);
+  padding: var(--s-1) var(--s-3);
   font-size: var(--fs-sm);
   letter-spacing: 0.04em;
   transition: color var(--dur-2), background-color var(--dur-2);
 }
 
-.theme-btn:hover, .mapswitch button:hover { color: var(--text); }
+.segmented button:hover { color: var(--text); }
 
-.theme-btn[aria-pressed="true"],
-.mapswitch button[aria-pressed="true"] {
+.segmented button[aria-pressed="true"] {
   background: var(--btn-bg);
   color: var(--btn-ink);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
 /* 分段控件的焦点环贴住胶囊轮廓即可，不需要额外圆角覆盖 */
-.theme-btn:focus-visible,
-.mapswitch button:focus-visible { outline-offset: 1px; }
+.segmented button:focus-visible { outline-offset: 1px; }
 
 /* ============================================================
  * 04 首屏
@@ -543,7 +570,7 @@ dialog#settings .row.between { margin-top: var(--s-5); }
   letter-spacing: 0.06em;
 }
 
-/* kicker 前的一小段强调色引线：公文页眉的那一笔 */
+/* kicker 前的一小段强调色引线：公文页眉的那一笔（装饰件，尺寸不进刻度） */
 .driver::before {
   content: "";
   width: 24px;
@@ -557,7 +584,7 @@ dialog#settings .row.between { margin-top: var(--s-5); }
 
 .hero h1 {
   font-family: var(--font-display);
-  font-size: clamp(34px, 6vw, 58px);
+  font-size: var(--fs-hero);
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: 0.005em;
@@ -569,7 +596,7 @@ dialog#settings .row.between { margin-top: var(--s-5); }
   margin: var(--s-4) 0 0;
   max-width: 36em;
   color: var(--muted);
-  font-size: 16px;
+  font-size: var(--fs-lede);
   line-height: 1.7;
   text-wrap: pretty;
 }
@@ -579,7 +606,7 @@ dialog#settings .row.between { margin-top: var(--s-5); }
 .census {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--s-1) var(--s-8, 40px);
+  gap: var(--s-1) var(--s-8);
   margin: var(--s-6) 0 0;
   padding: var(--s-3) 0 var(--s-1);
   border-top: 1px solid var(--hairline);
@@ -595,7 +622,7 @@ dialog#settings .row.between { margin-top: var(--s-5); }
 .census-item dd {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 17px;
+  font-size: var(--fs-lede);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.45;
@@ -625,11 +652,12 @@ dialog#settings .row.between { margin-top: var(--s-5); }
   text-wrap: balance;
 }
 
-/* 分节标题：小标签 + 发丝线。左侧的强调色小方块给长报告一个稳定的视觉节拍。 */
+/* 分节标题：小标签 + 发丝线。左侧的强调色小方块给长报告一个稳定的视觉节拍
+   （方块与引线是装饰件，尺寸不进刻度）。 */
 h3 {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--s-3);
   margin: var(--s-6) 0 var(--s-3);
   color: var(--muted);
   font-family: var(--font-body);
@@ -660,14 +688,17 @@ h3::after {
  * 06 表单
  * ============================================================ */
 
-.row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+.row { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-3) 0; }
 .row.between { justify-content: space-between; }
-.row label { color: var(--muted); font-size: var(--fs-md); }
+.row label { color: var(--muted); font-size: var(--fs-sm); }
 .row > input { flex: 1; min-width: 0; }
+/* 一行里放两个以上按钮时收成一组（弹窗底部的"关闭/清除/保存"），
+   否则 .row.between 会把三个按钮均匀摊开，主次不分。 */
+.row-actions { display: flex; gap: var(--s-2); flex-wrap: wrap; }
 
 /* 控件族：select / textarea / 文本类 input 共用一套外观。
    曾经只有 select 与 textarea 有样式，发帖框里的「定价阶梯」输入框一路裸奔到 UA 默认——
-   同一张表单里两种输入框长两个样。 */
+   同一张表单里两种输入框长两个样。高度走 --ctrl-h，与按钮同一条基线。 */
 select,
 textarea,
 input[type="text"],
@@ -680,7 +711,7 @@ input[type="search"] {
   border-radius: var(--r-ctrl);
   padding: 9px var(--s-3);
   font: inherit;
-  min-height: 38px;
+  min-height: var(--ctrl-h);
   transition: border-color var(--dur-2), background-color var(--dur-2);
 }
 
@@ -707,20 +738,30 @@ textarea {
 textarea::placeholder,
 input::placeholder { color: var(--muted); opacity: 0.75; }
 
+/* 按钮族：几何与过渡一次说清（:where() 让族规则特异性为 0，变体永远能覆盖它），
+   变体只声明自己的颜色与内边距。 */
+:where(button.primary, button.ghost, #go) {
+  border-radius: var(--r-ctrl);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  transition:
+    transform var(--dur-1),
+    box-shadow var(--dur-2),
+    filter var(--dur-2),
+    border-color var(--dur-2),
+    background-color var(--dur-2);
+}
+
 /* 主 CTA：印章式的实心块 + 脚下强调色软光 */
 button.primary,
 #go {
   background: var(--btn-bg);
   color: var(--btn-ink);
   border: 1px solid transparent;
-  border-radius: var(--r-ctrl);
   padding: var(--s-3) 26px;
   font-size: var(--fs-base);
-  font-weight: 650;
-  letter-spacing: 0.02em;
   white-space: nowrap;
   box-shadow: 0 6px 22px var(--accent-soft);
-  transition: transform var(--dur-1), box-shadow var(--dur-2), filter var(--dur-2);
 }
 
 button.primary:hover, #go:hover {
@@ -744,10 +785,8 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
   background: transparent;
   color: var(--text);
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--r-ctrl);
-  padding: 9px 18px;
+  padding: var(--s-2) var(--s-4);
   font-size: var(--fs-ui);
-  transition: border-color var(--dur-2), background-color var(--dur-2), transform var(--dur-1);
 }
 
 .ghost:hover {
@@ -770,17 +809,20 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
 .status-line {
   color: var(--muted);
   margin-bottom: var(--s-2);
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
   font-family: var(--font-mono);
   line-height: 1.6;
 }
 
-.bar {
-  height: 6px;
-  border-radius: var(--r-pill);
+/* 轨道条族：进度、分组条、漏斗条、双向条共用「内槽 + 圆角裁切」。
+   高度各自由组件声明（--track-h 的比例条 / --track-h-lg 的漏斗条）。 */
+:where(.bar, .seg .bar2, .frow .fbar, .atwin) {
   background: var(--inset);
+  border-radius: var(--r-pill);
   overflow: hidden;
 }
+
+.bar { height: var(--track-h); }
 
 /* 进度用 transform 缩放而不是动画 width（合成器友好）；
    fill 带一圈强调色软光，跑的时候进度条自己会「亮」，shadow 随 scaleX 拉伸正合适。 */
@@ -806,11 +848,11 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
   min-height: 28px;
   cursor: pointer;
   color: var(--text);
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
 }
 
-.inline-check input { width: 15px; height: 15px; accent-color: var(--accent); }
-#broadcastRow { flex-wrap: wrap; row-gap: 2px; }
+.inline-check input { width: var(--s-4); height: var(--s-4); }
+#broadcastRow { flex-wrap: wrap; row-gap: var(--s-1); }
 
 /* 发帖框的可玩性行：「试一句」样例按钮 + 字数计。样例按钮与 .aud-tag 同气质，
    但它是动作不是标签：没有 ×、默认 muted、hover 才浮起来。字数计靠右，等宽数字不跳。 */
@@ -822,7 +864,7 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
    命中区从 26px 提到 28px——它是发帖框里最容易被点的一排小按钮。 */
 .sample-chip {
   min-height: 28px;
-  padding: 3px 10px;
+  padding: var(--s-1) var(--s-3);
   font-size: var(--fs-xs);
   color: var(--muted);
   cursor: pointer;
@@ -839,18 +881,15 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
  * ============================================================ */
 
 /* 胶囊控件族：目录、样例、候选、已选标签、计数徽章共用一套几何（尺寸与状态），
-   各组件只声明自己的颜色、字号与内边距。改一处圆角/过渡，五个组件一起跟上。 */
-.toc a,
-.sample-chip,
-.aud-list button,
-.aud-tag,
-.chip,
-.badge {
+   各组件只声明自己的颜色、字号与内边距。改一处圆角/过渡，五个组件一起跟上。
+   :where() 让族规则特异性为 0——组件规则写在它前面也照样赢（上一轮 .sample-chip
+   被族吞掉样式，根因就是族与组件同特异性、只看谁写在后面）。 */
+:where(.toc a, .sample-chip, .aud-list button, .aud-tag, .chip, .badge) {
   display: inline-flex;
   align-items: center;
   gap: var(--s-1);
   border: 1px solid var(--hairline);
-  border-radius: var(--r-chip);
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -863,22 +902,9 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
     transform var(--dur-1);
 }
 
-/* 轨道条族：进度、分组条、漏斗条、双向条共用「内槽 + 圆角裁切」。
-   高度各自由组件声明（6px 的比例条 / 14px 的漏斗条）。 */
-.bar,
-.seg .bar2,
-.frow .fbar,
-.atwin {
-  background: var(--inset);
-  border-radius: var(--r-pill);
-  overflow: hidden;
-}
-
 /* 点阵底纹族：图例、监控小卡、标本卡是同一张坐标纸的三个用法。
    浓度与格距各组件覆盖 --dot-ink / --dot-size。 */
-.legend,
-.mini,
-.decision {
+:where(.legend, .mini, .decision) {
   background-image: radial-gradient(
     color-mix(in srgb, var(--text) var(--dot-ink), transparent) 1px,
     transparent 1.3px
@@ -887,9 +913,7 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
 }
 
 /* 强调下划线（马克笔）：首屏标题、快报、地形结论共用一支笔 */
-.hero h1 em,
-.brief-line em,
-.terrain-say em {
+:where(.hero h1 em, .brief-line em, .terrain-say em) {
   font-style: normal;
   font-weight: 700;
   padding: 0 var(--s-1);
@@ -898,7 +922,7 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
 
 /* ---------- 统计数字 ---------- */
 
-.stats { display: flex; flex-wrap: wrap; gap: var(--s-3) 34px; }
+.stats { display: flex; flex-wrap: wrap; gap: var(--s-3) var(--s-7); }
 
 .stat b {
   display: block;
@@ -913,19 +937,19 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
 
 /* ---------- 表格 ---------- */
 
-.waves { width: 100%; border-collapse: collapse; margin-top: 2px; }
+.waves { width: 100%; border-collapse: collapse; margin-top: var(--s-1); }
 
 .waves th {
   color: var(--muted);
   font-weight: 500;
   font-size: var(--fs-xs);
   text-align: left;
-  padding: 6px 10px;
+  padding: var(--s-2) var(--s-3);
   letter-spacing: 0.06em;
 }
 
 .waves td {
-  padding: 9px 10px;
+  padding: var(--s-2) var(--s-3);
   border-bottom: 1px solid var(--hairline);
   font-size: var(--fs-ui);
 }
@@ -938,7 +962,7 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
 /* ---------- 徽章与计数 ---------- */
 
 .badge {
-  padding: 2px 10px;
+  padding: var(--s-1) var(--s-3);
   font-size: var(--fs-xs);
   color: var(--muted);
   background: var(--card-2);
@@ -951,7 +975,7 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
 
 .chip {
   padding: var(--s-1) var(--s-3);
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
   border-color: var(--hairline-strong);
   background: var(--card-2);
 }
@@ -960,7 +984,7 @@ button:disabled { opacity: 0.55; cursor: default; transform: none; }
 
 /* ---------- 地图 ---------- */
 
-.map-wrap { display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap; }
+.map-wrap { display: flex; gap: var(--s-6); align-items: flex-start; flex-wrap: wrap; }
 
 canvas.grid {
   image-rendering: pixelated;
@@ -981,8 +1005,9 @@ canvas.grid {
   color: var(--muted);
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 6px 10px;
+  gap: var(--s-2) var(--s-3);
   align-items: center;
+  /* 图例与它右边的留白抢宽度时优先保住两列排版 */
   min-width: 150px;
   /* 图例是坐标纸小图版：点阵底 + 发丝框，与页面的普查图纸语言同源 */
   padding: var(--s-3) var(--s-4);
@@ -991,7 +1016,7 @@ canvas.grid {
   background-color: var(--card-2);
 }
 
-.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: var(--r-xs); }
 
 /* 聚集地形的图例点是环，不是实心——与地图上描的环同色相。图例画在卡片上，
    所以取面版墨水（地图上的环在深底板上，仍用地图墨水）。 */
@@ -1014,23 +1039,23 @@ canvas.grid {
   border: 1px solid var(--hairline-strong);
   border-radius: var(--r-ctrl);
   box-shadow: var(--shadow);
-  padding: 10px var(--s-3);
+  padding: var(--s-3);
   font-size: var(--fs-xs);
   line-height: 1.65;
   max-width: 280px;
 }
 
-#tooltip b { font-family: var(--font-display); font-size: var(--fs-md); }
+#tooltip b { font-family: var(--font-display); font-size: var(--fs-sm); }
 
 /* ---------- 分组条与漏斗 ---------- */
 
-.seg { display: flex; align-items: center; gap: 10px; margin: 7px 0; font-size: var(--fs-md); }
+.seg { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-2) 0; font-size: var(--fs-sm); }
 .seg .label { min-width: 150px; color: var(--text); }
 
 .seg .bar2 {
   flex: 1;
   max-width: 340px;
-  height: 6px;
+  height: var(--track-h);
   align-self: center;
 }
 
@@ -1045,16 +1070,16 @@ canvas.grid {
 .seg .num { color: var(--muted); min-width: 96px; font-family: var(--font-mono); font-size: var(--fs-xs); }
 
 /* 漏斗与分阶段条（共用一行三段式） */
-.funnel { margin-top: 6px; }
+.funnel { margin-top: var(--s-2); }
 
-.frow { display: flex; align-items: center; gap: var(--s-3); margin: 7px 0; }
+.frow { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-2) 0; }
 
 .frow .flabel { min-width: 76px; color: var(--muted); font-size: var(--fs-sm); flex-shrink: 0; }
 
 .frow .fbar {
   flex: 1;
   max-width: 400px;
-  height: 14px;
+  height: var(--track-h-lg);
 }
 
 .frow .fbar i { display: block; height: 100%; border-radius: var(--r-pill); background: var(--accent); }
@@ -1082,14 +1107,14 @@ canvas.grid {
   grid-template-columns: 76px minmax(0, 1fr) minmax(120px, 300px) minmax(0, 1.4fr) auto;
   align-items: center;
   gap: var(--s-3);
-  margin: 9px 0;
+  margin: var(--s-2) 0;
 }
 
 .arow .flabel { color: var(--muted); font-size: var(--fs-sm); }
 
-.arow .apart { color: var(--text); font-size: var(--fs-md); line-height: 1.55; overflow-wrap: anywhere; }
+.arow .apart { color: var(--text); font-size: var(--fs-sm); line-height: 1.55; overflow-wrap: anywhere; }
 
-.atwin { display: flex; height: 14px; }
+.atwin { display: flex; height: var(--track-h-lg); }
 
 /* 两端各自成段：右段靠右、左段靠左，中间留出的空当就是「没人被这句改变主意」。 */
 .atwin i { display: block; height: 100%; }
@@ -1101,23 +1126,23 @@ canvas.grid {
 .arow.quiet .fsay { font-style: italic; }
 .arow .fnum { color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-xs); white-space: nowrap; }
 
-.report-meta { display: flex; align-items: center; gap: 10px; margin: var(--s-1) 0 10px; }
+.report-meta { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-1) 0 var(--s-3); }
 
 /* ---------- 人格声音 ---------- */
 
 /* 折叠：默认只露 24 张，按钮展开 */
 .voices.collapsed .voice:nth-child(n + 25) { display: none; }
 
-.voices { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.voices { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--s-3); }
 
 .voice {
   display: flex;
-  gap: 10px;
+  gap: var(--s-3);
   align-items: flex-start;
   border: 1px solid var(--hairline);
   border-radius: var(--r-card);
-  padding: var(--s-3) 14px;
-  font-size: var(--fs-md);
+  padding: var(--s-3) var(--s-4);
+  font-size: var(--fs-sm);
   background: var(--card-2);
   transition: border-color var(--dur-2), transform var(--dur-1);
 }
@@ -1131,8 +1156,8 @@ canvas.grid {
   display: inline-block;
   width: 10px;
   height: 10px;
-  border-radius: 3px;
-  margin-right: 6px;
+  border-radius: var(--r-xs);
+  margin-right: var(--s-2);
   vertical-align: -1px;
 }
 
@@ -1147,12 +1172,12 @@ canvas.grid {
   /* 标本卡：Jev 决策现场的一格切片，铺一层比图例更淡的点阵 */
   --dot-ink: 4%;
   --dot-size: 16px;
-  padding: 14px var(--s-4);
+  padding: var(--s-4);
 }
 
 .decision .dline {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--fs-2xs);
   line-height: 1.6;
   color: var(--text);
   border-bottom: 1px dashed var(--hairline);
@@ -1162,7 +1187,7 @@ canvas.grid {
 
 .decision .dask {
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: var(--fs-2xs);
   margin-bottom: var(--s-2);
 }
 
@@ -1171,7 +1196,7 @@ canvas.grid {
 .decision .dseg.drawn .label { color: var(--text); font-weight: 650; }
 .decision .dseg.drawn .num { color: var(--accent); }
 
-.decision .dverdict { margin-top: 10px; font-size: var(--fs-sm); color: var(--muted); }
+.decision .dverdict { margin-top: var(--s-3); font-size: var(--fs-sm); color: var(--muted); }
 .decision .dverdict b { color: var(--text); font-family: var(--font-display); }
 
 /* ---------- 核对结论（Jev 解读 / 地形 / 对账） ---------- */
@@ -1185,18 +1210,18 @@ canvas.grid {
 .chip.scattered { color: var(--face-stopped); border-color: var(--face-stopped); }
 .chip.unclear { color: var(--muted); }
 
-/* 人群地形：一句人话 + 一个统计量 + 一行出处 */
-.terrain-read { margin: var(--s-1) 0 6px; }
-.terrain-read .terrain-say { margin: 10px 0 6px; font-size: 14.5px; line-height: 1.65; }
+/* 人群地形：一句人话 + 一个统计量 + 一行出处。
+   两版之差借同一套排版（.terrain-say / .hint），所以这一节不再为 delta 另写一份。 */
+.terrain-read { margin: var(--s-1) 0 var(--s-2); }
+.terrain-say { margin: var(--s-3) 0 var(--s-2); font-size: var(--fs-ui); line-height: 1.65; }
 
 /* 地图上方的开关条 */
 .map-bar { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; margin: 0 0 var(--s-3); }
-.map-bar .ghost { padding: 6px 14px; font-size: var(--fs-sm); }
+.map-bar .ghost { padding: var(--s-2) var(--s-4); font-size: var(--fs-sm); }
 .map-bar .ghost[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 
-/* 两版之差：排版借地形段（同一套 say/统计行），图例点是实心——差分是实色量表，不是环 */
-.delta-read { margin: var(--s-1) 0 6px; }
-.delta-read .terrain-say { margin: 14px 0 6px; font-size: 14.5px; }
+/* 两版之差：图例点是实心——差分是实色量表，不是环 */
+.delta-read { margin: var(--s-1) 0 var(--s-2); }
 .delta-legend { min-width: 0; }
 canvas.grid.diff { cursor: default; }
 
@@ -1204,14 +1229,14 @@ canvas.grid.diff { cursor: default; }
 .delta-kpis {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 18px;
+  gap: var(--s-2) var(--s-4);
   background: var(--inset);
   border-radius: var(--r-ctrl);
-  padding: 10px 14px;
+  padding: var(--s-3) var(--s-4);
   margin-bottom: var(--s-3);
 }
 
-.dkpi { display: flex; align-items: baseline; gap: var(--s-2); font-size: var(--fs-md); }
+.dkpi { display: flex; align-items: baseline; gap: var(--s-2); font-size: var(--fs-sm); }
 .dkpi-label { color: var(--muted); min-width: 34px; }
 .dkpi-nums { font-family: var(--font-mono); font-size: var(--fs-sm); }
 .dkpi-diff { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
@@ -1221,7 +1246,7 @@ canvas.grid.diff { cursor: default; }
 /* ---------- 头像与档案 ---------- */
 
 .avatar { flex-shrink: 0; display: block; }
-#tooltip .avatar { display: inline-block; vertical-align: -9px; margin-right: 6px; }
+#tooltip .avatar { display: inline-block; vertical-align: -9px; margin-right: var(--s-2); }
 
 /* 文本预览：中性卡，不是拒发提示。
    原先误用 .blocked-note 的 --bad 红边，而它的内联 border-color: var(--line)
@@ -1230,7 +1255,7 @@ canvas.grid.diff { cursor: default; }
   border: 1px solid var(--hairline);
   border-radius: var(--r-ctrl);
   background: var(--card-2);
-  padding: 10px 14px;
+  padding: var(--s-3) var(--s-4);
   font-size: var(--fs-ui);
   line-height: 1.7;
 }
@@ -1245,8 +1270,8 @@ canvas.grid.diff { cursor: default; }
 .toc {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 0 0 6px;
+  gap: var(--s-2);
+  margin: 0 0 var(--s-2);
 }
 
 .toc a {
@@ -1269,24 +1294,24 @@ canvas.grid.diff { cursor: default; }
   background: var(--inset);
   border-radius: var(--r-ctrl);
   padding: var(--s-3) var(--s-4);
-  margin-bottom: 14px;
+  margin-bottom: var(--s-4);
 }
 
 .brief-copy {
   position: absolute;
   top: var(--s-2);
-  right: 10px;
-  padding: 2px 10px;
+  right: var(--s-3);
+  padding: var(--s-1) var(--s-3);
   font-size: var(--fs-xs);
 }
 
-.brief-line { margin: 5px 0; font-size: 14px; line-height: 1.75; }
+.brief-line { margin: var(--s-1) 0; font-size: var(--fs-ui); line-height: 1.75; }
 
 /* 骨架屏（R21）：报告打开期间的过渡态，形状对齐报告布局；扫光在 reduced-motion 下静止 */
 .skeleton { padding: var(--s-1) 2px; }
 
 .sk {
-  height: 14px;
+  height: var(--track-h-lg);
   margin: var(--s-3) 0;
   border-radius: var(--r-sm);
   background: linear-gradient(90deg, var(--card-2) 25%, var(--inset) 50%, var(--card-2) 75%);
@@ -1303,7 +1328,7 @@ canvas.grid.diff { cursor: default; }
 
 /* ---------- 图谱 ---------- */
 
-.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4); }
 
 .mini {
   position: relative;
@@ -1313,19 +1338,19 @@ canvas.grid.diff { cursor: default; }
   /* 监控小卡也是图纸上的仪表：同款点阵，比图例更淡一档 */
   --dot-ink: 4%;
   --dot-size: 16px;
-  padding: 10px var(--s-3) 6px;
+  padding: var(--s-3) var(--s-3) var(--s-2);
 }
 
 #chartShare { position: relative; }
 .mini-head { color: var(--muted); font-size: var(--fs-xs); letter-spacing: 0.04em; margin-bottom: 2px; }
 .chart.ekg .ekg-now { font-family: var(--font-mono); font-size: var(--fs-base); font-weight: 600; }
-.chart-empty { color: var(--muted); font-size: var(--fs-xs); padding: 30px 0; text-align: center; }
+.chart-empty { color: var(--muted); font-size: var(--fs-xs); padding: var(--s-7) 0; text-align: center; }
 
 /* 悬停读数（R18）：右上角小读数 + svg 内的竖参考线 */
 .chart-read {
   position: absolute;
   top: var(--s-2);
-  right: 10px;
+  right: var(--s-3);
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   color: var(--accent);
@@ -1335,10 +1360,10 @@ canvas.grid.diff { cursor: default; }
 
 .hover-line { stroke: var(--accent); stroke-width: 1; opacity: 0.55; }
 
-.chart { width: 100%; height: auto; display: block; margin-top: 10px; }
+.chart { width: 100%; height: auto; display: block; margin-top: var(--s-3); }
 .chart .chart-zero { stroke: var(--hairline-strong); stroke-width: 1; }
 .chart .chart-axis-line { stroke: var(--hairline); stroke-width: 1; }
-.chart .chart-num { fill: var(--muted); font-family: var(--font-mono); font-size: 10.5px; }
+.chart .chart-num { fill: var(--muted); font-family: var(--font-mono); font-size: var(--fs-2xs); }
 .chart .chart-axis { fill: var(--muted); font-family: var(--font-body); font-size: var(--fs-2xs); }
 
 /* ---------- 实时监控表 ---------- */
@@ -1364,8 +1389,8 @@ canvas.grid.diff { cursor: default; }
 
 /* 表单那一块：贴着提交按钮下面，视觉上属于「可选的补充」而不是必填项——所以不额外加框，
    只用一条 hairline 把它和主表单分开；填了内容它才占地方。 */
-.aud-pick { margin-top: 14px; padding-top: var(--s-3); border-top: 1px solid var(--hairline); }
-.aud-pick > label { font-size: var(--fs-md); color: var(--text); }
+.aud-pick { margin-top: var(--s-4); padding-top: var(--s-3); border-top: 1px solid var(--hairline); }
+.aud-pick > label { font-size: var(--fs-sm); color: var(--text); }
 .aud-pick > label small { color: var(--muted); font-weight: 400; }
 
 .aud-pick input {
@@ -1374,21 +1399,21 @@ canvas.grid.diff { cursor: default; }
   min-height: 36px;
   background: var(--card-2);
   border-color: var(--hairline-strong);
-  padding: var(--s-2) 10px;
+  padding: var(--s-2) var(--s-3);
 }
 
 .aud-pick input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .aud-pick .hint { margin-top: var(--s-2); }
 
-/* 两个输入框的可见标签。原来第一行标签被一个 div.row.between 包着，标签和输入框之间隔了
-   一层容器，读屏软件按「标签→控件」相邻来找就断了；sr-only 的那条又把说明藏在
-   placeholder 里（placeholder 一打字就消失）。改成两个都是真正的可见标签：
+/* 一个字段 = 一行可见标签 + 一个控件。原来第一行标签被一个 div.row.between 包着，
+   标签和输入框之间隔了一层容器，读屏软件按「标签→控件」相邻来找就断了；sr-only 的那条
+   又把说明藏在 placeholder 里（placeholder 一打字就消失）。改成两个都是真正的可见标签：
    词表那一行的标签是这一节唯一的操作说明，不该靠 placeholder 撑。 */
-.aud-pick .field { display: block; margin-top: var(--s-3); }
-.aud-pick .field > label { display: block; margin-bottom: var(--s-1); }
+.field { display: block; margin-top: var(--s-3); }
+.field > label { display: block; margin-bottom: var(--s-1); }
 /* 说明那两行允许折行：两条 hint 并排时各占一半宽，中文一折就成「半句话 + 半句话」，
    比换行更难读——换行后每句还是整句。 */
-.aud-pick .row { flex-wrap: wrap; row-gap: 2px; }
+.aud-pick .row { flex-wrap: wrap; row-gap: var(--s-1); }
 
 /* 过滤出来的候选：按钮而不是链接，点下去就是加一组。min-height 28px 是这个尺寸标签的
    命中区下限（padding 4+4 + 13px 行高 + 2px 边框 ≈ 26px）——一个 26px 的命中区在手机上
@@ -1396,20 +1421,20 @@ canvas.grid.diff { cursor: default; }
 .aud-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
   max-height: 148px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
 
 .aud-list button {
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
   /* nowrap：标签是「年龄：25–34 岁 + 812」这种不长的固定串，折成两行会让人以为是两个组。
      真长到放不下时靠 flex-wrap 换行，不靠字内折行。 */
   white-space: nowrap;
   min-height: 28px;
-  padding: var(--s-1) 10px;
+  padding: var(--s-1) var(--s-3);
   border-color: var(--hairline-strong);
 }
 
@@ -1421,24 +1446,24 @@ canvas.grid.diff { cursor: default; }
 .aud-list .aud-n { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
 
 /* 已选：可点掉的一个个标签。作者挑的组是这一节的前提，挑错了要能一眼看见、一下改掉。 */
-.aud-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.aud-tags { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-3); }
 
 .aud-tag {
   white-space: nowrap;
   min-height: 28px;
-  font-size: var(--fs-md);
-  padding: var(--s-1) var(--s-2) var(--s-1) 10px;
+  font-size: var(--fs-sm);
+  padding: var(--s-1) var(--s-2) var(--s-1) var(--s-3);
   border-color: var(--face-glad);
 }
 
 /* × 是 CSS 生成的装饰，不进可访问名（sr 读的是按钮自己的文字）；给键盘用户一个真图标位
    只是排版对齐，不额外读一遍。 */
-.aud-tag::after { content: '×'; margin-left: 6px; color: var(--muted); }
+.aud-tag::after { content: '×'; margin-left: var(--s-2); color: var(--muted); }
 .aud-tag:hover { background: var(--inset); }
 
 /* 报告里那一节：状态小标题。四个状态靠左边的色条区分，色就是「谁吃、谁掉头」的信号色。 */
 .aud-state {
-  margin: 14px 0 2px;
+  margin: var(--s-4) 0 var(--s-1);
   padding-left: var(--s-2);
   border-left: 3px solid var(--hairline-strong);
   font-size: var(--fs-sm);
@@ -1460,7 +1485,7 @@ canvas.grid.diff { cursor: default; }
  * 09 示例与流
  * ============================================================ */
 
-.examples { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.examples { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4); }
 
 .examples .card {
   background: var(--card-2);
@@ -1474,8 +1499,8 @@ canvas.grid.diff { cursor: default; }
 /* 懒渲染占位（R22）：未渲染的示例卡不塌陷，滚到附近（rootMargin 300px）即填充 */
 .examples .card:empty { min-height: 420px; }
 
-#compare .source-text, #result .source-text { margin-bottom: 10px; }
-#resultActions { margin: -6px 2px var(--s-5); }
+#compare .source-text, #result .source-text { margin-bottom: var(--s-3); }
+#resultActions { margin: calc(-1 * var(--s-2)) 2px var(--s-5); }
 
 .feed { list-style: none; margin: 0; padding: 0; }
 
@@ -1485,8 +1510,8 @@ canvas.grid.diff { cursor: default; }
   align-items: baseline;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 2px 14px;
-  padding: 11px var(--s-3);
+  gap: var(--s-1) var(--s-4);
+  padding: var(--s-3);
   border-bottom: 1px solid var(--hairline);
   font-size: var(--fs-ui);
   border-radius: var(--r-md);
@@ -1511,7 +1536,7 @@ canvas.grid.diff { cursor: default; }
 
 footer {
   margin-top: var(--s-7);
-  padding-top: 18px;
+  padding-top: var(--s-5);
   border-top: 1px solid var(--hairline);
   color: var(--muted);
   font-size: var(--fs-sm);
@@ -1574,7 +1599,7 @@ footer a:hover { color: var(--text); border-bottom-color: var(--text); }
 @media (max-width: 1080px) {
   .arow {
     grid-template-columns: 76px minmax(120px, 300px) minmax(0, 1fr);
-    row-gap: 7px;
+    row-gap: var(--s-2);
   }
   .arow .flabel { grid-row: 1; grid-column: 1; }
   .arow .apart { grid-row: 1; grid-column: 2 / -1; }
@@ -1601,7 +1626,7 @@ footer a:hover { color: var(--text); border-bottom-color: var(--text); }
 
 @media (max-width: 720px) {
   .top { flex-wrap: wrap; }
-  .stat b { font-size: 23px; }
+  .stat b { font-size: var(--fs-lg); }
   .seg .label { min-width: 110px; }
   .plate { padding: var(--s-5) var(--s-4); }
   .charts-row { grid-template-columns: 1fr; }
@@ -1647,7 +1672,7 @@ footer a:hover { color: var(--text); border-bottom-color: var(--text); }
   .toc::-webkit-scrollbar-track { background: transparent; }
 
   /* 总览 KPI 在窄屏排成两列，别让五个数字折成 3+2 的碎行 */
-  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px var(--s-4); }
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-4) var(--s-4); }
 
   /* 窄屏地图与图例改为上下排：并排时 400px 的画布被挤成细条，图例也只剩一列窄字 */
   .map-wrap { flex-direction: column; gap: var(--s-3); }

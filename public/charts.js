@@ -4,10 +4,9 @@ import { GLAD_ENOUGH } from './shared/feed.js';
 import { lookOf } from './shared/presets.js';
 import { signed } from './shared/labels.js';
 import { FACE_INKS } from './inks.js';
+import { esc } from './dom.js';
 
-const esc = (value) => String(value).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
-
-/** 悬停读数的换算参数（app.js 的容器委托用；改 pad 记得同步这里）。 */
+/** 悬停读数的换算参数（monitor.js 的容器委托用；改 pad 记得同步这里）。 */
 export const CHART_PADS = {
   roll: { l: 10, r: 54 },
   share: { l: 10, r: 120 },
