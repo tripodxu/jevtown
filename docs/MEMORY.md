@@ -43,10 +43,11 @@
 **上线**：2026-10-28 已部署，worker 版本 `afecbe7e`（提交 `41bf2ea`）；自定义域逐项核对
 14 项全过（首帧 `instrument`、`#advancedOptions`、`.live-observation`、第 12 节样式、
 `report-toolbar`/`REPORT_VIEW_ZH`、`placeholder` 修复行、`/api/feed` 200、26 个预载全 200）。
-**一条部署教训**：这次 wrangler 只报了 2 个新资产，说明 `index.html`/`styles.css`/`render.js`/
-`app.js` 的新内容**早就进过资产桶**——未提交的改动也能被部署上线（带 `ReferenceError` 的那版
-`app.js` 曾就此上线）。资产按内容哈希增量上传，**部署前必须 `git status` 干净、部署后按内容
-核对线上**，别只看 worker 版本号。
+**一条部署教训**：这次 wrangler 只报了 2 个新资产（`theme.js`、`shared/labels.js`），而
+`index.html`/`styles.css`/`render.js`/`app.js` 明明都改过——它们的新内容早已在资产桶里。
+具体时点从输出看不出来（可能有人部署过未提交的工作区，也可能是 `.wrangler/` 本地缓存的
+增量判定），但结论一致：**资产上传计数不能当"线上是不是这一版"的证据**。部署前保证
+`git status` 干净，部署后按内容核对线上（标记串/函数名），别只看 worker 版本号。
 
 ---
 
