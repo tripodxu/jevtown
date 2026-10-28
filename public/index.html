@@ -47,6 +47,9 @@
 <body>
   <div class="grain" aria-hidden="true"></div>
 
+  <!-- 键盘用户的一步直达：顶栏有品牌、通道、四个主题按钮，逐个 Tab 过去才到发帖框 -->
+  <a class="skip" href="#compose">跳到发帖框</a>
+
   <header class="top">
     <a class="brand" href="/">
       <span class="seal" aria-hidden="true">镇</span>
@@ -55,10 +58,10 @@
     <div class="top-actions">
       <span class="chip mode-chip" id="modeChip" title="当前 Jev 通道">默认通道</span>
       <nav class="themeswitch" role="group" aria-label="主题切换">
-      <button class="theme-btn" type="button" data-theme="night" aria-pressed="true">夜巡</button>
-      <button class="theme-btn" type="button" data-theme="bulletin" aria-pressed="false">公报</button>
-      <button class="theme-btn" type="button" data-theme="instrument" aria-pressed="false">仪器</button>
-      <button class="theme-btn" type="button" data-theme="classic" aria-pressed="false">经典</button>
+        <button class="theme-btn" type="button" data-theme="night" aria-pressed="true">夜巡</button>
+        <button class="theme-btn" type="button" data-theme="bulletin" aria-pressed="false">公报</button>
+        <button class="theme-btn" type="button" data-theme="instrument" aria-pressed="false">仪器</button>
+        <button class="theme-btn" type="button" data-theme="classic" aria-pressed="false">经典</button>
       </nav>
       <button class="ghost settings-btn" id="settingsBtn" type="button" aria-haspopup="dialog">Key…</button>
     </div>
@@ -79,7 +82,8 @@
       </dl>
     </section>
 
-    <section id="compose" class="plate">
+    <!-- tabindex="-1" 只为让跳过链接能把焦点真正移进来（不加它只滚动、焦点还在顶栏） -->
+    <section id="compose" class="plate" tabindex="-1">
       <form id="form">
         <div class="row">
           <label for="preset">类型</label>

@@ -64,6 +64,31 @@ app.js  fetch /api/post/:id
 - 动效只做入场（dialog 轻）落/既有 rise），`prefers-reduced-motion` 全局压到 0.01ms 的
   既有规则兜底；所有颜色均来自令牌（`color-mix` 混合），四主题自动跟随、零硬编码色。
 
+## 设计令牌与组件族（2026-10-28 重构轮）
+
+`styles.css` 按 11 节排：`01 令牌 / 02 基础 / 03 顶栏 / 04 首屏 / 05 卡片 / 06 表单 /
+07 数据 / 08 报告 / 09 示例与流 / 10 动效 / 11 响应式`。改样式先读 01 节，不要新造数字。
+
+- **刻度**：间距 `--s-1…--s-8`（4px 基准）、字号 `--fs-2xs…--fs-xl`、圆角
+  `--r-xs…--r-xl` + 组件别名 `--r-card(16) / --r-ctrl(10) / --r-chip(pill)`、动效
+  `--dur-1..3` + `--ease-out`。新值先问「能不能落到某一档」，落不上再考虑加档。
+- **硬约束**：尺寸类令牌必须写 px 字面量，**不能**写成 `--r-card: var(--r-xl)`——
+  `theme.test.js` 的 `tokensOf` 会把 `var()` 开头的令牌一路解析到十六进制，尺寸会炸断言。
+- **组件族**（一条声明服务多个组件，改一处全跟上）：
+  - 胶囊：`.toc a / .sample-chip / .aud-list button / .aud-tag / .chip / .badge`
+  - 轨道：`.bar / .seg .bar2 / .frow .fbar / .atwin`
+  - 点阵底纹：`.legend / .mini / .decision`（浓度与格距由 `--dot-ink / --dot-size` 覆盖）
+  - 马克笔下划线：`.hero h1 em / .brief-line em / .terrain-say em`
+- **并族的代价**：族规则只给几何，组件的颜色/字号/内边距仍要在**自己的规则**里写全。
+  本轮漏过 `.sample-chip`（并族后内边距、颜色、hover 全丢）。重构后必须做
+  「重构前后选择器集合 diff」，测试绿不代表样式没丢。
+- **输入控件族**：`select / textarea / input[type=text|password|number|search]` 共用外观。
+  新增输入框走这条，别再单独手写一份（`#pricesInput` 曾长期裸奔到 UA 默认）。
+- **焦点环**：全站一条 `:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }`。
+  **不要**在里面写 `border-radius`——它会把卡片与输入框的圆角在聚焦瞬间压成直角；
+  现代浏览器 outline 自己跟随元素圆角。
+- **命中区**：小控件（胶囊、样例、候选、标签）`min-height` 不小于 28px。
+
 ## 主题系统
 
 - 主题 = `styles.css` 里一组 CSS 变量；现有四套：**夜巡**（默认）/ **公报** / **仪器** / **经典**。
@@ -308,3 +333,5 @@ SVG 的 `viewBox` 宽度与渲染宽度成反比：viewBox 固定 + CSS `width:1
 - [ ] canvas 有对应的主题重绘与清理路径
 - [ ] 图表宽度由调用方按容器传入（不是写死的默认值）
 - [ ] `[hidden]` 仍然藏得住（别给带 `hidden` 的元素加 `display` 的类）
+- [ ] 动了选择器/并了族 → 跑一次「重构前后选择器集合 diff」，确认没有组件把
+      自己的声明弄丢（测试只钉了少数几条，绿不等于样式齐全）

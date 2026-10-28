@@ -6,7 +6,45 @@
 
 ---
 
-## 2026-10-25 · 错误文案中文化（展示层）与整体推送
+## 2026-10-28 · 前端重构轮：设计令牌层 + 组件族，样式表可维护性
+
+**结论先行：没有改任何业务逻辑、文案、数据口径与四套主题的配色**（配色受
+`theme.test.js` 的 WCAG 断言保护，一个十六进制都没动）。这一轮只动
+`public/styles.css`（重排 + 令牌化 + 去重）与 `public/index.html`（跳过链接）。
+
+1. **令牌层**（styles.css 的 01 节）：4px 间距刻 `--s-1…--s-8`、字号刻
+   `--fs-2xs…--fs-xl`、圆角刻 `--r-xs…--r-xl` + 三个沿用旧名的组件别名
+   （`--r-card/--r-ctrl/--r-chip`）、动效两条曲线三档时长（`--ease-out/--dur-1..3`）、
+   点阵底纹的 `--dot-ink/--dot-size`。px 字面量 473 → 295（-38%），`var()` 引用
+   291 → 490。**踩坑**：`theme.test.js` 的 `tokensOf` 会把值以 `var(` 开头的令牌
+   一路解析到十六进制，所以尺寸类令牌绝不能写成 `--r-card: var(--r-xl)`（会断言
+   「值既不是十六进制也不是 var()」而炸）；尺寸令牌一律写 px 字面量。
+2. **组件族**：胶囊控件（目录/样例/候选/已选/徽章）、轨道条（进度/分组/漏斗/双向）、
+   点阵底纹（图例/监控小卡/标本卡）、马克笔下划线（标题/快报/地形）各收敛成一条
+   共享声明 + 组件差异。**踩坑**：并族时容易顺手删掉组件自己的规则——本轮就漏了
+   `.sample-chip`（并入族后内边距/颜色/hover 全丢），靠「重构前后选择器集合比对」
+   抓回来。这类重构必须做集合 diff，不能只看测试绿。
+3. **真冗余与真 bug**：`body` 重复的 `font-family`（`font:` 简写已含）、
+   `.delta-read/.terrain-read` 两份同款 `em` 规则、`.feed a:hover` 与 `.feed li:hover a`
+   两份同色声明；**新发现**：发帖框的 `#pricesInput` 一路裸奔到 UA 默认样式
+   （原样式只覆盖了 `select`/`textarea` 与 dialog/aud-pick 里的 input），现已补
+   `input[type=text|password|number|search]` 控件族。
+4. **焦点环的老坑**：原 `:focus-visible { border-radius: 4px }` 会把卡片（16px）与
+   输入框（10px）在聚焦瞬间压成直角。现代浏览器 outline 已跟随元素圆角，那条
+   border-radius 已删；为它而写的三处 `border-radius: var(--r-chip)` 补偿规则一并删掉。
+5. **可访问性**：跳过导航（`.skip` → `#compose` + `tabindex="-1"`）；样例按钮命中区
+   26 → 28px；`prefers-contrast: more` 下把发丝线提到 strong。
+6. **视觉**：字号 13.5px（六处散值）并入 14px 一档；比例条/漏斗条/双向条圆角统一为
+   胶囊；卡片内边距 22/24 → 24、首屏与分节标题节奏按 4px 刻度收齐；印章 hover 微转、
+   顶栏吸附层加饱和、弹窗 backdrop 加模糊。
+
+**验证**：`npm run lint` 54 文件过；`npm test` **217/217 绿**；样式表结构自检
+（括号配平/注释闭合/无空选择器，333 块）；令牌悬空检查 0；`font-variant-numeric`
+全站仍只有 1 处。**未做**：本机无头浏览器被沙箱静默拦下（`--dump-dom` 也无输出），
+四主题截图核对没跑成——布局与配色是按规则推导的，未做像素级目视确认。
+
+---
+
 
 - **ERROR_ZH / errorZh（labels.js）**：Worker 的 error 串是 API 契约（英文，改它才破坏
   契约），翻译只做在展示层——精确表 + `text is longer than` 前缀匹配，未命中（D1/网关
