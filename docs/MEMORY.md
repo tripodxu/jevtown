@@ -17,7 +17,9 @@
    `if (placeholder)` 的引用留着。这个函数在 `app.js` 末尾被顶层调用一次 → `ReferenceError`
    → 其后的 `updateTextCount / refreshComposeMode / initThemeSwitcher / loadFeed / 深链
    openPost` 全部不执行；主题按钮、feed、深链、样例 chips、预设切换一起停摆。
-   **lint（只有语法门）与 217 个用例都抓不到**——编排层没有自动化防线，见 TESTING.md 缺口节。
+   **lint（只有语法门）与 217 个用例都抓不到**——编排层当时没有自动化防线，见 TESTING.md
+  缺口节。收口时补了 `test/app-init.test.js`（最小 DOM 桩件导入模块图，断言初始化链走到
+  `loadFeed`），反证过：把 `const placeholder` 那行删掉它当场红，恢复即绿。
 2. **速览/完整是纯展示折叠**：`buildToc()` 给非核心 h3 及其后面的兄弟节点打
    `data-report-detail`，由宿主元素的 `data-report-mode` 决定显隐；核心清单在
    `labels.js` 的 `REPORT_VIEW_ZH.core`，**判定靠 h3 的 `textContent.trim()` 精确匹配**
@@ -33,11 +35,12 @@
 5. **折叠区里的图表**：心电图住进收起的 `<details>`，`clientWidth` 为 0 时退回默认 420 宽，
    全局 `svg { max-width: 100% }` 兜住溢出——只会被等比缩小，不会撑破布局。
 
-**验证**：`npm run lint` 57 文件 + 预载清单 26 项一致；`npm test` **218/218 绿**。
-**文档**：`docs/README.md` 补 `superpowers/specs/` 索引；`docs/TESTING.md` 用例数 87→218
+**验证**：`npm run lint` 57 文件 + 预载清单 26 项一致；`npm test` **219/219 绿**
+（新增 2 条：`REPORT_VIEW_ZH.core` 对拍 + 编排层初始化）。
+**文档**：`docs/README.md` 补 `superpowers/specs/` 索引；`docs/TESTING.md` 用例数 87→219
 并补齐 8 个漏记的测试文件；方向文档的「未完成验证」更新为收口后的真实状态。
-**未做**：本机无头浏览器仍被沙箱拦下，四主题与 360/390/768 的目视核对没做；本轮改动
-**未提交、未部署**（线上仍是 3664b921）。
+**未做**：本机无头浏览器仍被沙箱拦下，四主题与 360/390/768 的目视核对没做；本轮已提交
+（`ceaaafb`）但**未部署**（线上仍是 3664b921）。
 
 ---
 

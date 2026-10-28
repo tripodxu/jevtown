@@ -6,7 +6,7 @@
 npm test    # node --test "test/*.test.js"
 ```
 
-当前 **218 个用例**（README 里若写旧数以本文件为准；数量会随用例增加变化，
+当前 **219 个用例**（README 里若写旧数以本文件为准；数量会随用例增加变化，
 以 `npm test` 输出 `tests N` 行为准）。全部走 mock 通道，**不花真钱、不需要 key**。
 
 ```bash
@@ -36,6 +36,7 @@ npm run bench   # 实时监控增量统计的一次性对拍（旧全量重扫 v
 | `test/theme.test.js` | 四套主题的令牌契约：WCAG 对比度（正文/次要/按钮/信号色）、字号与间距刻度、行宽上限、CSS 结构自检 |
 | `test/labels.test.js` | 中文单源：符号字形、九宫格、押得准三档、样例/占位句与 `PRESETS` 一一对应、错误文案翻译、`REPORT_VIEW_ZH.core` 与 `render.js` 的 h3 字面文案对拍 |
 | `test/sharecard.test.js` | 分享卡片构图：canvas 桩件记录绘制次序（底→卡→快照→文字） |
+| `test/app-init.test.js` | **编排层初始化**：最小 DOM 桩件导入整个模块图，断言 app.js 顶层不抛错、链子走到 `loadFeed`（只打一次 `/api/feed`）、默认主题落到 `instrument` |
 | `test/worker.test.js` | Worker 集成（`unstable_dev` 起真实本地 Worker）：全链路、版本、blocked、调用报告/决策样本、删帖、**每 IP 日闸双路 429（check/version，无 CF 头豁免）**、**作者校验（无头/错令牌 403、带头放行）**、**收波 CAS 不变量**、**批次认领并发不变量** |
 | `test/helper.js` | 共享夹具（非测试文件） |
 
@@ -70,10 +71,11 @@ npm run bench   # 实时监控增量统计的一次性对拍（旧全量重扫 v
   点击会静默丢失）， Edge profile 每次运行用独立目录（单例锁会让复用 profile 的第二次启动
   连到旧实例）。
 - 无 lint/格式化工具链（约定靠 [CONVENTIONS.md](CONVENTIONS.md) 自律）。
-- **前端编排层（`app.js`）没有自动化防线**：`scripts/lint.mjs` 只做语法门，
-  `test/render.test.js` 只覆盖纯字符串视图，Node 里也没装 DOM。2026-10-28 的未提交改动里
-  `syncComposeForPreset()` 引用了已被删掉的 `placeholder` 变量——lint 绿、217 全绿都抓不到，
-  靠人工读 diff 才发现；后果是模块顶层第一次调用就抛 `ReferenceError`，
-  其后的主题切换、`loadFeed()`、深链 `openPost()` 全部不执行。
-  **改 `app.js` 顶层语句或事件回调后必须人工过一遍初始化路径**；要自动化就按上一条惯例用
-  一次性 DOM 桩件把模块图导入一次（`document`/`fetch`/`localStorage` 全桩，导入不抛即通过）。
+- **前端编排层（`app.js`）只有一层薄防线**：`test/app-init.test.js` 用最小 DOM 桩件导入
+  整个模块图，断言顶层初始化不抛错、链子走到 `loadFeed`、默认主题落地。它覆盖的是
+  「顶层引用了不存在的变量」这类运行时错——2026-10-28 的 `syncComposeForPreset()`
+  `placeholder` 缺声明就是这么漏掉的（当时 lint 只有语法门、视图冒烟只管字符串构造器，
+  217 全绿也抓不到；后果是顶层第一次调用抛 `ReferenceError`，其后的主题切换、`loadFeed()`、
+  深链 `openPost()` 全不执行）。
+  **事件回调里的逻辑仍无覆盖**（点一下按钮会发生什么，只有人工核对），所以改回调、
+  改 `render.js` 的 DOM 操作后仍要过一遍真实浏览器。新增浏览器 API 时记得在用例里补桩。

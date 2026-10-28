@@ -82,12 +82,14 @@
 
 ### 验证状态（2026-10-28 收口复查后）
 
-- `npm run lint` ✓（57 文件 + 预载清单 26 项一致）；`npm test` **218/218 绿**（新增
-  `REPORT_VIEW_ZH.core` 与 `render.js` h3 字面文案的对拍用例，原来这颗只能在浏览器里看）。
+- `npm run lint` ✓（57 文件 + 预载清单 26 项一致）；`npm test` **219/219 绿**。新增两条：
+  `REPORT_VIEW_ZH.core` 与 `render.js` h3 字面文案的静态对拍（原来这颗只能在浏览器里看）；
+  `test/app-init.test.js` 用最小 DOM 桩件导入模块图，兜住编排层顶层初始化。
 - **收口时抓到的回归**：`syncComposeForPreset()` 重写时删掉了 `const placeholder = …`
   却留了 `if (placeholder)` 的引用，`app.js` 末尾的初始化调用会抛 `ReferenceError`，
   导致其后的 `updateTextCount / refreshComposeMode / initThemeSwitcher / loadFeed / 深链`
-  全部不执行（样例 chips 与预设切换也停摆）。已修复。
+  全部不执行（样例 chips 与预设切换也停摆）。已修复；`app-init` 用例做过反证
+  （删掉那行声明它当场红）。
 - 仍待人工核对：首屏双栏、抽屉展开、实时态、速览/完整、四主题、键盘与 360/390/768 宽度。
   本机无头浏览器被沙箱拦下，没有自动化截图。
-- 本轮改动**尚未提交、尚未部署**；上一轮（3664b921）仍是线上版本。
+- 本轮改动已提交（`ceaaafb` 及其后的测试补记），**尚未部署**；上一轮（3664b921）仍是线上版本。
