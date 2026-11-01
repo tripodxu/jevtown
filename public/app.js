@@ -8,7 +8,7 @@ import { renderCheck, renderDelta } from './render.js';
 import { initThemeSwitcher } from './theme.js';
 import { $, esc } from './dom.js';
 import { startMonitor, stopMonitor, paintBatch, monitorRow, etaSay, pace } from './monitor.js';
-import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH, WAVE_ZH, FEED_ZH, DELETE_ZH, errorZh } from './shared/labels.js';
+import { BLOCKED_ZH, AWAY_ZH, AUDIENCE_ZH, presetNoun as PRESET_NOUN_OF, signed, COMPOSE_ZH, WAVE_ZH, FEED_ZH, DELETE_ZH, errorZh, waveStoppedZh, travelBarZh } from './shared/labels.js';
 import { PRESETS, DEFAULT_PRICES } from './shared/presets.js';
 import { renderShareCard } from './sharecard.js';
 import { crowd } from './shared/personas.js';
@@ -412,13 +412,16 @@ async function driveCheck(post, version, author, presetId, seedDrawn = null, ope
       // 结束原因分两说：gate = 情绪没过线被拦下（告诉作者差在哪、还有广播这条路）；
       // capacity = 波次跑满或全城都看到了，正常谢幕不用解释。
       const gateLine = wave.endedBy === 'gate'
-        ? WAVE_ZH.stoppedSay.replace('%1', String(wave.wave.index + 1))
+        ? waveStoppedZh(wave.wave.index, wave.wave.mood)
         : '收尾完成。';
       status(gateLine, 0.98);
       announce(gateLine);
     } else {
-      // 广播模式下情绪不过线也继续推：状态行要把「为什么还在传」说穿，不然读着像矛盾。
-      const push = wave.broadcast && !wave.wave.travels ? `，${WAVE_ZH.broadcastGo}（不看门槛）` : '';
+      // 过线标当波线（透明化：玩家看得见为什么还在传）；广播模式下情绪不过线也继续推，
+      // 状态行要把「为什么还在传」说穿，不然读着像矛盾。
+      const push = wave.broadcast && !wave.wave.travels
+        ? `，${WAVE_ZH.broadcastGo}（不看门槛）`
+        : wave.wave.travels ? `，${WAVE_ZH.barPassSay.replace('%1', travelBarZh(wave.wave.index))}` : '';
       const line = `第 ${wave.wave.index + 1} 波完成，情绪 ${signed(wave.wave.mood, 2)}${push}，文字传给第 ${wave.next.index + 1} 波（${wave.next.total} 人）`;
       monitorRow([`第 ${wave.wave.index + 1} 波收束`, `情绪 ${signed(wave.wave.mood, 2)}`, `${wave.wave.size} 人`, '', ''], 'wave-row');
       status(line, 0.5);

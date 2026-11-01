@@ -72,7 +72,7 @@ async function settleWave(env, post, id, v, request, version) {
     .all();
   const drawn = waveRows.map((row) => row.reaction);
   const waveMood = mood(presetId, drawn);
-  const waveTravels = travels(presetId, drawn);
+  const waveTravels = travels(presetId, drawn, waveIndex);
   const waveInfo = { index: waveIndex, asked: order.length, size: drawn.length, mood: round2(waveMood), travels: waveTravels };
 
   // reached（pid → reaction）从上一波收波落下的 looks 快照起步，只把本波 reactions 合并进来

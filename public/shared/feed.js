@@ -14,15 +14,18 @@ export const WAVES = [
   { size: Infinity, random: 0 },
 ];
 /**
- * A wave sends the text further when the glad reactions outweigh the sorry ones by this share of
- * the wave. Measured on first waves: strong texts give 0.12 to 0.33, weak ones -0.39 to 0.02.
+ * A wave sends the text further when its reaction is *strong* enough: the net glad share must clear
+ * the wave's bar, in either direction — love spreads, and so does a backlash (坏消息传千里). The bar
+ * decays per wave because later waves reach a broader, less-matched crowd whose mood naturally
+ * settles closer to neutral.
  *
- * The bar sits *below* what a coin flip scores (see `randomBaseline`): a wave near it carries no
- * information, so passing on it is luck rather than judgement. Measured on three real texts
- * (docs/research/wave-baseline-report.md). It stays where it is — moving it needs recalibrating
- * against the baselines that report puts on screen.
+ * Recalibrated 2026-11-01 (docs/MEMORY.md 同日条目)：real Jev scores most Chinese texts between
+ * −0.05 and +0.05 net per wave, so the old single bar of +0.10 (GLAD_ENOUGH) sat above almost
+ * everything a real post produced — second waves were near-impossible outside broadcast mode
+ * (docs/research/wave-baseline-report.md, real-api-report.md). Bars stay well above the per-wave
+ * standard error (~0.03 @600 / ~0.02 @1500+) so a coin-flip wave still fails.
  */
-export const GLAD_ENOUGH = 0.1;
+export const TRAVEL_BAR = [0.10, 0.05, 0.04, 0.03];
 
 /**
  * What a wave looks like if nobody read it: every reaction equally likely, so the mood is the
@@ -496,8 +499,9 @@ export function mood(presetId, waveReactions) {
   return net / Math.max(1, waveReactions.length);
 }
 
-/** Does a finished wave send the text further? */
-export const travels = (presetId, waveReactions) => mood(presetId, waveReactions) >= GLAD_ENOUGH;
+/** Does a finished wave send the text further? `waveIndex` picks the bar — later waves, lower bar. */
+export const travels = (presetId, waveReactions, waveIndex = 0) =>
+  Math.abs(mood(presetId, waveReactions)) >= (TRAVEL_BAR[waveIndex] ?? TRAVEL_BAR[TRAVEL_BAR.length - 1]);
 
 /**
  * Whether somebody in town has not seen the text yet: a byte of `reactions` still at 0. `inTown`

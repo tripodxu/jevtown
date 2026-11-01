@@ -1,6 +1,6 @@
 // 轻量图谱：无依赖，返回 HTML/SVG 字符串，由 render.js 组装进报告页。
 // 折线/面积用 SVG（清晰、可缩放），漏斗与条形用 DOM（复用主题令牌与等宽数字）。
-import { GLAD_ENOUGH } from './shared/feed.js';
+import { TRAVEL_BAR } from './shared/feed.js';
 import { lookOf } from './shared/presets.js';
 import { signed } from './shared/labels.js';
 import { FACE_INKS } from './inks.js';
@@ -17,7 +17,8 @@ export function moodLine(points, { width = 560, height = 130 } = {}) {
   if (!points.length) return '';
   if (points.length === 1) {
     const v = points[0];
-    const tier = v >= GLAD_ENOUGH ? '绿色（传播）' : v >= 0 ? '蓝色（持平）' : '红色（负面）';
+    // 单点必是第 1 波：强度门槛（|情绪| 过线即传播，正负都算），平淡/负面未过线分层如实标。
+    const tier = Math.abs(v) >= TRAVEL_BAR[0] ? '绿色（传播）' : v >= 0 ? '蓝色（未过线）' : '红色（负面）';
     return `<svg class="chart" viewBox="0 0 ${width} 90" role="img" aria-label="唯一一波的情绪为 ${v.toFixed(2)}">
       <circle cx="${width / 2}" cy="38" r="6" fill="var(--accent)" />
       <text x="${width / 2}" y="20" text-anchor="middle" class="chart-num">唯一一波 · 情绪 ${signed(v, 2)}（${tier}）</text>
@@ -92,14 +93,16 @@ export function funnel(waves, { broadcast = false } = {}) {
   if (!waves.length) return '';
   const max = Math.max(...waves.map((w) => w.size), 1);
   const rows = waves.map((wave) => {
-    const tier = wave.mood >= GLAD_ENOUGH ? 'fgo' : wave.mood >= 0 ? 'fhold' : 'fdrop';
+    // 强度门槛（逐波线）：|情绪| 过当波线才传播，正负都算——线的数字逐波不同，行里要亮出来。
+    const bar = TRAVEL_BAR[wave.index] ?? TRAVEL_BAR.at(-1);
+    const tier = Math.abs(wave.mood) >= bar ? 'fgo' : wave.mood >= 0 ? 'fhold' : 'fdrop';
     const width = Math.max(6, Math.round((wave.size / max) * 100));
     // 广播模式下情绪不过线的中间波不写「停在这里」——它没停，是不看门槛继续推。
     const label = wave.index === waves.length - 1 && !wave.travels ? '检查结束' : wave.travels ? '继续传播' : broadcast ? '广播继续' : '停在这里';
     return `<div class="frow">
       <span class="flabel">第 ${wave.index + 1} 波</span>
       <span class="fbar"><i class="f${tier}" style="width:${width}%"></i></span>
-      <span class="fnum">${wave.size.toLocaleString()} 人 · 情绪 ${signed(wave.mood, 2)} · ${label}</span>
+      <span class="fnum">${wave.size.toLocaleString()} 人 · 情绪 ${signed(wave.mood, 2)} · 线 ${bar.toFixed(2)} · ${label}</span>
     </div>`;
   });
   return `<div class="funnel">${rows.join('')}</div>`;

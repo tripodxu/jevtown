@@ -186,7 +186,7 @@ export async function runCheck({ send, presetId, pool, text, versionId, prices, 
       expected += expectedTone(presetId, probabilities);
     }, { sample: index === 0 });
     // `asked` against `size` shows how many answers failed batches took away; `expectedMood` is the mood over all possible draws.
-    const finished = { index, asked: wave.length, size: drawn.length, mood: mood(presetId, drawn), expectedMood: expected / Math.max(1, drawn.length), travels: travels(presetId, drawn), seconds: (performance.now() - waveStartedAt) / 1000 };
+    const finished = { index, asked: wave.length, size: drawn.length, mood: mood(presetId, drawn), expectedMood: expected / Math.max(1, drawn.length), travels: travels(presetId, drawn, index), seconds: (performance.now() - waveStartedAt) / 1000 };
     waves.push(finished);
     gathered = gatherAsked(presetId, wave.map((persona) => persona.id), reactionOf, gathered);
     onWave?.(finished, reactions);

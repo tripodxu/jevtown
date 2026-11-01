@@ -6,7 +6,7 @@ import { drawGrid, attachTooltip, drawDelta, drawReach, reachLegendInk } from '.
 import { avatarSvg } from './avatar.js';
 import { esc, stat } from './dom.js';
 import {
-  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount, AUDIENCE_ZH, AUDIENCE_STATE_ZH, audienceSayZh, CALIBRATE_ZH, calibrateSayZh, WAVE_ZH, REPORT_VIEW_ZH,
+  REACTIONS_ZH, REASONS_ZH, HOOKS_ZH, COMMENTS_ZH, SEGMENT_ZH, segmentValueZh, CHECKS_ZH, LIST_ZH, FOLLOWUP_LISTING_ZH, reportStageZh, BLOCKED_ZH, presetNoun, TERRAIN_VERDICT_ZH, TERRAIN_SAY_ZH, DELTA_SAY_ZH, directionZh, zSayZh, AWAY_ZH, awaySayZh, signed, signedCount, AUDIENCE_ZH, AUDIENCE_STATE_ZH, audienceSayZh, CALIBRATE_ZH, calibrateSayZh, WAVE_ZH, REPORT_VIEW_ZH, waveStoppedZh,
 } from './shared/labels.js';
 import { moodLine, demandChart, funnel, reportBars, fmtMs, sliceChart, waveMixChart } from './charts.js';
 import { randomBaseline, moodZ, WAVES } from './shared/feed.js';
@@ -244,7 +244,7 @@ export function wavesView(result, width) {
   const last = result.waves.at(-1);
   const fullRun = result.waves.length >= WAVES.length || (result.counters?.reach ?? 0) >= CROWD;
   const gateNote = !result.broadcast && !last?.travels && !fullRun
-    ? `<div class="hint">${esc(WAVE_ZH.gateSay)} ${esc(WAVE_ZH.stoppedSay.replace('%1', String((last?.index ?? 0) + 1)))}</div>`
+    ? `<div class="hint">${esc(WAVE_ZH.gateSay)} ${esc(waveStoppedZh(last.index, last.mood))}</div>`
     : !result.broadcast
       ? `<div class="hint">${esc(WAVE_ZH.gateSay)}</div>`
       : '';

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { exposure, exposureAll, exposureBands, firstWave, nextWave, mood, travels, WAVES, GLAD_ENOUGH, randomBaseline, moodZ } from '../public/shared/feed.js';
+import { exposure, exposureAll, exposureBands, firstWave, nextWave, mood, travels, WAVES, TRAVEL_BAR, randomBaseline, moodZ } from '../public/shared/feed.js';
 import { persona, crowd } from '../public/shared/personas.js';
 import { PRESETS } from '../public/shared/presets.js';
 import { rng, hash32 } from '../public/shared/rng.js';
@@ -84,24 +84,35 @@ test('nextWave：不再包含已到达的人', () => {
   for (const who of wave2) assert.ok(!reactions.has(who.id));
 });
 
-test('mood/travels：glad 多一截才传播，阈值是 0.1', () => {
-  assert.equal(GLAD_ENOUGH, 0.1);
-  // 1 赞 3 划走：+0.25 ≥ 0.1，传播
+test('mood/travels：强度门槛（正负都传），逐波递减', () => {
+  // 钉形状：数组本身、逐波递减（后面波受众更宽，情绪天然更平）、越界用末档。
+  assert.deepEqual(TRAVEL_BAR, [0.10, 0.05, 0.04, 0.03]);
+  for (let i = 1; i < TRAVEL_BAR.length; i++) assert.ok(TRAVEL_BAR[i] < TRAVEL_BAR[i - 1], `第 ${i + 1} 波线必须低于第 ${i} 波`);
+  // 3 赞 1 划走：+0.25 ≥ 0.10，第一波传播
   assert.ok(travels('post', ['liked', 'liked', 'liked', 'scrolled_past']));
-  assert.ok(travels('post', ['liked', 'scrolled_past', 'scrolled_past', 'scrolled_past']));
-  // 1 赞 1 反感 2 划走：净情绪 0，不传播
+  // 1 反感 3 划走：−0.25，强度同样过线——反对强烈也传（坏消息传千里）
+  assert.ok(travels('post', ['disliked', 'scrolled_past', 'scrolled_past', 'scrolled_past']));
+  // 1 赞 1 反感 2 划走：净情绪 0，平淡不传
   assert.ok(!travels('post', ['liked', 'disliked', 'scrolled_past', 'scrolled_past']));
+  // 波号选线：情绪 0.06 过第 2 波线（0.05），过不了第 1 波线（0.10）
+  const wave2 = ['liked', 'liked', 'liked', ...Array(47).fill('scrolled_past')];
+  assert.equal(mood('post', wave2), 0.06);
+  assert.ok(!travels('post', wave2, 0));
+  assert.ok(travels('post', wave2, 1));
+  // 越界波号（maxWaves 被配置压短/加长都不炸）：用末档线
+  assert.ok(travels('post', ['liked'], 99));
   assert.equal(mood('post', ['liked']), 1);
   assert.equal(mood('post', ['blocked']), -1);
 });
 
-// R29：随机基线。这轮不改传播判据（用户选择「只交证据与展示」），但把「阈值在基线之下」
-// 这件事钉成断言，免得后人以为 GLAD_ENOUGH 是「有信息」的线。
+// R29：随机基线。随机基线是 tone 表的形状（mock 世界的「没人读它」）；真 Jev 的情绪贴着 0
+// （见 docs/research/wave-baseline-report.md），与基线的分离才是「这条文字有没有反应」的信号。
+// 第一波线仍画在基线均值之下是已知取舍：闸管节奏不管真伪（2026-11-01 重标定，MEMORY 同日）。
 test('randomBaseline：均匀抽反应时的情绪均值与标准误', () => {
   const base = randomBaseline('post', 600);
   assert.ok(base.mean > 0, `随机基线为正（均匀抽到 glad 一侧），实测 ${base.mean}`);
   assert.ok(base.error > 0 && base.error < 0.1, `600 人的标准误应在 0.01 量级：${base.error}`);
-  assert.ok(GLAD_ENOUGH < base.mean, 'GLAD_ENOUGH 画在随机基线之下：这条线不是「有信息」');
+  assert.ok(TRAVEL_BAR[0] < base.mean, '第一波线画在随机基线均值之下：已知取舍，闸管节奏不管真伪');
   // 人越多越接近均值：标准误随 1/sqrt(n) 缩
   const big = randomBaseline('post', 2400);
   assert.ok(big.error < base.error / 1.5, `标准误应随人数下降：${base.error} → ${big.error}`);

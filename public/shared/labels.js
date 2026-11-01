@@ -1,5 +1,6 @@
 // 界面中文标签：把 presets.js 里的英文 id 翻译成人话。Jev 读不到这个文件，它只面向界面。
 import { INTEREST, FIELDS, AGE_GROUP, TEMPER, BUDGET, SHOP, JOB } from './vocab.js';
+import { TRAVEL_BAR } from './feed.js';
 
 /**
  * 有符号数字的唯一写法（R33）。
@@ -456,7 +457,7 @@ export const ERROR_ZH = {
   'this check is not yours': '这次检查不是这台浏览器发起的。',
   'the check is not running': '这次检查已经不在进行中，刷新页面看看结果。',
   'the check is already closing': '这一波正在收束，稍等一下再试。',
-  'this wave has no answers yet': '这一波还没有任何判定，先让它跑一会儿。',
+  'this wave has no answers yet': '这一波还没有任何判定——多半是通道临时限流，等十几秒再收波（进度不会丢）。',
   'the check is not finished yet': '检查还没跑完，跑完才能算逐句承重。',
   'this batch was already claimed, retry': '这一批被别的请求领走了，正在重试。',
   'too many report reads for this IP, retry in a minute': '刷新太频繁了，一分钟后再看这份进行中的报告。',
@@ -474,8 +475,9 @@ export function errorZh(message) {
 }
 
 /**
- * 传播门槛与全城广播的界面中文。门槛是 feed.js 的 GLAD_ENOUGH（实测钉死在那儿，
- * 这里只写显示文案；labels.test.js 钉住文案里的门槛数字与 GLAD_ENOUGH 对得上）。
+ * 传播门槛与全城广播的界面中文。门槛是 feed.js 的 TRAVEL_BAR（逐波衰减的强度线，
+ * 正负都算——爱传，骂声够大也传；平淡无波才停），这里直接从它生成数字，
+ * 单源不再靠人肉对账；labels.test.js 另钉文案形状。
  *
  * 广播模式回答的是另一个问题：「如果无限制推给全镇，谁会怎么反应」——波次照跑、
  * 账照记，只是不拿情绪当闸。它不是作弊，是把「传不传得开」和「全镇怎么读」分开问。
@@ -484,7 +486,24 @@ export const WAVE_ZH = {
   broadcastLabel: '全城广播',
   broadcastBrief: '全城广播：不看情绪门槛，%1 波跑满，%2 人读到。',
   broadcastGo: '广播继续',
-  // funnel 中间一波情绪不过线时的标注：门槛模式 = 停在这里；广播模式 = 不看门槛继续推。
-  gateSay: '传播门槛：一波的净情绪（乐见 − 反感占比）至少 +0.10，文字才传下一波。',
-  stoppedSay: '第 %1 波净情绪没到 +0.10，文字止步于此——改几个词让更多人乐见，或勾「全城广播」直接看全城反应。',
+  // funnel 的门槛规则句：逐波线直接来自 TRAVEL_BAR，数组变了文案跟着变。
+  gateSay: `传播门槛：一波的情绪强度（|乐见 − 反感| 占比）过当波线才传下一波——逐波线 ${TRAVEL_BAR.map((bar) => bar.toFixed(2)).join(' → ')}；骂声够大也一样传。`,
+  // 被门槛拦下的收束句：%1 波号、%2 本波情绪、%3 当波线、%4 差多少。调用方填数。
+  stoppedSay: '第 %1 波情绪 %2，当波线 %3 还差 %4——文字止步于此：把话写得让人更乐见或更有所谓，或勾「全城广播」直接看全城反应。',
+  // 实时监控的过线行：%1 当波线。情绪数字调用方已拼在句子里。
+  barPassSay: '（线 %1 ✓）',
+};
+
+/** 当波线的显示格式（越界用末档——maxWaves 被配置增减时文案不炸）。 */
+export const travelBarZh = (waveIndex) => (TRAVEL_BAR[waveIndex] ?? TRAVEL_BAR.at(-1)).toFixed(2);
+
+/** 被门槛拦下的完整句：波号/情绪/当波线/差值一次填齐（stoppedSay 的唯一填充处，报告与实时区共用）。 */
+export const waveStoppedZh = (waveIndex, moodValue) => {
+  const bar = TRAVEL_BAR[waveIndex] ?? TRAVEL_BAR.at(-1);
+  const gap = Math.max(0, bar - Math.abs(moodValue));
+  return WAVE_ZH.stoppedSay
+    .replace('%1', String(waveIndex + 1))
+    .replace('%2', signed(moodValue, 2))
+    .replace('%3', travelBarZh(waveIndex))
+    .replace('%4', gap.toFixed(2));
 };

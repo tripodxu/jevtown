@@ -118,15 +118,21 @@ test('COMPOSE_ZH：定价阶梯的报错文案说得清「怎么写才算对」'
   assert.ok(COMPOSE_ZH.pricesBad.includes('9, 19, 39, 79'), '报错要带一个照抄就能过的例子');
 });
 
-// 传播门槛与全城广播的文案：门槛数字写死在 feed.js 的 GLAD_ENOUGH（实测钉住不动），
-// labels 里的显示文案跟它对不上就是骗人；广播的措辞不能说「传了」——波次是推满的。
+// 传播门槛与全城广播的文案：门槛数字现在由 labels 直接从 feed.js 的 TRAVEL_BAR 生成
+// （单源 by construction），测试钉文案形状：逐波数字都出现、占位符齐全、广播措辞不说「传了」
+// ——波次是推满的。import 保留在用例旁，锁住「labels 引引擎常量」这条单源链路。
 import { WAVE_ZH } from '../public/shared/labels.js';
-import { GLAD_ENOUGH } from '../public/shared/feed.js';
+import { TRAVEL_BAR } from '../public/shared/feed.js';
 
-test('WAVE_ZH：门槛文案里的数字与 GLAD_ENOUGH 对得上，广播措辞不说「传开」', () => {
-  const gate = `+${GLAD_ENOUGH.toFixed(2)}`;
-  assert.ok(WAVE_ZH.gateSay.includes(gate), `gateSay 应含门槛 ${gate}`);
-  assert.ok(WAVE_ZH.stoppedSay.includes(gate), `stoppedSay 应含门槛 ${gate}`);
+test('WAVE_ZH：门槛文案含逐波线数字与强度语义，广播措辞不说「传开」', () => {
+  for (const bar of TRAVEL_BAR) {
+    assert.ok(WAVE_ZH.gateSay.includes(bar.toFixed(2)), `gateSay 应含逐波线 ${bar.toFixed(2)}`);
+  }
+  assert.ok(WAVE_ZH.gateSay.includes('骂声'), '强度门槛要说清反对强烈也传播');
+  for (const token of ['%1', '%2', '%3', '%4']) {
+    assert.ok(WAVE_ZH.stoppedSay.includes(token), `stoppedSay 应含占位符 ${token}（波号/情绪/线/差值）`);
+  }
+  assert.ok(WAVE_ZH.barPassSay.includes('%1'), 'barPassSay 应含当波线占位符');
   assert.ok(!WAVE_ZH.broadcastBrief.includes('传了'), '广播模式的波次是不看门槛推满的，不能说「传了」');
   assert.ok(WAVE_ZH.stoppedSay.includes('全城广播'), '止步的那句话要指出广播这条路，不然只报了坏消息');
 });

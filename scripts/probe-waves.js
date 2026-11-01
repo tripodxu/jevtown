@@ -15,10 +15,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crowd } from '../public/shared/personas.js';
 import { PRESETS, CANT_TELL } from '../public/shared/presets.js';
-import { firstWave, nextWave, mood, travels, GLAD_ENOUGH, WAVES } from '../public/shared/feed.js';
+import { firstWave, nextWave, mood, travels, TRAVEL_BAR, WAVES } from '../public/shared/feed.js';
 import { reactionRequest, openingRequest, openingAnswers } from '../public/shared/requests.js';
 import { drawReaction, expectedTone } from '../public/shared/draw.js';
-import { pickProvider, ask as askJev } from '../public/shared/jev.js';
+import { pickProvider, PROVIDERS, ask as askJev, eachLimit } from '../public/shared/jev.js';
 import { createMockAsk } from '../public/shared/mock.js';
 import { rng, hash32 } from '../public/shared/rng.js';
 
@@ -36,7 +36,7 @@ const option = (name) => {
   const at = args.indexOf(`--${name}`);
   return at >= 0 ? args[at + 1] : undefined;
 };
-const VALUE_FLAGS = new Set(['preset', 'max-waves', 'only']);
+const VALUE_FLAGS = new Set(['preset', 'max-waves', 'only', 'provider', 'concurrency']);
 const positional = args
   .filter((arg, index) => !arg.startsWith('--') && !VALUE_FLAGS.has((args[index - 1] ?? '').replace(/^--/, '')))
   .join(' ')
@@ -48,7 +48,7 @@ if (!PRESETS[presetId]) {
   process.exit(1);
 }
 if (!positional) {
-  console.error('用法：node scripts/probe-waves.js --preset listing "文本" [--real] [--only A]');
+  console.error('用法：node scripts/probe-waves.js --preset listing "文本" [--real] [--provider opencode] [--all-waves] [--only A] [--concurrency 4]');
   process.exit(1);
 }
 const text = positional;
@@ -58,10 +58,17 @@ if (only.some((key) => !'ABC'.includes(key))) {
   process.exit(1);
 }
 
-const picked = pickProvider(process.env);
+// --provider 可点名无 key 通道（opencode 是 openAccess 匿名开放，$0）——标定/复现线上默认通道用。
+const wanted = (option('provider') ?? '').trim().toLowerCase();
+if (wanted && !PROVIDERS[wanted]) {
+  console.error(`未知通道 ${wanted}（可选：${Object.keys(PROVIDERS).join(' / ')}），改用默认选择`);
+}
+const picked = PROVIDERS[wanted] ? { name: wanted, ...PROVIDERS[wanted] } : pickProvider(process.env);
 const real = args.includes('--real') && picked;
 if (args.includes('--real') && !picked) console.error('没有 key，退回 mock');
 const send = real ? (request) => askJev(picked, request) : createMockAsk();
+// --all-waves：不看闸门跑满 maxWaves，用于标定（看每波情绪全貌）。「继续/停」显示仍按现行闸。
+const allWaves = args.includes('--all-waves');
 
 const people = crowd('zh');
 const preset = PRESETS[presetId];
@@ -74,17 +81,27 @@ let requests = 0;
 
 // 同一批人只问一次：三条 arm 共用同一份答案，钱只花一遍，对照才公平。
 const answerOf = new Map();
+// 并发发批（--concurrency，默认 4）：一次全波 100 个批次，串行每个请求几十秒要跑几小时。
+// 失败语义不变：任何批次重试耗尽都算这轮探测失败（缺一批答案 mood 就不准，宁炸勿糊）。
+const CONCURRENCY = Math.max(1, Number(option('concurrency') ?? 4));
 async function askOnce(wave) {
   // 缓存命中就不再问——不查缓存等于把同一段文字问三遍。
   const fresh = wave.filter((who) => !answerOf.has(who.id));
   if (!fresh.length) return;
-  for (const batch of chunk(fresh, 100)) {
-    const result = await send(reactionRequest(presetId, text, batch));
-    usd += result.usd;
-    tokens += result.tokens;
-    requests += 1;
-    for (const who of batch) answerOf.set(who.id, result.answers[`p${who.id}`]?.probabilities ?? {});
-  }
+  const failures = [];
+  await eachLimit(
+    chunk(fresh, 100),
+    CONCURRENCY,
+    async (batch) => {
+      const result = await send(reactionRequest(presetId, text, batch));
+      usd += result.usd;
+      tokens += result.tokens;
+      requests += 1;
+      for (const who of batch) answerOf.set(who.id, result.answers[`p${who.id}`]?.probabilities ?? {});
+    },
+    (batch, error) => failures.push(error),
+  );
+  if (failures.length) throw failures[0];
 }
 
 // -- 三条 arm 的「这个人会怎样」 ----------------------------------------------------------------
@@ -178,7 +195,7 @@ async function runArm(name, of) {
     const info = readWave(wave, of);
     history.push({ index: index + 1, asked: wave.length, ...info });
     for (const [i, who] of wave.entries()) reached.set(who.id, info.drawn[i]);
-    if (!travels(presetId, info.drawn)) break;
+    if (!allWaves && !travels(presetId, info.drawn, index)) break;
     wave = nextWave(people, reached, openingScores, presetId, index + 1, random);
   }
   return { name, reached: reached.size, waves: history.length, history };
@@ -195,7 +212,7 @@ const opening = await (async () => {
 const openingScores = opening.scores;
 
 console.log(`【${presetId}】${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`);
-console.log(`通道：${real ? `真实 ${picked.name}` : 'mock'} · 阈值 GLAD_ENOUGH = ${GLAD_ENOUGH}`);
+console.log(`通道：${real ? `真实 ${picked.label ?? picked.name}` : 'mock'} · 阈值 TRAVEL_BAR = [${TRAVEL_BAR.join(', ')}]${allWaves ? ' · --all-waves：不看闸门跑满，继续/停 仍按现行闸显示' : ''}`);
 // 随机基线：均匀抽反应时的情绪期望，就是这条线。mood 落在它附近 = 这一波没说明什么。
 console.log(`随机基线：情绪 ${NULL.mean >= 0 ? '+' : ''}${NULL.mean.toFixed(3)} ± ${NULL.sd.toFixed(3)}（每波标准误 ${(NULL.sd / Math.sqrt(600)).toFixed(3)} @600 人）`);
 if (opening.blocked.length) {
@@ -224,7 +241,7 @@ for (const arm of arms) {
     const sign = (n) => (n >= 0 ? '+' : '');
     console.log(
       `  第 ${wave.index} 波 ${wave.asked} 人：情绪 ${sign(wave.mood)}${wave.mood.toFixed(3)}` +
-        `（期望 ${sign(wave.expected)}${wave.expected.toFixed(3)}）→ ${travels(presetId, wave.drawn) ? '继续' : '停'} · ` +
+        `（期望 ${sign(wave.expected)}${wave.expected.toFixed(3)}）→ ${travels(presetId, wave.drawn, wave.index - 1) ? '继续' : '停'} · ` +
         `z ${sign(wave.z)}${wave.z.toFixed(2)} · 停住 ${(wave.stopped * 100).toFixed(0)}%` +
         `（其中乐见 ${sign(wave.gladAmongStopped)}${wave.gladAmongStopped.toFixed(2)}）· 转传 ${(wave.spread * 100).toFixed(0)}% · ` +
         `拿不准 ${(wave.hollow * 100).toFixed(0)}% · ${top}`,
