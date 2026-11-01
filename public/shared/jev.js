@@ -34,6 +34,18 @@ export const PROVIDERS = {
     usd: () => 0,
     openAccess: true,
   },
+  // 站方自建中转（2026-11-01 接入，与站点同根域的反代）：System One 形状与 TypeSafe 官方
+  // API 相同，走认证流量。接它的原因：Zen 免费匿名档实测 451（端点已死）、TypeSafe 官方
+  // 对本地区域封锁（451 not available in your region）——这条中转是当前的站点默认通道，
+  // key 由站方以 Worker secret LOGICC_API_KEY 持有（`npx wrangler secret put`，绝不入库）。
+  // 记账暂按 TypeSafe 牌价估；中转若另有一套计费口径，改这里。
+  logicc: {
+    label: 'Logicc 中转',
+    keyName: 'LOGICC_API_KEY',
+    url: 'https://jev.logicc.top/v1/systemone',
+    model: 'jev-1.13.0',
+    usd: (usage) => (usage?.input_tokens ?? 0) * TYPESAFE_USD_PER_TOKEN,
+  },
 };
 
 /**

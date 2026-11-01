@@ -63,7 +63,9 @@ const wanted = (option('provider') ?? '').trim().toLowerCase();
 if (wanted && !PROVIDERS[wanted]) {
   console.error(`未知通道 ${wanted}（可选：${Object.keys(PROVIDERS).join(' / ')}），改用默认选择`);
 }
-const picked = PROVIDERS[wanted] ? { name: wanted, ...PROVIDERS[wanted] } : pickProvider(process.env);
+const picked = PROVIDERS[wanted]
+  ? { name: wanted, ...PROVIDERS[wanted], apiKey: process.env[PROVIDERS[wanted].keyName] }
+  : pickProvider(process.env);
 const real = args.includes('--real') && picked;
 if (args.includes('--real') && !picked) console.error('没有 key，退回 mock');
 const send = real ? (request) => askJev(picked, request) : createMockAsk();

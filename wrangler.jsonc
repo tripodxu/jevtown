@@ -14,10 +14,11 @@
   "vars": {
     // 文本最多传几波：1 = 只有第一波 600 人，4 = 全城。
     "CROWD_MAX_WAVES": "4",
-    // 2026-10-07：默认通道 = OpenCode Zen 免费档（jev-1.13-free，匿名可用、零花费），
-    // 访客不填 key 也有真实 Jev；BYOK 头与站方 secret（OPENCODE_API_KEY，可选，更稳）
-    // 都优先于它。本地开发与测试的 mock 由 .dev.vars 的 JEV_PROVIDER=mock 决定。
-    "JEV_PROVIDER": "opencode"
+    // 2026-11-01：默认通道 = 站方自建中转 Logicc（jev.logicc.top，System One 形状与
+    // TypeSafe 相同）——Zen 免费匿名档实测 451（端点已死）、TypeSafe 官方对本地区域封锁。
+    // 通道 key 由站方以 Worker secret LOGICC_API_KEY 持有（wrangler secret put，绝不入库）；
+    // 访客 BYOK 头仍优先于它。本地开发与测试的 mock 由 .dev.vars 的 JEV_PROVIDER=mock 决定。
+    "JEV_PROVIDER": "logicc"
   },
   "observability": { "enabled": true }
 }

@@ -277,17 +277,18 @@
 
   <dialog id="settings" aria-labelledby="settingsTitle">
     <h2 id="settingsTitle">Jev 通道设置</h2>
-    <p class="hint">不填即走站点免费通道（真实 Jev，零花费）。填自己的 key 即刻切换：key 只存在本浏览器 localStorage、随每个请求发给本 Worker 使用，不落库不打日志；站方不持有任何 key（零 secret）。</p>
+    <p class="hint">不填即走站点默认通道（真实 Jev，站方中转，key 由站方持有）。填自己的 key 即刻切换：key 只存在本浏览器 localStorage、随每个请求发给本 Worker 使用，不落库不打日志。</p>
     <div class="row">
       <label for="providerSel">通道</label>
       <select id="providerSel">
-        <!-- 第一项 = 不发通道头（站点默认免费通道）。打开设置就默认选中 mock 是个陷阱：
+        <!-- 第一项 = 不发通道头（站点默认通道）。打开设置就默认选中 mock 是个陷阱：
              什么都不改点一下「保存」，就把自己静默切到了离线假答案。 -->
-        <option value="">站点默认（免费通道，不填 key）</option>
+        <option value="">站点默认（站方中转，不填 key）</option>
         <option value="mock">mock（离线假答案，不花钱）</option>
         <option value="typesafe">TypeSafe 官方 API（api.typesafe.ai）</option>
         <option value="openrouter">OpenRouter Decisions API</option>
         <option value="opencode">OpenCode Zen（jev-1.13-free，限时免费）</option>
+        <option value="logicc">Logicc 中转（jev.logicc.top，需站方发的 key）</option>
       </select>
     </div>
     <div class="row">
@@ -312,7 +313,7 @@
 
   <footer>
     引擎与架构来自 <a href="https://github.com/gaborishka/jevtown" target="_blank" rel="noopener">gaborishka/jevtown</a>（MIT）。
-    决策模型：<a href="https://typesafe.ai" target="_blank" rel="noopener">Jev</a>，TypeSafe 的 System One。默认通道为 OpenCode Zen 免费档（限时）。
+    决策模型：<a href="https://typesafe.ai" target="_blank" rel="noopener">Jev</a>，TypeSafe 的 System One。默认通道为站方中转 Logicc（真实 Jev）。
   </footer>
 
   <script type="module" src="/app.js"></script>
