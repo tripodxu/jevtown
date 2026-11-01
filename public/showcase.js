@@ -1,6 +1,7 @@
 // 首页示例：两条真实检查的存档，纯浏览器回放。访客先看到小镇会做什么，再决定写不写。
-// 懒渲染（R22）：一张回放卡 = 一份完整报告（数据 ~60ms + DOM/canvas），两张在首页加载时
-// 白付 ~120ms+ 而它们沉在折叠线下——滚到附近才渲染，rootMargin 300px 预渲染保证无跳变。
+// 示例区是原生 details 抽屉（默认收起）+ 懒渲染（R22）：一张回放卡 = 一份完整报告
+// （数据 ~60ms + DOM/canvas），收起时内容不进布局、IntersectionObserver 不会命中，
+// 展开且滚到附近（rootMargin 300px）才渲染——抽屉与懒渲染互赢，未展开零成本。
 import { renderCheck } from './render.js';
 import { replayToView } from './shared/replay.js';
 

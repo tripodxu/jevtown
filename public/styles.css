@@ -1861,7 +1861,8 @@ footer a:hover { color: var(--text); border-bottom-color: var(--text); }
 }
 
 .advanced-options > summary,
-.live-log > summary {
+.live-log > summary,
+.showcase-drawer > summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1876,10 +1877,12 @@ footer a:hover { color: var(--text); border-bottom-color: var(--text); }
 }
 
 .advanced-options > summary::-webkit-details-marker,
-.live-log > summary::-webkit-details-marker { display: none; }
+.live-log > summary::-webkit-details-marker,
+.showcase-drawer > summary::-webkit-details-marker { display: none; }
 
 .advanced-options > summary::after,
-.live-log > summary::after {
+.live-log > summary::after,
+.showcase-drawer > summary::after {
   content: "+";
   font-family: var(--font-mono);
   font-size: var(--fs-lg);
@@ -1888,10 +1891,12 @@ footer a:hover { color: var(--text); border-bottom-color: var(--text); }
 }
 
 .advanced-options[open] > summary::after,
-.live-log[open] > summary::after { content: "−"; }
+.live-log[open] > summary::after,
+.showcase-drawer[open] > summary::after { content: "−"; }
 
 .advanced-options > summary:hover,
-.live-log > summary:hover { color: var(--text); }
+.live-log > summary:hover,
+.showcase-drawer > summary:hover { color: var(--text); }
 
 .advanced-hint { font-size: var(--fs-2xs); }
 
@@ -1969,3 +1974,23 @@ footer a:hover { color: var(--text); border-bottom-color: var(--text); }
 
 /* 速览模式下把次级小节连同正文一起收起：一次纯展示切换（数据仍在 DOM 里）。 */
 [data-report-mode="quick"] [data-report-detail] { display: none !important; }
+
+/* ---------- 存档示例抽屉：整块收进原生 details，默认收起 ---------- */
+
+/* h2 放进 summary 保住文档大纲；.plate > h2 的直接子选择器够不到它，这里补齐同一套字。 */
+.showcase-drawer > summary h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  color: var(--text);
+  text-wrap: balance;
+}
+
+.showcase-hint { font-size: var(--fs-2xs); }
+
+.showcase-body {
+  padding-top: var(--s-3);
+  animation: instrument-reveal var(--dur-3) var(--ease-out) both;
+}
