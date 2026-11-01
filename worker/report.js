@@ -142,8 +142,10 @@ async function showPost(id, env, url, request = null) {
   const frozen = post.state !== 'running';
   const versionId = `${id}.${v}`;
   const scores = readJson(version.scores);
-  const bands = scores ? derivedFor(versionId, frozen, () => exposureBands(presetId, keys, scores, bytes, people)) : null;
-  const voices = derivedFor(versionId, frozen, () =>
+  // 缓存键必须带派生种类前缀：两类派生（十档/声音）共用一张以键为准的表，裸 versionId
+  // 会让后算的拿到先算的缓存——voices 曾因此整节变成 bands（验收 2026-10-30 抓到）。
+  const bands = scores ? derivedFor(`bands:${versionId}`, frozen, () => exposureBands(presetId, keys, scores, bytes, people)) : null;
+  const voices = derivedFor(`voices:${versionId}`, frozen, () =>
     voicesOf(id, presetId, bytes).map((voice) => ({
       ...voice,
       who: personView(people[voice.id]),

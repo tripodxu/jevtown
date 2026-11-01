@@ -84,6 +84,8 @@ function terrainFor(presetId, keys, bytes, versionId, frozen) {
  * 重复查看（刷新、多人看、对比区回拉所选版本）不再现算。voices 全城一次要对每个反应者
  * 做 FNV 哈希（约 1–2ms），十档一趟约 2.5ms，是重复访问剩余的大头；首访照算不省。
  * 缓存对象直接进响应（只读，JSON.stringify 只读不写），版本号只增不复用 ⇒ 无失效路径。
+ * **键 = 派生种类前缀 + 版本号**（`bands:<id>` / `voices:<id>`）：所有调用方共用这一张表，
+ * 裸 versionId 会让后算的派生拿到先算的缓存（voices 曾因此整节变成 bands）。
  */
 const derivedCache = new Map();
 const DERIVED_CACHE_MAX = 200;

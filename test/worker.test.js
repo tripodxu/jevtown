@@ -184,6 +184,11 @@ test('冻结报告重复拉取：十档/声音/地形逐字相同（派生缓存
   assert.equal(JSON.stringify(a.bands), JSON.stringify(b.bands), '十档两拉不一致');
   assert.equal(JSON.stringify(a.voices), JSON.stringify(b.voices), '人格声音两拉不一致');
   assert.equal(JSON.stringify(a.terrain), JSON.stringify(b.terrain), '地形两拉不一致');
+  // 形状本身也要钉：两拉一致对「第一次就算错了」免疫——voices 曾因 derivedFor 撞键
+  // 整节变成 bands（对象），两拉照样逐字相同。数组 + 与十档不同 + 带人格档案，缺一就红。
+  assert.ok(Array.isArray(a.voices) && a.voices.length > 0, '人格声音应是数组且有内容');
+  assert.ok(a.voices[0].who && a.voices[0].who.name, '人格声音带人格档案（who）');
+  assert.notEqual(JSON.stringify(a.voices), JSON.stringify(a.bands), '人格声音不得与十档是同一份数据');
 });
 
 // 商品的定价阶梯是帖子的属性：改版不重报 prices 时沿用上一版，显式传入才覆盖。
