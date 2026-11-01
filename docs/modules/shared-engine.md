@@ -24,8 +24,9 @@ runCheck({ send, presetId, pool, text, versionId, prices, maxWaves, onWave, bloc
 - 开局打分（约 55 类人群）→ 审核（0.5 不进公共流 / 0.85 拒发）→ 逐波传播。
 - `mayGoOn` / `mayFollowUp` / `mayAsk` 是**回调闸门**：Worker 用它们落实限额与预算，
   引擎本身不感知平台。改传播逻辑时不要绕过闸门直接扩批。
-- 波次队列：`feed.js` 的 `WAVES`（600 → 1500 → 3000 → 其余），`GLAD_ENOUGH = 0.1`
-  是净情绪阈值；`waveReach` 决定每波到达人数。
+- 波次队列：`feed.js` 的 `WAVES`（600 → 1500 → 3000 → 其余）；`TRAVEL_BAR = [0.10, 0.05, 0.04, 0.03]`
+  是逐波衰减的强度门槛（|净情绪| 过当波线才传下一波，正负都算，2026-11-01 真通道重标定）；
+  `waveReach` 决定每波到达人数。
 
 ## 概率 → 反应：`draw.js`
 
@@ -37,7 +38,7 @@ runCheck({ send, presetId, pool, text, versionId, prices, maxWaves, onWave, bloc
 ## 传播：`feed.js`
 
 - `firstWave` / `nextWave`：谁进入下一波（曝光分 × 随机）。
-- `mood` / `travels`：净情绪 ≥ 0.1 才继续传播。
+- `mood` / `travels`：|净情绪| ≥ 当波线（`TRAVEL_BAR[waveIndex]`）才继续传播——强烈反对也传播。
 - `gatherAsked` / `asking` / `whoIsAsked`：收尾提问的加权聚合
   （`ASK_WEIGHT=100`、`SORRY_WHY=40`、`MIN_ASKED=10`）。
 - `exposureAll` / `exposureBands`：Jev 开局那份打分怎么排全城（报告里的「十档对账」）。
