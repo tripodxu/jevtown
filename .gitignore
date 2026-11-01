@@ -10,6 +10,10 @@ output/
 # 上游调研原始材料（约 0.8MB，蒸馏结论见 docs/research/，本地保留不入库）
 _research_raw/
 
+# 本地工具状态目录（不入库）
+.dsh-prompt-setting/
+.workbuddy/
+
 # 系统/编辑器杂项
 .DS_Store
 Thumbs.db
