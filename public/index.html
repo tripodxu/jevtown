@@ -126,7 +126,7 @@
           <span class="hint text-count" id="textCount"></span>
         </div>
         <div class="row between compose-submit">
-          <span class="hint" id="hint">不填 key 也走真实模型：站点免费通道（OpenCode Zen 免费档，限时零花费）；Key… 里可换自己的通道，mock 是离线假答案。</span>
+          <span class="hint" id="hint">不填 key 也走真实模型：站点默认通道（站方中转 Logicc）；Key… 里可换自己的通道，mock 是离线假答案。</span>
           <button id="go" type="submit">开始观测
             <svg class="go-arrow" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path d="M2.5 8h9M8 4.5 11.5 8 8 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
@@ -256,6 +256,80 @@
       <h2>最近的小镇检查</h2>
       <ul id="feed" class="feed"></ul>
     </section>
+
+    <!-- 传播阶梯（2026-11-01 真通道实测，样本即正式站存档，深链可复看完整报告）：
+         纯静态 HTML，零 JS 零请求；原生 details 默认收起，不与上方动态区抢戏。 -->
+    <details id="ladder" class="plate showcase-drawer">
+      <summary>
+        <h2>传播阶梯：同一件事，三种命运</h2>
+        <span class="hint showcase-hint">同一条消息，只换写法 · 真人小镇实测 · 展开查看</span>
+      </summary>
+      <div class="showcase-body">
+        <p class="hint">下面每份样本都在这个小镇真实跑过全程：格子是 Jev 的逐波情绪判定（✓ 过当波线继续传，✗ 止步），条长 = 传到的人数。「看报告」回到那份检查的完整现场。</p>
+
+        <ol class="ladder">
+          <li class="rung">
+            <div class="rung-line">
+              <span class="rung-depth">止步第 1 波 · 600 人</span>
+              <span class="rung-bar" aria-hidden="true"><i style="width:6%"></i></span>
+              <span class="rung-reach">600</span>
+            </div>
+            <div class="rung-body">
+              <span class="rung-name">平淡通知体</span>
+              <p class="rung-text">「小区快递驿站双十一期间包裹量较大，取件可能需要排队，请业主错峰取件。」</p>
+              <div class="rung-mood">
+                <span class="mood-cell miss" title="第 1 波 +0.05，未过线 0.10">+0.05 ✗</span>
+              </div>
+            </div>
+            <a class="rung-link" href="https://jevtown.logicc.top/?post=0f2a5d4b6e">看报告 →</a>
+          </li>
+
+          <li class="rung">
+            <div class="rung-line">
+              <span class="rung-depth">止步第 2 波 · 2,100 人</span>
+              <span class="rung-bar" aria-hidden="true"><i style="width:21%"></i></span>
+              <span class="rung-reach">2,100</span>
+            </div>
+            <div class="rung-body">
+              <span class="rung-name">交易窄核体 <small>（转让帖：核心买家第 1 波就位，外圈无感）</small></span>
+              <p class="rung-text">「iPhone 13，128G，电池 86%，无维修，1400 元，可小刀，地铁 10 号线当面交易。」</p>
+              <div class="rung-mood">
+                <span class="mood-cell pass" title="第 1 波 +0.19，过线">+0.19 ✓</span>
+                <span class="mood-cell miss" title="第 2 波 +0.01，未过线 0.05">+0.01 ✗</span>
+              </div>
+            </div>
+            <a class="rung-link" href="https://jevtown.logicc.top/?post=7659a37033">看报告 →</a>
+          </li>
+
+          <li class="rung">
+            <div class="rung-line">
+              <span class="rung-depth">传遍全城 · 10,000 人</span>
+              <span class="rung-bar" aria-hidden="true"><i style="width:100%"></i></span>
+              <span class="rung-reach">10,000</span>
+            </div>
+            <div class="rung-body">
+              <span class="rung-name">真实故事体</span>
+              <p class="rung-text">「今天在驿站看见一位老奶奶踮着脚在几百个包裹里翻了一个多小时，只因为她不会用取件码。我帮她找到了件，顺手把整面货架按日期重新码好。谁家老人不会取件的，告诉我，我下班顺路帮取。」</p>
+              <div class="rung-mood">
+                <span class="mood-cell pass" title="第 1 波 +0.56">+0.56 ✓</span>
+                <span class="mood-cell pass" title="第 2 波 +0.44">+0.44 ✓</span>
+                <span class="mood-cell pass" title="第 3 波 +0.39">+0.39 ✓</span>
+                <span class="mood-cell pass" title="第 4 波 +0.33">+0.33 ✓</span>
+              </div>
+            </div>
+            <a class="rung-link" href="https://jevtown.logicc.top/?post=b750ee23ea">看报告 →</a>
+            <!-- 同档的另外三种写法（实测同样走满全城）：收进一行小注，不另起大卡。 -->
+            <ul class="rung-siblings">
+              <li><a href="https://jevtown.logicc.top/?post=dbb771dc98">利他行动体 +0.42 → +0.18 ✓</a></li>
+              <li><a href="https://jevtown.logicc.top/?post=b0521861a0">具体干货体 +0.30 → +0.15 ✓</a></li>
+              <li><a href="https://jevtown.logicc.top/?post=6a3da2495b">暖人物体 +0.24 → +0.21 ✓</a></li>
+            </ul>
+          </li>
+        </ol>
+
+        <p class="ladder-moral hint">写法口诀：<b>具体细节 · 利他行动 · 真实故事</b>，占一样就能过线，叠加更热；平淡通知与干巴抱怨止步第 1 波；纯愤怒不够——Jev 只认「有用」的情绪；想让帖子圈内地爆、圈外无感，就写成交易帖。</p>
+      </div>
+    </details>
 
     <!-- 存档示例：原生 details 抽屉，默认收起。两张回放卡各是一份完整报告（R22 懒渲染），
          收起时不进布局、展开滚到附近才渲染——与抽屉天然互赢，首页不再被两份长报告占满。 -->

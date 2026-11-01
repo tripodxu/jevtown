@@ -1567,6 +1567,7 @@ footer a:hover { color: var(--text); border-bottom-color: var(--text); }
   .hero { animation-delay: 0.06s; }
   #compose { animation-delay: 0.12s; }
   #feedSection { animation-delay: 0.18s; }
+  #ladder { animation-delay: 0.21s; }
   #showcase { animation-delay: 0.24s; }
 
   @keyframes rise {
@@ -1993,4 +1994,110 @@ footer a:hover { color: var(--text); border-bottom-color: var(--text); }
 .showcase-body {
   padding-top: var(--s-3);
   animation: instrument-reveal var(--dur-3) var(--ease-out) both;
+}
+
+/* ---------- 传播阶梯：同主题实测样本，条长 = 传到人数，格子 = 逐波情绪 ---------- */
+
+.ladder { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); }
+
+.rung {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: var(--s-3) var(--s-4);
+  transition: background-color var(--dur-2);
+}
+
+.rung:hover { background: var(--card-2); }
+
+/* 行 1：深度标签 · 条（宽度=reach，与漏斗同语） · 人数。条轨用发丝线，填充走 accent。 */
+.rung-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-bottom: var(--s-2);
+}
+
+.rung-depth { font-size: var(--fs-sm); color: var(--text); font-weight: 600; white-space: nowrap; }
+
+.rung-bar {
+  flex: 1 1 120px;
+  min-width: 60px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--hairline);
+  overflow: hidden;
+}
+
+.rung-bar i { display: block; height: 100%; border-radius: var(--r-pill); background: var(--accent); }
+
+.rung-reach { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+
+.rung-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-2) var(--s-4); align-items: start; }
+
+.rung-name { font-size: var(--fs-sm); color: var(--muted); }
+.rung-name small { color: var(--muted); font-weight: 400; }
+
+.rung-text { margin: 0; font-size: var(--fs-ui); line-height: 1.7; color: var(--text); grid-column: 1; }
+
+/* 逐波情绪格：颜色语义交给小圆点（主题令牌），文字保持主题安全对比度。 */
+.rung-mood { display: flex; gap: var(--s-2); flex-wrap: wrap; align-items: center; grid-column: 2; grid-row: 2; }
+
+.mood-cell {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-pill);
+  padding: 2px var(--s-2);
+  white-space: nowrap;
+}
+
+.mood-cell::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
+.mood-cell.pass::before { background: var(--face-glad); }
+.mood-cell.miss::before { background: var(--face-sorry); }
+
+.rung-link {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  font-size: var(--fs-sm);
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--dur-2);
+}
+
+.rung-link:hover { border-bottom-color: var(--accent); }
+
+/* 同档其他写法：一行小注，收住不铺开。 */
+.rung-siblings {
+  list-style: none;
+  margin: var(--s-2) 0 0;
+  padding: var(--s-2) 0 0;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-4);
+  grid-column: 1 / -1;
+}
+
+.rung-siblings a { font-size: var(--fs-xs); color: var(--muted); text-decoration: none; }
+.rung-siblings a:hover { color: var(--accent); }
+
+.ladder-moral { margin: var(--s-4) 0 0; padding-top: var(--s-3); border-top: 1px solid var(--hairline); }
+.ladder-moral b { color: var(--text); font-weight: 600; }
+
+@media (max-width: 720px) {
+  .rung-body { grid-template-columns: 1fr; }
+  .rung-mood { grid-column: 1; grid-row: auto; }
+  .rung-link { grid-column: 1; grid-row: auto; justify-self: start; }
 }
