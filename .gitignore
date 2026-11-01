@@ -13,6 +13,7 @@ _research_raw/
 # 本地工具状态目录（不入库）
 .dsh-prompt-setting/
 .workbuddy/
+.zcode/
 
 # 系统/编辑器杂项
 .DS_Store
