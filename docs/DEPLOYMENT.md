@@ -65,6 +65,16 @@ VPS 中转），未实施。
       `jev.logicc.top/v1/systemone`、设置面板含 `value="logicc"`；线上端到端——开局
       `provider = logicc`、600 人批次判定完成、平淡帖 `mood 0 → endedBy: gate`
       （强度闸区分度线上复验 ✓）。
+- [x] **D1 写配额事故与护栏（2026-11-01，版本 `9ce73760` 起）**：当日 D1 写入 13.7 万行
+      超免费档 10 万/日（`npx wrangler d1 insights` 实测），98% 来自 reactions 逐人行
+      INSERT（含 `idx_reactions_wave` 索引，每人 ≈ 3 行计量），约 4.5 万人判定——其中
+      ~4.3 万是当日在正式站跑的端到端验证（阶梯 6 帖 + 冒烟）。**验证纪律（由此立）**：
+      真通道全流程验证一律跑本地——`.dev.vars` 临时改 `JEV_PROVIDER=logicc` 并加
+      `LOGICC_API_KEY=<key>`，`npm run dev` 后照常驱动，判定走真实 Jev、落库在本地
+      miniflare D1，零线上配额；用完改回 `mock`。正式站只做 ≤1 波的小冒烟。
+      护栏：`CHECK_DAILY_LIMIT` 生产 20 → 10（wrangler.jsonc，注释含最坏情形算术）。
+      结构性根治（reactions 逐人行 → 按批写字节进 versions，写入 ÷100）是 P1 提案，
+      见 MEMORY 同日条目，未实施。
 - [ ] 定期 `npx wrangler d1 export`（D1 无自动备份）。
 
 ## 密钥（按场景）

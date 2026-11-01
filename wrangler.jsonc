@@ -18,7 +18,12 @@
     // TypeSafe 相同）——Zen 免费匿名档实测 451（端点已死）、TypeSafe 官方对本地区域封锁。
     // 通道 key 由站方以 Worker secret LOGICC_API_KEY 持有（wrangler secret put，绝不入库）；
     // 访客 BYOK 头仍优先于它。本地开发与测试的 mock 由 .dev.vars 的 JEV_PROVIDER=mock 决定。
-    "JEV_PROVIDER": "logicc"
+    "JEV_PROVIDER": "logicc",
+    // 2026-11-01：每 IP 日闸 20 → 10。免费档 D1 写配额 10 万行/日，一帖满城 ≈ 1 万行
+    // reactions（含索引计量 ≈ 3 万）——新传播闸让热帖更常跑满后，20 的最坏情形（单 IP
+    // 全热帖）= 60 万计量写，是配额的 6 倍；10 压到 3 倍内，正常游玩（几帖/日）无感。
+    // 本地开发与测试环回豁免，不受影响。根治要 reactions 逐人行改按批写字节（MEMORY 同日提案）。
+    "CHECK_DAILY_LIMIT": "10"
   },
   "observability": { "enabled": true }
 }
