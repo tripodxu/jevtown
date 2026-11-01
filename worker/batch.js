@@ -1,8 +1,9 @@
 // GET /api/batch：一批 100 人一道 Choice 题；原子认领制（并发只有一个成功）。
-import { persona, personaLine } from '../public/shared/personas.js';
+import { persona, personaLine, CROWD } from '../public/shared/personas.js';
 import { PRESETS, CANT_TELL } from '../public/shared/presets.js';
 import { reactionRequest, questionId } from '../public/shared/requests.js';
 import { drawReaction } from '../public/shared/draw.js';
+import { decodeBytes, encodeBytes } from '../public/shared/bytes.js';
 import { PER_REQUEST, loadPost, loadVersion, authorOk, providerOf, addSpend, json, fail, today, round4 } from './common.js';
 
 // -- GET /api/batch：问 Jev 一批人 ---------------------------------------------
@@ -56,27 +57,36 @@ async function runBatch(url, request, env) {
   // 决策样本：只采第一波的第一批（曝光最靠前的人），留存 Jev 读到的原句与它给出的分布。
   let decisionSamples = null;
   const drawnPairs = [];
-  const statements = batch.map((pid, index) => {
+  for (let index = 0; index < batch.length; index++) {
     const probabilities = answers[questionId(people[index])]?.probabilities ?? {};
-    const reaction = drawReaction(probabilities, pool, pid, versionId) ?? CANT_TELL;
-    drawnPairs.push({ id: pid, reaction });
+    const reaction = drawReaction(probabilities, pool, batch[index], versionId) ?? CANT_TELL;
+    drawnPairs.push({ id: batch[index], reaction });
     if (start === 0 && !version.decisions && decisionSamples?.length !== 10) {
       (decisionSamples ??= []).push({
-        id: pid,
+        id: batch[index],
         line: personaLine(people[index], PRESETS[presetId]),
         ask: PRESETS[presetId].ask,
         probabilities,
         reaction,
       });
     }
-    return env.DB.prepare('INSERT INTO reactions (post, number, id, wave, reaction) VALUES (?, ?, ?, ?, ?)')
-      .bind(id, v, pid, plan.wave, reaction);
-  });
+  }
+  // 判定按批合并进 looks 字节（每人一位，1 = 反应序号 + 1），取代逐人 INSERT：
+  // D1 写计量从每人 3 行（表行 + PK + 波次索引）降到每批 1 行，满城一帖 ≈ 3 万 → ≈ 250。
+  // 2026-11-01 起 reactions 表不再新增行（旧帖的历史行仅供结算兼容读与删除清理）。
+  // 本批人在 plan.history 里去重过、上游 CAS 认领保证同时只有一批在写，合并无冲突。
+  const keys = Object.keys(PRESETS[presetId].reactions);
+  const bytes = version.looks ? decodeBytes(version.looks) : new Uint8Array(CROWD);
+  for (const { id: pid, reaction } of drawnPairs) {
+    const index = keys.indexOf(reaction);
+    bytes[pid] = index >= 0 ? index + 1 : 0;
+  }
+  const statements = [
+    env.DB.prepare('UPDATE versions SET looks = ?, usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
+      .bind(encodeBytes(bytes), round4(usd), tokens, id, v),
+  ];
   if (decisionSamples) statements.push(env.DB.prepare('UPDATE versions SET decisions = ? WHERE post = ? AND number = ?').bind(JSON.stringify(decisionSamples), id, v));
   statements.push(
-    // answered 已在认领时推进，这里只累加花费与 tokens。
-    env.DB.prepare('UPDATE versions SET usd = usd + ?, tokens = tokens + ? WHERE post = ? AND number = ?')
-      .bind(round4(usd), tokens, id, v),
     addSpend(env.DB, { post: id, number: v, stage: `wave${plan.wave}`, n: start, usd, tokens, ms, day: today() }),
   );
   await env.DB.batch(statements);

@@ -73,8 +73,9 @@ VPS 中转），未实施。
       `LOGICC_API_KEY=<key>`，`npm run dev` 后照常驱动，判定走真实 Jev、落库在本地
       miniflare D1，零线上配额；用完改回 `mock`。正式站只做 ≤1 波的小冒烟。
       护栏：`CHECK_DAILY_LIMIT` 生产 20 → 10（wrangler.jsonc，注释含最坏情形算术）。
-      结构性根治（reactions 逐人行 → 按批写字节进 versions，写入 ÷100）是 P1 提案，
-      见 MEMORY 同日条目，未实施。
+      结构性根治**同日落地**（reactions 逐人行 → 按批写字节进 versions.looks）：本地实测
+      满城帖 reactions 行增量 = 0，读路径全面改 looks × plan.history 推导，旧行查询保留
+      为旧帖兼容——详见 MEMORY 同日条目第 4 点。
 - [ ] 定期 `npx wrangler d1 export`（D1 无自动备份）。
 
 ## 密钥（按场景）

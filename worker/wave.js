@@ -39,10 +39,15 @@ async function closeWave(url, request, env) {
   };
   try {
     // 空波门：当前波次没有任何回答就不许收——否则 travels([]) 为 false 会直接走收尾、跳过整个波次。
+    // 判定看两处：looks 字节（2026-11-01 起判定按批合并在这里）× 本波名单；looks 里没有
+    // 再查旧逐人行（只可能是升级前开跑、停在半波的旧帖——新帖此查询恒空，读配额无压力）。
     const version = await loadVersion(env.DB, id, v);
-    const wave = readJson(version.plan, '{}').wave;
-    const { results: answered } = await env.DB.prepare('SELECT 1 FROM reactions WHERE post = ? AND number = ? AND wave = ? LIMIT 1').bind(id, v, wave).all();
-    if (!answered.length) {
+    const plan = readJson(version.plan, '{}');
+    const wave = plan.wave;
+    const looksBytes = version.looks ? decodeBytes(version.looks) : null;
+    const answered = (plan.history?.[String(wave)] ?? []).some((pid) => looksBytes?.[pid]) ||
+      Boolean(await env.DB.prepare('SELECT 1 FROM reactions WHERE post = ? AND number = ? AND wave = ? LIMIT 1').bind(id, v, wave).first());
+    if (!answered) {
       await release();
       return fail('this wave has no answers yet', 409);
     }
@@ -67,29 +72,40 @@ async function settleWave(env, post, id, v, request, version) {
 
   const waveIndex = plan.wave;
   const order = plan.history[String(waveIndex)];
+  // 本波判定看两处（2026-11-01 起新判定按批合并在 looks 字节里；逐人行只剩升级前旧帖）：
+  // 行查询保留只为兼容旧帖——新帖恒命中 0 行，读配额无压力（500 万/日 vs 每帖 ≤1 万行）。
+  const keys = Object.keys(preset.reactions);
   const { results: waveRows } = await env.DB.prepare('SELECT id, reaction FROM reactions WHERE post = ? AND number = ? AND wave = ?')
     .bind(id, v, waveIndex)
     .all();
-  const drawn = waveRows.map((row) => row.reaction);
-  const waveMood = mood(presetId, drawn);
-  const waveTravels = travels(presetId, drawn, waveIndex);
-  const waveInfo = { index: waveIndex, asked: order.length, size: drawn.length, mood: round2(waveMood), travels: waveTravels };
-
-  // reached（pid → reaction）从上一波收波落下的 looks 快照起步，只把本波 reactions 合并进来
-  // ——R25 把读报告从 1 万行降到 1 行，这里把同一思路搬到写侧（收波每波都要付的全量读）。
-  // looks 为空才全量读一次兜底：第一波收波本就等于全量；R25 之前就在 running 的旧帖也走
-  // 这条路自愈。合并幂等（主键 (post, number, id) 一人一行），少谁补谁。
-  const keys = Object.keys(preset.reactions);
+  const rowOf = new Map(waveRows.map((row) => [row.id, row.reaction]));
   const bytes = new Uint8Array(CROWD);
   if (version.looks) {
     bytes.set(decodeBytes(version.looks));
   } else {
+    // looks 为空才全量读一次兜底：第一波收波本就等于全量；R25 之前就在 running 的旧帖也走
+    // 这条路自愈。合并幂等（主键 (post, number, id) 一人一行），少谁补谁。
     const { results: allRows } = await env.DB.prepare('SELECT id, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, v).all();
     for (const row of allRows) {
       const index = keys.indexOf(row.reaction);
       bytes[row.id] = index >= 0 ? index + 1 : 0;
     }
   }
+  const drawn = [];
+  for (const pid of order) {
+    const reaction = rowOf.get(pid) ?? (bytes[pid] ? keys[bytes[pid] - 1] : null);
+    if (reaction) {
+      drawn.push(reaction);
+      const index = keys.indexOf(reaction);
+      bytes[pid] = index >= 0 ? index + 1 : 0;
+    }
+  }
+  const waveMood = mood(presetId, drawn);
+  const waveTravels = travels(presetId, drawn, waveIndex);
+  const waveInfo = { index: waveIndex, asked: order.length, size: drawn.length, mood: round2(waveMood), travels: waveTravels };
+
+  // reached（pid → reaction）从 looks 字节起步（批次写入时已含本波判定），旧行合并进字节
+  // 以便继续路径把升级前的答案也固化进快照。合并幂等，少谁补谁。
   for (const row of waveRows) {
     const index = keys.indexOf(row.reaction);
     bytes[row.id] = index >= 0 ? index + 1 : 0;

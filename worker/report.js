@@ -109,18 +109,31 @@ async function showPost(id, env, url, request = null) {
     // 版本列表与调用报告互不依赖，一趟并行省一个 D1 往返（回退路径早已如此）。
     [versions, report] = await Promise.all([versionsOf(env.DB, id), callReport(env.DB, id, v, version)]);
   } else {
-    // 回退路径：running 中的版本（或迁移前的旧帖）没有快照，逐行现读。
+    // 回退路径：running 中的版本（looks 是批次写入的增量中间态、reach 未落库）。
+    // 判定看两处：looks 字节（2026-11-01 起按批合并在这里，波次归属从 plan.history 推导）
+    // + 旧逐人行（升级前开跑的帖子，wave 列权威）。两路按人去重合并，行优先。
     const [{ results: rows }, versions_, report_] = await Promise.all([
       env.DB.prepare('SELECT id, wave, reaction FROM reactions WHERE post = ? AND number = ?').bind(id, v).all(),
       versionsOf(env.DB, id),
       callReport(env.DB, id, v, version),
     ]);
-    for (const row of rows) {
+    bytes.set(decodeBytes(version.looks ?? ''));
+    const rowOf = new Map(rows.map((row) => [row.id, row]));
+    for (const row of rowOf.values()) {
       const index = keys.indexOf(row.reaction);
       bytes[row.id] = index >= 0 ? index + 1 : 0;
       waveBytes[row.id] = row.wave + 1;
       if (!byWave.has(row.wave)) byWave.set(row.wave, []);
       byWave.get(row.wave).push(row.reaction);
+    }
+    for (const waveKey of Object.keys(plan.history ?? {})) {
+      const wave = Number(waveKey);
+      for (const pid of plan.history[waveKey]) {
+        if (!bytes[pid] || rowOf.has(pid)) continue;
+        waveBytes[pid] = wave + 1;
+        if (!byWave.has(wave)) byWave.set(wave, []);
+        byWave.get(wave).push(keys[bytes[pid] - 1]);
+      }
     }
     versions = versions_;
     report = report_;
@@ -221,28 +234,39 @@ async function versionsOf(db, id) {
 // -- GET /api/feed --------------------------------------------------------------
 
 /**
- * 公共流 + 读数摘要。读数（reach/glad/sorry）由 reactions 在 D1 里 GROUP BY 聚好带回：
- * 一行一条 (post, reaction) 计数，tone 按 post 的 preset 在这里映射——比把每帖 13KB 的
- * looks 字节搬回 Worker 再各走一万格便宜两个数量级。没有 reactions（blocked / 刚开局）reading 为 null。
+ * 公共流 + 读数摘要。读数（reach/glad/sorry）从各版本 looks 字节现算（2026-11-01 起
+ * reactions 表不再新增行，原来的 GROUP BY 会把新帖读成空）：每帖 ≤2 行 versions 读、
+ * 字节搬运 ~几十 KB，换掉逐人行的 100 倍写放大。没有 looks（blocked / 刚开局）reading 为 null。
  */
 async function listFeed(env) {
   const { results } = await env.DB.prepare('SELECT id, preset, text, state, created_at FROM posts ORDER BY created_at DESC LIMIT 20').all();
   const readings = new Map();
   if (results.length) {
     const marks = results.map(() => '?').join(',');
-    const { results: counts } = await env.DB.prepare(
-      `SELECT post, reaction, COUNT(*) AS n FROM reactions WHERE post IN (${marks}) GROUP BY post, reaction`,
+    const { results: snapshots } = await env.DB.prepare(
+      `SELECT post, looks FROM versions WHERE post IN (${marks}) AND looks IS NOT NULL`,
     )
       .bind(...results.map((row) => row.id))
       .all();
     const presetOf = new Map(results.map((row) => [row.id, row.preset]));
-    for (const row of counts) {
-      const tone = PRESETS[presetOf.get(row.post)]?.reactions[row.reaction]?.tone ?? 0;
-      const entry = readings.get(row.post) ?? { reach: 0, glad: 0, sorry: 0 };
-      entry.reach += row.n;
-      if (tone === 1) entry.glad += row.n;
-      else if (tone === -1) entry.sorry += row.n;
-      readings.set(row.post, entry);
+    const tonesOf = new Map();
+    for (const snap of snapshots) {
+      const presetId = presetOf.get(snap.post);
+      const preset = PRESETS[presetId];
+      if (!preset) continue;
+      // 反应序号 → tone 的查表按 preset 缓存（一次构建，20 帖 × 1 万格共用）。
+      if (!tonesOf.has(presetId)) tonesOf.set(presetId, Object.values(preset.reactions).map((r) => r.tone ?? 0));
+      const tones = tonesOf.get(presetId);
+      const bytes = decodeBytes(snap.looks);
+      const entry = readings.get(snap.post) ?? { reach: 0, glad: 0, sorry: 0 };
+      for (let pid = 0; pid < bytes.length; pid++) {
+        if (!bytes[pid]) continue;
+        entry.reach += 1;
+        const tone = tones[bytes[pid] - 1] ?? 0;
+        if (tone === 1) entry.glad += 1;
+        else if (tone === -1) entry.sorry += 1;
+      }
+      readings.set(snap.post, entry);
     }
   }
   return json({

@@ -311,12 +311,18 @@ test('作者校验：没有 x-jev-author 头，batch/wave/version 全部 403；�
 test('每 IP 日闸：check 超限 429，version 双路同样 429，换 IP 不受牵连', { timeout: 120_000 }, async () => {
   const ip = `203.0.113.${(Date.now() % 180) + 20}`;
   const head = { 'CF-Connecting-IP': ip };
-  for (let i = 0; i < 20; i++) {
+  // 开跑先清同段残留：本地库跨运行复用，同 IP 撞上上一轮的帖子会把 limitedAt 推到个位数。
+  execSync(`npx wrangler d1 execute jevtown --local --command "DELETE FROM posts WHERE ip LIKE '203.0.113.%' OR ip = '198.51.100.9'"`, { stdio: 'pipe' });
+  // 限额数值来自 env（CHECK_DAILY_LIMIT，2026-11-01 起生产配 10）——用例限额无关：
+  // 连发到 429 为止，只断言「必被限、限前全 200、他家 IP 不牵连」，数字归 wrangler.jsonc 管。
+  let limitedAt = null;
+  for (let i = 0; limitedAt === null && i < 40; i++) {
     const res = await postJSON(worker, '/api/check', { preset: 'post', text: `写入闸验证：第 ${i + 1} 条` }, head);
-    assert.equal(res.status, 200, `同 IP 第 ${i + 1} 次不该被限`);
+    if (res.status === 429) limitedAt = i + 1;
+    else assert.equal(res.status, 200, `同 IP 第 ${i + 1} 次不该 429`);
   }
-  const over = await postJSON(worker, '/api/check', { preset: 'post', text: '写入闸验证：超限的一条' }, head);
-  assert.equal(over.status, 429, '同 IP 第 21 次该被限');
+  assert.ok(limitedAt !== null && limitedAt <= 40, `同 IP 超限必须被限（实际 ${limitedAt ?? '未触发'}）`);
+  assert.ok(limitedAt > 3, `限额不该小到误伤正常游玩（第 ${limitedAt} 次就 429）`);
 
   // version 双路：限额排在作者门之前（404 → 409 → 限额 → 作者），用 blocked 帖穿过 409 门
   const blocked = await (await postJSON(worker, '/api/check', { preset: 'listing', text: '傻逼东西你去死吧' })).json();
