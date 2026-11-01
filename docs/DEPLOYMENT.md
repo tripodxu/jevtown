@@ -1,9 +1,9 @@
 # DEPLOYMENT · 部署指南
 
 > 当前状态：**已上线（2026-09-30）** → https://jevtown-cn.xd04040212.workers.dev
-> 最新部署：**2026-10-28**，worker 版本 `afecbe7e`（提交 `41bf2ea`，C 方案新精密仪器）。
-> 自定义域：**https://jevtown.logicc.top**（2026-10-28 起可用，线上验证一律走它——
-> 本机网络对 `*.workers.dev` 不通，见下文冒烟记录）。
+> 最新部署：**2026-11-01**，worker 版本 `99dfa4c7`（默认通道切站方中转 Logicc + 传播闸
+> 强度门槛重标定）。自定义域：**https://jevtown.logicc.top**（2026-10-28 起可用，线上
+> 验证一律走它——本机网络对 `*.workers.dev` 不通，见下文冒烟记录）。
 > 本文记录已执行的步骤与后续运维清单。
 
 ## 已执行（2026-09-30）
@@ -15,12 +15,16 @@ npx wrangler secret put TYPESAFE_API_KEY            # 站方兜底 key（正常�
 npx wrangler deploy                   # → https://jevtown-cn.xd04040212.workers.dev
 ```
 
-- **计费模型（R28 决策 + 2026-10-07 两次更新）**：**站方零 secret**——真实通道的 key 全部
-  由访客自带（BYOK，三条通道任选、只存访客自己的浏览器）；访客不填 key 时兜底走
-  OpenCode Zen 匿名免费档（`jev-1.13-free`，匿名可用、零花费，**不需要站方任何配置**）。
-  mock 是显式选择的离线演示。R28 拆闸拆的是付费 key 的钱包风险；滥用面由每 IP 日闸
-  （`CHECK_DAILY_LIMIT`，2026-10-06 回归）接管。请求一律从 Worker 侧发——Zen 不开 CORS
-  （实测），Worker 出口是 Cloudflare 共享 IP 池。
+- **计费模型（R28 决策 + 2026-11-01 更新）**：默认通道 = **站方自建中转 Logicc**
+  （`jev.logicc.top/v1/systemone`，System One 形状与 TypeSafe 相同，`jev-1.13.0`，认证流量），
+  key 由站方以 Worker secret **`LOGICC_API_KEY`** 持有——这是 R28「零 secret」政策的
+  一次主动调整：2026-11-01 实测 **Zen 免费匿名档已死**（451 "Endpoint is unavailable"，
+  端点消失，本机 IP 同样）、**TypeSafe 官方对本地区域封锁**（451 "not available in your
+  region"），两条真实通道全断，访客自建了干净出口中转，站方持 key 是用户明确的决定。
+  BYOK 三条官方通道照旧（访客自带、只存访客浏览器）；mock 是显式选择的离线演示。
+  滥用面由每 IP 日闸（`CHECK_DAILY_LIMIT`）接管。请求一律从 Worker 侧发。
+  中转记账暂按 TypeSafe 牌价（`$0.042/M input tokens`；本地实测 600 人 ≈ $0.0057，
+  与牌价口径一致，若中转另有计费改 `jev.js` 的 `usd`）。
 
 ⚠️ **出口限流约束（2026-10-07 上线实测，改架构前先读）**：Zen 对 Cloudflare Worker 的
 **共享出口 IP 段持续 429**（Worker 侧 5 连重试 + 客户端 6 轮退避都打不穿），而同一时刻
@@ -55,18 +59,24 @@ VPS 中转），未实施。
       `REPORT_VIEW_ZH`；`/theme.js` 兜底 `instrument`；`/app.js` 已含 `placeholder` 修复行；
       `/api/feed` 200（`{"posts":[]}`）；首屏 26 个 `modulepreload` 全部 200。
       **仍未验证**：真实检查全流程（默认通道 `opencode` 是否 200、花费 $0）与浏览器目视。
+- [x] **Logicc 通道上线验证（2026-11-01，版本 `99dfa4c7`）**：`wrangler secret put
+      LOGICC_API_KEY` ✓（`secret list` 可见）；本地直连 600 人实测 200（$0.0057）；
+      线上内容核对——首页页脚含「默认通道为站方中转 Logicc」、`/shared/jev.js` 含
+      `jev.logicc.top/v1/systemone`、设置面板含 `value="logicc"`；线上端到端——开局
+      `provider = logicc`、600 人批次判定完成、平淡帖 `mood 0 → endedBy: gate`
+      （强度闸区分度线上复验 ✓）。
 - [ ] 定期 `npx wrangler d1 export`（D1 无自动备份）。
 
 ## 密钥（按场景）
 
 | 方式 | 位置 | 适用 |
 |---|---|---|
-| 访客 BYOK | 浏览器 localStorage（页面 Key… 弹窗） | **全部真实通道的唯一 key 来源（三条通道任选，含 opencode）** |
-| 本地 CLI | `.env.local` 放 `TYPESAFE_API_KEY` / `OPENROUTER_API_KEY` / `OPENCODE_API_KEY`（gitignored） | `npm run check` |
-| ~~站方 secret~~ | — | **零 secret**：TYPESAFE_API_KEY 已于 2026-10-07 删除（`wrangler secret list` = []），站方不再持有任何 key |
+| 站方 secret | `LOGICC_API_KEY`（`wrangler secret put`，2026-11-01 起） | **站点默认通道（Logicc 中转）的 key，绝不入库** |
+| 访客 BYOK | 浏览器 localStorage（页面 Key… 弹窗） | 三条官方通道任选（typesafe / openrouter / opencode），只存访客自己的浏览器 |
+| 本地 CLI | `.env.local` 放 `TYPESAFE_API_KEY` / `OPENROUTER_API_KEY` / `OPENCODE_API_KEY` / `LOGICC_API_KEY`（gitignored） | `npm run check`、`scripts/probe-waves.js --provider logicc` |
 
-- BYOK key 只存浏览器 localStorage，随请求头发给本 Worker，不落库不打日志；站方零 secret，
-  没有任何 key 需要在 Cloudflare 侧配置。
+- BYOK key 只存浏览器 localStorage，随请求头发给本 Worker，不落库不打日志；站方只持有
+  默认中转这一把 key（撤销它 = 访客只能 BYOK 或 mock）。
 
 ## 上线后检查清单（每次重大变更后）
 

@@ -6,6 +6,28 @@
 
 ---
 
+## 2026-11-01 · 默认通道切站方中转 Logicc，R28「零 secret」政策主动调整
+
+**用户提供了自建反代 `jev.logicc.top/v1/systemone`（与站点同根域的干净出口）与 key，要求
+以 Worker secret 方式持有（不明文）。** 上一条目里「两条真实通道全断」的现状就此解决。
+
+1. **接入**：`jev.js` 注册第四条通道 `logicc`（System One 形状与 TypeSafe 相同、
+   `jev-1.13.0`、认证流量、记账暂按 TypeSafe 牌价）；`wrangler.jsonc` 的 `JEV_PROVIDER`
+   opencode → logicc；key 走 `wrangler secret put LOGICC_API_KEY`（**绝不入库**，
+   `git status` 干净后才部署）。本地 `.env.local` 同步放了一份（gitignored）供 CLI。
+2. **验证**：本地直连 600 人 200（$0.0057/600 人，与牌价口径一致）；部署 `99dfa4c7` 后
+   线上内容核对三项全过（页脚/`/shared/jev.js`/设置面板），线上端到端一帖走通——开局
+   `provider = logicc`、600 人判定完成、平淡帖 `mood 0 → endedBy: gate`（强度闸区分度
+   线上复验）。**冒烟脚本教训：`/api/batch` 也要带 `x-jev-author`，漏了会 403
+   "this check is not yours"、批次全空，别误判成通道故障。**
+3. **政策**：R28 的「站方零 secret」就此退役一条——站方现持默认中转这一把 key（撤销
+   它 = 访客只能 BYOK 或 mock）；BYOK 三条官方通道照旧。设置面板的「站方不持有任何
+   key」文案已同步改掉。Zen 匿名档若复活，`PROVIDERS.opencode` 仍在册可随时切回。
+4. 部署纪律执行情况：部署前 `git status` 干净（ahead 7 已全部提交），部署后按内容核对
+   （非资产计数），与 2026-10-28 立的规矩一致。
+
+---
+
 ## 2026-11-01 · 传播闸重标定：强度门槛+逐波衰减（真通道实测定稿）；两条真实通道现状
 
 **用户反馈「实际跑很难跑出第二波、可玩性低」，明确要求改传播判据——推翻 m00674→m00711
